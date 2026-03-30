@@ -275,6 +275,8 @@ pip install -r requirements-test.txt
 pytest -q
 ```
 
+GitHub Actions runs this test suite automatically on every pull request and on pushes to `main` via [`.github/workflows/pytest.yml`](/home/chaos/PycharmProjects/headmatch/.github/workflows/pytest.yml). To actually block merges when tests fail, mark the `Pytest` check as required in the repository branch protection rules for `main`.
+
 ## Limits
 
 This toolkit is realistic for:

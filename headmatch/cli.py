@@ -3,30 +3,33 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .analysis import analyze_measurement
-from .measure import (
-    MeasurementPaths,
-    OfflineMeasurementPlan,
-    PipeWireDeviceConfig,
-    prepare_offline_measurement,
-    render_sweep_file,
-    run_pipewire_measurement,
-)
-from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
-from .signals import SweepSpec
+
+def parse_seconds(value: str) -> float:
+    text = value.strip().lower()
+    if text.endswith("s"):
+        text = text[:-1]
+    try:
+        seconds = float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid duration value: {value!r}") from exc
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("duration must be greater than 0")
+    return seconds
 
 
 def add_common_sweep_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sample-rate", type=int, default=48000)
-    p.add_argument("--duration", type=float, default=8.0)
+    p.add_argument("--duration", type=parse_seconds, default=8.0)
     p.add_argument("--f-start", type=float, default=20.0)
     p.add_argument("--f-end", type=float, default=22000.0)
-    p.add_argument("--pre-silence", type=float, default=0.5)
-    p.add_argument("--post-silence", type=float, default=1.0)
+    p.add_argument("--pre-silence", type=parse_seconds, default=0.5)
+    p.add_argument("--post-silence", type=parse_seconds, default=1.0)
     p.add_argument("--amplitude", type=float, default=0.2)
 
 
-def spec_from_args(args) -> SweepSpec:
+def spec_from_args(args):
+    from .signals import SweepSpec
+
     return SweepSpec(
         sample_rate=args.sample_rate,
         duration_s=args.duration,
@@ -39,6 +42,17 @@ def spec_from_args(args) -> SweepSpec:
 
 
 def main() -> None:
+    from .analysis import analyze_measurement
+    from .measure import (
+        MeasurementPaths,
+        OfflineMeasurementPlan,
+        PipeWireDeviceConfig,
+        prepare_offline_measurement,
+        render_sweep_file,
+        run_pipewire_measurement,
+    )
+    from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
+
     parser = argparse.ArgumentParser(prog="headmatch")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
