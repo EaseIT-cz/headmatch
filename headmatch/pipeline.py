@@ -8,7 +8,13 @@ import numpy as np
 
 from .analysis import MeasurementResult, analyze_measurement
 from .app_identity import get_app_identity
-from .contracts import RUN_SUMMARY_SCHEMA_VERSION
+from .contracts import (
+    ConfidenceSummary,
+    FrontendRunSummary,
+    RunErrorSummary,
+    RunFilterCounts,
+    RUN_SUMMARY_SCHEMA_VERSION,
+)
 from .exporters import (
     export_camilladsp_filter_snippet_yaml,
     export_camilladsp_filters_yaml,
@@ -44,7 +50,7 @@ def _confidence_penalty(value: float, good: float, bad: float) -> float:
 
 
 
-def _summarize_trustworthiness(result: MeasurementResult, report: dict) -> dict:
+def _summarize_trustworthiness(result: MeasurementResult, report: dict) -> ConfidenceSummary:
     diagnostics = result.diagnostics
     roughness = max(diagnostics['left_roughness_db'], diagnostics['right_roughness_db'])
     predicted_rms = max(report['predicted_left_rms_error_db'], report['predicted_right_rms_error_db'])
@@ -103,14 +109,14 @@ def _summarize_trustworthiness(result: MeasurementResult, report: dict) -> dict:
         f"Predicted residual error: {predicted_rms:.2f} dB RMS, {predicted_max:.2f} dB max.",
     ]
 
-    return {
-        'score': score,
-        'label': label,
-        'headline': headline,
-        'interpretation': interpretation,
-        'reasons': reasons,
-        'warnings': warnings,
-        'metrics': {
+    return ConfidenceSummary(
+        score=score,
+        label=label,
+        headline=headline,
+        interpretation=interpretation,
+        reasons=tuple(reasons),
+        warnings=tuple(warnings),
+        metrics={
             'alignment_reference_score': diagnostics['alignment_reference_score'],
             'alignment_peak_ratio': diagnostics['alignment_peak_ratio'],
             'channel_mismatch_rms_db': diagnostics['channel_mismatch_rms_db'],
@@ -120,11 +126,11 @@ def _summarize_trustworthiness(result: MeasurementResult, report: dict) -> dict:
             'predicted_rms_error_db': predicted_rms,
             'predicted_max_error_db': predicted_max,
         },
-    }
+    )
 
 
 
-def write_results_guide(out_dir: Path, kind: str, trust_summary: dict | None = None) -> Path:
+def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSummary | None = None) -> Path:
     if kind == 'fit':
         title = 'headmatch fit results'
         overview = 'This folder contains one analyzed recording and the EQ files built from it.'
@@ -175,13 +181,13 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: dict | None = N
             '',
             'Trust summary',
             '-------------',
-            f"- Confidence: {trust_summary['label']} ({trust_summary['score']}/100)",
-            f"- {trust_summary['headline']}",
-            f"- {trust_summary['interpretation']}",
+            f"- Confidence: {trust_summary.label} ({trust_summary.score}/100)",
+            f"- {trust_summary.headline}",
+            f"- {trust_summary.interpretation}",
         ])
-        if trust_summary['warnings']:
+        if trust_summary.warnings:
             lines.append('- Warnings:')
-            for warning in trust_summary['warnings']:
+            for warning in trust_summary.warnings:
                 lines.append(f'  - {warning}')
     lines.extend(['', 'Files', '-----'])
     for name, description in files:
@@ -195,36 +201,33 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: dict | None = N
 
 
 
-def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> dict:
+def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> FrontendRunSummary:
     identity = get_app_identity()
     target_resampled = resample_curve(target, result.freqs_hz)
     trust_summary = _summarize_trustworthiness(result, report)
-    return {
-        'schema_version': RUN_SUMMARY_SCHEMA_VERSION,
-        'generated_by': identity.as_metadata(),
-        'kind': kind,
-        'out_dir': str(out_dir),
-        'sample_rate': sample_rate,
-        'frequency_points': int(len(result.freqs_hz)),
-        'target': target_resampled.name,
-        'filters': {
-            'left': len(left_bands),
-            'right': len(right_bands),
-        },
-        'predicted_error_db': {
-            'left_rms': report['predicted_left_rms_error_db'],
-            'right_rms': report['predicted_right_rms_error_db'],
-            'left_max': report['predicted_left_max_error_db'],
-            'right_max': report['predicted_right_max_error_db'],
-        },
-        'confidence': trust_summary,
-        'plots': {
+    return FrontendRunSummary(
+        schema_version=RUN_SUMMARY_SCHEMA_VERSION,
+        generated_by=identity.as_metadata(),
+        kind=kind,
+        out_dir=str(out_dir),
+        sample_rate=sample_rate,
+        frequency_points=int(len(result.freqs_hz)),
+        target=target_resampled.name,
+        filters=RunFilterCounts(left=len(left_bands), right=len(right_bands)),
+        predicted_error_db=RunErrorSummary(
+            left_rms=report['predicted_left_rms_error_db'],
+            right_rms=report['predicted_right_rms_error_db'],
+            left_max=report['predicted_left_max_error_db'],
+            right_max=report['predicted_right_max_error_db'],
+        ),
+        confidence=trust_summary,
+        plots={
             'overview': str(out_dir / 'fit_overview.svg'),
             'left': str(out_dir / 'fit_left.svg'),
             'right': str(out_dir / 'fit_right.svg'),
         },
-        'results_guide': str(out_dir / RESULTS_GUIDE_NAME),
-    }
+        results_guide=str(out_dir / RESULTS_GUIDE_NAME),
+    )
 
 
 def _write_fit_artifacts(
@@ -247,9 +250,9 @@ def _write_fit_artifacts(
     render_fit_graphs(out_dir, result, target, sample_rate, left_bands, right_bands)
     summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate)
     save_json(out_dir / 'fit_report.json', report)
-    save_json(out_dir / 'run_summary.json', summary)
-    write_results_guide(out_dir, kind=kind, trust_summary=summary['confidence'])
-    return summary
+    save_json(out_dir / 'run_summary.json', summary.to_dict())
+    write_results_guide(out_dir, kind=kind, trust_summary=summary.confidence)
+    return summary.to_dict()
 
 
 def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
@@ -282,7 +285,7 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
     }
-    report['confidence'] = _summarize_trustworthiness(result, report)
+    report['confidence'] = _summarize_trustworthiness(result, report).to_dict()
     return left_bands, right_bands, report
 
 

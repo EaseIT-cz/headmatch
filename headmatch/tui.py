@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TextIO
 
-from .contracts import FrontendConfig
+from .contracts import FrontendConfig, FrontendRunSummary
 from .history import load_recent_runs, read_results_guide
 from .measure import OfflineMeasurementPlan, prepare_offline_measurement
 from .pipeline import iterative_measure_and_fit
@@ -156,7 +156,7 @@ class HeadMatchWizard:
             summary = entry.summary
             self.io.write(
                 f"{index}) {summary.kind} | {summary.out_dir} | target={summary.target} | "
-                f"filters L/R={summary.filters.get('left', 0)}/{summary.filters.get('right', 0)}"
+                f"filters L/R={summary.filters.left}/{summary.filters.right}"
             )
 
         while True:
@@ -177,10 +177,10 @@ class HeadMatchWizard:
         self.io.write(f"target: {summary.target}")
         self.io.write(
             "predicted error dB: "
-            f"L rms {summary.predicted_error_db.get('left_rms')}, "
-            f"R rms {summary.predicted_error_db.get('right_rms')}, "
-            f"L max {summary.predicted_error_db.get('left_max')}, "
-            f"R max {summary.predicted_error_db.get('right_max')}"
+            f"L rms {summary.predicted_error_db.left_rms}, "
+            f"R rms {summary.predicted_error_db.right_rms}, "
+            f"L max {summary.predicted_error_db.left_max}, "
+            f"R max {summary.predicted_error_db.right_max}"
         )
         self.io.write()
         self.io.write(read_results_guide(selected.guide_path).rstrip())

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from .signals import SweepSpec
 
@@ -47,33 +47,44 @@ class FrontendConfig:
         return asdict(self)
 
 
-@dataclass
-class FrontendRunRequest:
-    """Shared request payload from a frontend into the domain pipeline."""
+@dataclass(frozen=True)
+class RunFilterCounts:
+    left: int
+    right: int
 
-    workflow: WorkflowName
-    mode: RunMode
-    output_dir: Optional[str] = None
-    recording_path: Optional[str] = None
-    target_csv: Optional[str] = None
-    output_target: Optional[str] = None
-    input_target: Optional[str] = None
-    notes: str = ""
-    max_filters: int = 8
-    iterations: int = 1
-    source_csv: Optional[str] = None
-    clone_target_csv: Optional[str] = None
-    clone_out: Optional[str] = None
-    sweep: Optional[SweepSpec] = None
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class RunErrorSummary:
+    left_rms: float
+    right_rms: float
+    left_max: float
+    right_max: float
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ConfidenceSummary:
+    score: int
+    label: Literal["high", "medium", "low"]
+    headline: str
+    interpretation: str
+    reasons: tuple[str, ...]
+    warnings: tuple[str, ...]
+    metrics: dict[str, float]
 
     def to_dict(self) -> dict:
         payload = asdict(self)
-        if self.sweep is not None:
-            payload["sweep"] = asdict(self.sweep)
+        payload["reasons"] = list(self.reasons)
+        payload["warnings"] = list(self.warnings)
         return payload
 
 
-@dataclass
+@dataclass(frozen=True)
 class FrontendRunSummary:
     """Minimal stable summary that every frontend can read back."""
 
@@ -83,12 +94,32 @@ class FrontendRunSummary:
     sample_rate: int
     frequency_points: int
     target: str
-    filters: dict
-    predicted_error_db: dict
+    filters: RunFilterCounts
+    predicted_error_db: RunErrorSummary
+    generated_by: dict[str, Any]
+    confidence: ConfidenceSummary
+    plots: dict[str, str]
     results_guide: str
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": self.schema_version,
+            "kind": self.kind,
+            "out_dir": self.out_dir,
+            "sample_rate": self.sample_rate,
+            "frequency_points": self.frequency_points,
+            "target": self.target,
+            "filters": self.filters.to_dict(),
+            "predicted_error_db": self.predicted_error_db.to_dict(),
+            "generated_by": self.generated_by,
+            "confidence": self.confidence.to_dict(),
+            "plots": self.plots,
+            "results_guide": self.results_guide,
+        }
 
     @classmethod
     def from_dict(cls, payload: dict) -> "FrontendRunSummary":
+        confidence_payload = payload.get("confidence", {})
         return cls(
             schema_version=int(payload.get("schema_version", RUN_SUMMARY_SCHEMA_VERSION)),
             kind=payload["kind"],
@@ -96,7 +127,18 @@ class FrontendRunSummary:
             sample_rate=int(payload["sample_rate"]),
             frequency_points=int(payload["frequency_points"]),
             target=payload["target"],
-            filters=dict(payload["filters"]),
-            predicted_error_db=dict(payload["predicted_error_db"]),
+            filters=RunFilterCounts(**dict(payload["filters"])),
+            predicted_error_db=RunErrorSummary(**dict(payload["predicted_error_db"])),
+            generated_by=dict(payload.get("generated_by", {})),
+            confidence=ConfidenceSummary(
+                score=int(confidence_payload.get("score", 0)),
+                label=confidence_payload.get("label", "low"),
+                headline=confidence_payload.get("headline", ""),
+                interpretation=confidence_payload.get("interpretation", ""),
+                reasons=tuple(confidence_payload.get("reasons", ())),
+                warnings=tuple(confidence_payload.get("warnings", ())),
+                metrics=dict(confidence_payload.get("metrics", {})),
+            ),
+            plots=dict(payload.get("plots", {})),
             results_guide=payload.get("results_guide", str(Path(payload["out_dir"]) / "README.txt")),
         )
