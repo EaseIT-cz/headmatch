@@ -191,6 +191,10 @@ Use any CSV with frequency + response data. This includes:
 - AutoEq-style CSVs if they include frequency and raw response columns
 - other measurement databases converted to CSV
 
+Safety notes:
+- keep `--out` pointed at a new file; `clone-target` now refuses to overwrite either input CSV
+- both source and target curves must span **1 kHz**, because clone targets are normalized there before diffing
+
 Example:
 
 ```bash
@@ -253,9 +257,13 @@ The loader accepts:
 - `frequency_hz,response_db`
 - `frequency_hz,raw`
 - `frequency,response_db`
-- many AutoEq-like CSVs where the first non-frequency column is the response column
+- `freq`,`freq_hz`, or `Hz` style frequency headers
+- response headers such as `raw`, `raw_db`, `target_db`, `fr`, `equalization`, `Amplitude (dB)`, `Magnitude (dB)`, `Level (dB)`, or `SPL`
+- many AutoEq-like CSVs where the first frequency-like column and the first response-like column are used
 
-Everything is normalized at **1 kHz** before diffing or fitting.
+The CSV reader also ignores leading `#` comment lines, sorts rows into ascending frequency order when needed, and rejects duplicate frequency rows so clone inputs fail safely instead of producing ambiguous targets.
+
+Everything is normalized at **1 kHz** before diffing or fitting, so target and clone files should include a point below and above 1 kHz.
 
 ## Practical advice
 

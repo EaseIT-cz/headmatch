@@ -114,7 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("clone-target", help="Create a clone target curve from source and target FR CSVs.")
     p.add_argument("--source-csv", required=True)
     p.add_argument("--target-csv", required=True)
-    p.add_argument("--out", required=True)
+    p.add_argument(
+        "--out",
+        required=True,
+        help="Write the clone target to a new CSV file. Do not point this at your source or target input file.",
+    )
 
     p = sub.add_parser("iterate", help="Measure -> fit -> export, repeated.")
     add_common_sweep_args(p)
@@ -172,6 +176,26 @@ def print_next_steps(cmd: str, args) -> None:
         print("Next: pass that CSV to fit, fit-offline, or start with --target-csv.")
 
 
+def format_user_error(cmd: str, exc: ValueError) -> str:
+    message = str(exc)
+    if cmd == "clone-target":
+        return (
+            f"clone-target failed: {message}\n"
+            "Check that both input CSVs include frequency and response columns, span 1 kHz, and that --out points to a new file."
+        )
+    if cmd in {"fit", "fit-offline", "start", "iterate"} and 'Target curve' in message:
+        return (
+            f"target CSV could not be used: {message}\n"
+            "Use a target file that includes frequency + response data and spans 1 kHz."
+        )
+    if cmd in {"fit", "fit-offline", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
+        return (
+            f"target CSV could not be read: {message}\n"
+            "Expected a CSV with a frequency column such as frequency_hz/frequency/freq and a response column such as response_db/raw/target_db."
+        )
+    return message
+
+
 def main(argv: list[str] | None = None) -> None:
     from .analysis import analyze_measurement
     from .measure import (
@@ -191,52 +215,55 @@ def main(argv: list[str] | None = None) -> None:
         print_beginner_guide(parser)
         raise SystemExit(0)
 
-    if args.cmd == "start":
-        print(f"Starting guided measurement workflow in {args.out_dir} ...")
-        iterative_measure_and_fit(
-            output_dir=args.out_dir,
-            sweep_spec=spec_from_args(args),
-            target_path=args.target_csv,
-            output_target=args.output_target,
-            input_target=args.input_target,
-            iterations=args.iterations,
-            max_filters=args.max_filters,
-        )
-    elif args.cmd == "render-sweep":
-        render_sweep_file(spec_from_args(args), args.out)
-    elif args.cmd == "measure":
-        out_dir = Path(args.out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        run_pipewire_measurement(
-            spec_from_args(args),
-            MeasurementPaths(out_dir / "sweep.wav", out_dir / "recording.wav"),
-            PipeWireDeviceConfig(output_target=args.output_target, input_target=args.input_target),
-        )
-    elif args.cmd == "prepare-offline":
-        out_dir = Path(args.out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        prepare_offline_measurement(
-            spec_from_args(args),
-            OfflineMeasurementPlan(out_dir / "sweep.wav", out_dir / "measurement_plan.json", notes=args.notes),
-        )
-    elif args.cmd == "analyze":
-        analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
-    elif args.cmd == "fit":
-        process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters)
-    elif args.cmd == "fit-offline":
-        process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters)
-    elif args.cmd == "clone-target":
-        build_clone_curve(args.source_csv, args.target_csv, args.out)
-    elif args.cmd == "iterate":
-        iterative_measure_and_fit(
-            output_dir=args.out_dir,
-            sweep_spec=spec_from_args(args),
-            target_path=args.target_csv,
-            output_target=args.output_target,
-            input_target=args.input_target,
-            iterations=args.iterations,
-            max_filters=args.max_filters,
-        )
+    try:
+        if args.cmd == "start":
+            print(f"Starting guided measurement workflow in {args.out_dir} ...")
+            iterative_measure_and_fit(
+                output_dir=args.out_dir,
+                sweep_spec=spec_from_args(args),
+                target_path=args.target_csv,
+                output_target=args.output_target,
+                input_target=args.input_target,
+                iterations=args.iterations,
+                max_filters=args.max_filters,
+            )
+        elif args.cmd == "render-sweep":
+            render_sweep_file(spec_from_args(args), args.out)
+        elif args.cmd == "measure":
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            run_pipewire_measurement(
+                spec_from_args(args),
+                MeasurementPaths(out_dir / "sweep.wav", out_dir / "recording.wav"),
+                PipeWireDeviceConfig(output_target=args.output_target, input_target=args.input_target),
+            )
+        elif args.cmd == "prepare-offline":
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            prepare_offline_measurement(
+                spec_from_args(args),
+                OfflineMeasurementPlan(out_dir / "sweep.wav", out_dir / "measurement_plan.json", notes=args.notes),
+            )
+        elif args.cmd == "analyze":
+            analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
+        elif args.cmd == "fit":
+            process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters)
+        elif args.cmd == "fit-offline":
+            process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters)
+        elif args.cmd == "clone-target":
+            build_clone_curve(args.source_csv, args.target_csv, args.out)
+        elif args.cmd == "iterate":
+            iterative_measure_and_fit(
+                output_dir=args.out_dir,
+                sweep_spec=spec_from_args(args),
+                target_path=args.target_csv,
+                output_target=args.output_target,
+                input_target=args.input_target,
+                iterations=args.iterations,
+                max_filters=args.max_filters,
+            )
+    except ValueError as exc:
+        parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
     print_next_steps(args.cmd, args)
 
