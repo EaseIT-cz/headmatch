@@ -19,6 +19,7 @@ def test_load_recent_runs_sorts_latest_first_and_skips_bad_json(tmp_path):
                 "target": "flat",
                 "filters": {"left": 4, "right": 4},
                 "predicted_error_db": {"left_rms": 1.0, "right_rms": 1.1, "left_max": 3.0, "right_max": 3.1},
+                "confidence": {"score": 90, "label": "high", "headline": "This run looks trustworthy.", "interpretation": "Looks clean.", "reasons": [], "warnings": [], "metrics": {}},
                 "results_guide": str(older / "README.txt"),
             }
         )
@@ -39,6 +40,7 @@ def test_load_recent_runs_sorts_latest_first_and_skips_bad_json(tmp_path):
                 "target": "custom",
                 "filters": {"left": 5, "right": 5},
                 "predicted_error_db": {"left_rms": 0.8, "right_rms": 0.9, "left_max": 2.5, "right_max": 2.6},
+                "confidence": {"score": 68, "label": "medium", "headline": "This run looks usable, but review it before trusting it fully.", "interpretation": "Some signals are only fair.", "reasons": [], "warnings": ["Check the graphs."], "metrics": {}},
                 "results_guide": str(newer / "README.txt"),
             }
         )

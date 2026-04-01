@@ -170,6 +170,15 @@ def test_gui_history_selection_reads_recent_runs(tmp_path):
   "target": "flat",
   "filters": {"left": 4, "right": 4},
   "predicted_error_db": {"left_rms": 1.0, "right_rms": 1.1, "left_max": 3.0, "right_max": 3.1},
+  "confidence": {
+    "score": 82,
+    "label": "medium",
+    "headline": "This run looks usable, but review it before trusting it fully.",
+    "interpretation": "Nothing looks catastrophically wrong, but one or more stability signals are only fair.",
+    "warnings": ["Residual error is still noticeable."],
+    "reasons": [],
+    "metrics": {}
+  },
   "results_guide": "%s"
 }
 """ % (run_dir, guide)
@@ -193,7 +202,9 @@ def test_gui_history_selection_reads_recent_runs(tmp_path):
     assert selection.search_root == str(tmp_path)
     assert selection.selected_summary == str(summary)
     assert "headmatch fit results" in selection.selected_guide
-    assert selection.items[0][0] == str(run_dir)
+    assert selection.items[0].summary.out_dir == str(run_dir)
+    assert selection.selected_entry is not None
+    assert selection.selected_entry.summary.confidence.score == 82
 
 
 

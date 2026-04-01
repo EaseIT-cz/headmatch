@@ -20,7 +20,8 @@ class HistorySelection:
     search_root: str
     selected_summary: str | None
     selected_guide: str | None
-    items: tuple[tuple[str, str, str], ...]
+    selected_entry: RunHistoryEntry | None
+    items: tuple[RunHistoryEntry, ...]
 
 
 def _iter_summary_files(root: Path) -> Iterable[Path]:
@@ -57,14 +58,13 @@ def read_results_guide(path: str | Path) -> str:
 def build_history_selection(search_root: str | Path, config_root: str | Path | None = None, *, limit: int = 10) -> HistorySelection:
     root = Path(search_root).expanduser()
     entries = load_recent_runs(root, limit=limit)
-    items: list[tuple[str, str, str]] = []
-    selected_summary = None
-    selected_guide = None
-    for entry in entries:
-        label = entry.summary.out_dir
-        details = f"{entry.summary.kind} | {entry.summary.target} | {entry.summary.sample_rate} Hz"
-        items.append((str(entry.summary_path.parent), label, details))
-    if entries:
-        selected_summary = str(entries[0].summary_path)
-        selected_guide = read_results_guide(entries[0].guide_path)
-    return HistorySelection(search_root=str(root), selected_summary=selected_summary, selected_guide=selected_guide, items=tuple(items))
+    selected_entry = entries[0] if entries else None
+    selected_summary = str(selected_entry.summary_path) if selected_entry else None
+    selected_guide = read_results_guide(selected_entry.guide_path) if selected_entry else None
+    return HistorySelection(
+        search_root=str(root),
+        selected_summary=selected_summary,
+        selected_guide=selected_guide,
+        selected_entry=selected_entry,
+        items=tuple(entries),
+    )

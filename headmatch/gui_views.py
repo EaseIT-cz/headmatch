@@ -148,6 +148,10 @@ def render_history(ttk, frame, *, history_root_var, config_path: Path):
     return build_history_selection(history_root_var.get(), config_path.parent)
 
 
+def _confidence_display(label: str) -> str:
+    return label.replace('_', ' ').title()
+
+
 def render_history_results(ttk, frame, *, selection) -> None:
     if not selection.items:
         ttk.Label(
@@ -166,13 +170,43 @@ def render_history_results(ttk, frame, *, selection) -> None:
     results.columnconfigure(0, weight=1)
     frame.rowconfigure(3, weight=1)
 
-    for idx, (_folder, label, details) in enumerate(selection.items):
-        ttk.Label(results, text=label, font=("TkDefaultFont", 10, "bold")).grid(row=idx * 2, column=0, sticky="w")
-        ttk.Label(results, text=details, wraplength=620, justify="left").grid(row=idx * 2 + 1, column=0, sticky="w", pady=(0, 8))
+    for idx, entry in enumerate(selection.items):
+        confidence = entry.summary.confidence
+        ttk.Label(results, text=entry.summary.out_dir, font=("TkDefaultFont", 10, "bold")).grid(row=idx * 3, column=0, sticky="w")
+        ttk.Label(
+            results,
+            text=f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100) — {confidence.headline}",
+            wraplength=620,
+            justify="left",
+        ).grid(row=idx * 3 + 1, column=0, sticky="w")
+        ttk.Label(
+            results,
+            text=f"{entry.summary.kind} | {entry.summary.target} | {entry.summary.sample_rate} Hz",
+            wraplength=620,
+            justify="left",
+        ).grid(row=idx * 3 + 2, column=0, sticky="w", pady=(0, 8))
 
-    guide = ttk.LabelFrame(frame, text="Selected guide", padding=16)
+    guide = ttk.LabelFrame(frame, text="Selected run summary", padding=16)
     guide.grid(row=4, column=0, sticky="ew", pady=(12, 0))
     guide.columnconfigure(0, weight=1)
     summary_text = selection.selected_summary or "No summary selected."
     ttk.Label(guide, text=f"Summary: {summary_text}", wraplength=620, justify="left").grid(row=0, column=0, sticky="w")
-    ttk.Label(guide, text=selection.selected_guide or "", wraplength=620, justify="left").grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+    selected = selection.selected_entry
+    if selected is not None:
+        confidence = selected.summary.confidence
+        ttk.Label(
+            guide,
+            text=f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100)",
+            font=("TkDefaultFont", 11, "bold"),
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(guide, text=confidence.headline, wraplength=620, justify="left").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ttk.Label(guide, text=confidence.interpretation, wraplength=620, justify="left").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        row = 4
+        if confidence.warnings:
+            ttk.Label(guide, text="Warnings", font=("TkDefaultFont", 10, "bold")).grid(row=row, column=0, sticky="w", pady=(8, 0))
+            row += 1
+            for warning in confidence.warnings[:3]:
+                ttk.Label(guide, text=f"- {warning}", wraplength=620, justify="left").grid(row=row, column=0, sticky="w", pady=(2, 0))
+                row += 1
+        ttk.Label(guide, text=selection.selected_guide or "", wraplength=620, justify="left").grid(row=row, column=0, sticky="w", pady=(10, 0))
