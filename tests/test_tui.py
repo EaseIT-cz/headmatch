@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+from uuid import uuid4
 
 from headmatch.contracts import FrontendConfig
+from headmatch.settings import save_config
 from headmatch import tui
 
 
@@ -126,3 +128,42 @@ def test_run_tui_persists_selected_targets(monkeypatch, tmp_path):
     assert saved["config"].pipewire_output_target == "out-node"
     assert saved["config"].pipewire_input_target == "in-node"
     assert saved["config"].default_output_dir == "out/session_02"
+
+
+
+def test_run_tui_reads_explicit_config_file_with_randomized_values(monkeypatch, tmp_path):
+    suffix = uuid4().hex
+    config_path = tmp_path / f"tui-{suffix}.json"
+    save_config(
+        FrontendConfig(
+            default_output_dir=f"out/{suffix}",
+            pipewire_output_target=f"playback-{suffix}",
+            pipewire_input_target=f"capture-{suffix}",
+            preferred_target_csv=f"targets/{suffix}.csv",
+            max_filters=9,
+            start_iterations=4,
+        ),
+        config_path,
+    )
+
+    calls = {}
+
+    def fake_iterative_measure_and_fit(**kwargs):
+        calls.update(kwargs)
+        return []
+
+    monkeypatch.setattr("headmatch.tui.iterative_measure_and_fit", fake_iterative_measure_and_fit)
+
+    stdin = StringIO("1\n\n\n\n\n\n\n")
+    stdout = StringIO()
+
+    result = tui.run_tui(stdin=stdin, stdout=stdout, config_path=config_path)
+
+    assert result.workflow == "start"
+    assert calls["output_dir"] == f"out/{suffix}"
+    assert calls["output_target"] == f"playback-{suffix}"
+    assert calls["input_target"] == f"capture-{suffix}"
+    assert calls["target_path"] == f"targets/{suffix}.csv"
+    assert calls["max_filters"] == 9
+    assert calls["iterations"] == 4
+    assert f"Config path: {config_path}" in stdout.getvalue()

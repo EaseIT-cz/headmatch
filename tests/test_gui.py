@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 import sys
 
 import pytest
 
 from headmatch.contracts import FrontendConfig
 from headmatch.gui import NAV_ITEMS, build_arg_parser, load_gui_state, main
+from headmatch.settings import save_config
 
 
 class DummyVar:
@@ -299,3 +301,28 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
     assert calls['out_dir'] == str(tmp_path / 'offline-fit')
     assert calls['kwargs']['max_filters'] == 4
     assert app.completion_title_var.get() == 'Offline fit complete'
+
+
+
+def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
+    suffix = uuid4().hex
+    config_path = tmp_path / f"gui-{suffix}.json"
+    original = FrontendConfig(
+        default_output_dir=f"out/{suffix}",
+        preferred_target_csv=f"targets/{suffix}.csv",
+        pipewire_output_target=f"playback-{suffix}",
+        pipewire_input_target=f"capture-{suffix}",
+        start_iterations=7,
+        max_filters=5,
+    )
+    save_config(original, config_path)
+
+    state = load_gui_state(config_path=config_path)
+
+    assert state.config_path == config_path
+    assert state.default_output_dir == f"out/{suffix}"
+    assert state.preferred_target_csv == f"targets/{suffix}.csv"
+    assert state.pipewire_output_target == f"playback-{suffix}"
+    assert state.pipewire_input_target == f"capture-{suffix}"
+    assert state.start_iterations == 7
+    assert state.max_filters == 5
