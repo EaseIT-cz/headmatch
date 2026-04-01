@@ -68,6 +68,10 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def flat_target_csv() -> Path:
+    return Path(__file__).with_name('fixtures') / 'flat_target.csv'
+
+
 def _rms_error(values_db: np.ndarray, target_db: np.ndarray) -> float:
     return float(np.sqrt(np.mean((values_db - target_db) ** 2)))
 
@@ -111,6 +115,8 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     out_dir = tmp_path / "fit"
     _patch_cli_config(monkeypatch, tmp_path)
 
+    target_csv = flat_target_csv()
+
     cli.main(
         [
             "fit",
@@ -118,6 +124,8 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
             str(recording),
             "--out-dir",
             str(out_dir),
+            "--target-csv",
+            str(target_csv),
             "--sample-rate",
             str(spec.sample_rate),
             "--duration",
@@ -141,7 +149,7 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     assert errors["left_after"] < errors["left_before"] * 0.5
     assert errors["right_after"] < errors["right_before"] * 0.5
     assert summary["kind"] == "fit"
-    assert summary["target"] == "flat_1k_norm"
+    assert summary["target"] == "flat_target"
     assert summary["filters"]["left"] >= 2
     assert summary["filters"]["right"] >= 2
     assert summary["predicted_error_db"]["left_rms"] == report["predicted_left_rms_error_db"]
@@ -169,11 +177,15 @@ def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_out
 
     monkeypatch.setattr("headmatch.pipeline.run_pipewire_measurement", fake_run_pipewire_measurement)
 
+    target_csv = flat_target_csv()
+
     cli.main(
         [
             "start",
             "--out-dir",
             str(out_dir),
+            "--target-csv",
+            str(target_csv),
             "--sample-rate",
             str(spec.sample_rate),
             "--duration",
