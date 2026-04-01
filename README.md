@@ -46,6 +46,16 @@ pip install -r requirements-test.txt
 
 ## CLI overview
 
+The easiest first run is:
+
+```bash
+headmatch start --out-dir out/session_01
+```
+
+That guided path runs one online measurement pass and exports CamillaDSP EQ files.
+
+If you want the older explicit workflow, the lower-level commands are still available:
+
 ```bash
 headmatch render-sweep
 headmatch measure
