@@ -8,7 +8,7 @@ from scipy import signal
 from headmatch.analysis import analyze_measurement
 from headmatch.io_utils import write_wav
 from headmatch.peq import fit_peq, peq_chain_response_db
-from headmatch.pipeline import fit_from_measurement, process_single_measurement
+from headmatch.pipeline import fit_from_measurement, iterative_measure_and_fit, process_single_measurement
 from headmatch.signals import SweepSpec, generate_log_sweep
 from headmatch.targets import TargetCurve
 
@@ -74,7 +74,36 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert 'predicted_error_db' in summary
     assert (out_dir / 'camilladsp_full.yaml').exists()
     assert (out_dir / 'camilladsp_filters_only.yaml').exists()
+    guide = (out_dir / 'README.txt').read_text()
+    assert 'headmatch fit results' in guide
+    assert 'camilladsp_full.yaml' in guide
 
+
+
+def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+
+    def fake_run_pipewire_measurement(_spec, paths, _device):
+        paths.sweep_wav.write_bytes(b'fake sweep')
+        paths.recording_wav.write_bytes(recording.read_bytes())
+        return paths.recording_wav
+
+    monkeypatch.setattr('headmatch.pipeline.run_pipewire_measurement', fake_run_pipewire_measurement)
+
+    summaries = iterative_measure_and_fit(
+        output_dir=tmp_path / 'iterative',
+        sweep_spec=spec,
+        target_path=None,
+        output_target=None,
+        input_target=None,
+        iterations=1,
+        max_filters=4,
+    )
+
+    assert len(summaries) == 1
+    guide = (tmp_path / 'iterative' / 'iter_01' / 'README.txt').read_text()
+    assert 'headmatch iteration results' in guide
+    assert 'iterations_summary.json' in guide
 
 
 def test_analyze_rejects_mono_recording(tmp_path: Path):

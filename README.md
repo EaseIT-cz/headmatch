@@ -100,6 +100,7 @@ headmatch fit   --recording out/measure_usb_01/recording.wav   --out-dir out/fit
 ```
 
 Outputs:
+- `README.txt` — quick plain-language guide to the folder contents
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
 - `fit_report.json`
@@ -111,7 +112,7 @@ Outputs:
 headmatch iterate   --out-dir out/iterative_usb   --target-csv my_target.csv   --output-target "your-headphone-output-node"   --input-target "your-h2n-input-node"   --iterations 3   --max-filters 8   --sample-rate 48000
 ```
 
-Each iteration gets its own folder.
+Each iteration gets its own folder, plus a `README.txt` in every iteration directory so you can tell the files apart without opening JSON first.
 
 ## Offline workflow: record first, analyze later
 

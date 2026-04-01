@@ -15,6 +15,9 @@ from .signals import SweepSpec
 from .targets import TargetCurve, create_flat_target, load_curve, resample_curve, clone_target_from_source_target
 
 
+RESULTS_GUIDE_NAME = 'README.txt'
+
+
 @dataclass
 class IterationSummary:
     iteration: int
@@ -24,7 +27,51 @@ class IterationSummary:
     right_max_error_db: float
 
 
+def write_results_guide(out_dir: Path, kind: str) -> Path:
+    if kind == 'fit':
+        title = 'headmatch fit results'
+        overview = 'This folder contains one analyzed recording and the EQ files built from it.'
+        files = [
+            ('run_summary.json', 'Plain-language machine-readable summary of the run and predicted error after EQ.'),
+            ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device names before use.'),
+            ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
+            ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
+            ('measurement_left.csv', 'Estimated left-channel headphone response from the recording.'),
+            ('measurement_right.csv', 'Estimated right-channel headphone response from the recording.'),
+        ]
+        next_steps = [
+            'Open run_summary.json first if you want the quickest overview.',
+            'Use camilladsp_full.yaml if you need a starter CamillaDSP config, or camilladsp_filters_only.yaml if you already have one.',
+            'If the result still looks off, repeat the measurement with a fresh reseat before adding more filters.',
+        ]
+    else:
+        title = 'headmatch iteration results'
+        overview = 'This folder contains one measurement-and-fit pass inside a multi-iteration run.'
+        files = [
+            ('sweep.wav', 'The sweep played during this iteration.'),
+            ('recording.wav', 'The recorded response captured for this iteration.'),
+            ('run_summary.json', 'Summary of this iteration and predicted error after EQ.'),
+            ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('camilladsp_full.yaml', 'Full CamillaDSP config template for this iteration.'),
+            ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
+            ('measurement_left.csv', 'Estimated left-channel response for this iteration.'),
+            ('measurement_right.csv', 'Estimated right-channel response for this iteration.'),
+        ]
+        next_steps = [
+            'Compare this folder with the other iter_* folders if you want to see whether the predicted residual improved.',
+            'Check the top-level iterations_summary.json for the per-iteration error overview.',
+        ]
 
+    lines = [title, '=' * len(title), '', overview, '', 'Files', '-----']
+    for name, description in files:
+        lines.append(f'- {name}: {description}')
+    lines.extend(['', 'Next steps', '----------'])
+    for step in next_steps:
+        lines.append(f'- {step}')
+    path = out_dir / RESULTS_GUIDE_NAME
+    path.write_text('\n'.join(lines) + '\n')
+    return path
 
 
 def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> dict:
@@ -89,6 +136,7 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
     save_json(out_dir / 'fit_report.json', report)
     save_json(out_dir / 'run_summary.json', summary)
+    write_results_guide(out_dir, kind='fit')
     return report
 
 
@@ -132,5 +180,6 @@ def iterative_measure_and_fit(
         summaries.append(asdict(summary))
         save_json(iter_dir / 'fit_report.json', report)
         save_json(iter_dir / 'run_summary.json', _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate))
+        write_results_guide(iter_dir, kind='iteration')
     save_json(output_dir / 'iterations_summary.json', {'iterations': summaries, 'count': len(summaries)})
     return summaries
