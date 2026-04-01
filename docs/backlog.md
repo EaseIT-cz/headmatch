@@ -2,24 +2,24 @@
 
 Priority is ordered top to bottom.
 
-## P0 — versioning and interaction foundation
+## P0 — configuration and interaction foundation
 
-1. Establish a real versioning scheme and expose version info in CLI/TUI/GUI.
-2. Implement config persistence/loading against the shared interaction contract, including PipeWire target preload.
-3. Add a default config file location strategy plus first-run creation behavior.
+1. [done] Implement config persistence/loading against the shared interaction contract, including PipeWire target preload.
+2. [done] Add a default config file location strategy plus first-run creation behavior.
+3. [done] Expose a lightweight settings API usable by CLI, TUI, and GUI.
 
 ## P1 — GUI and TUI core workflows
 
-4. Implement the initial TUI wizard for beginner-guided measurement and fit.
+4. [done] Implement the initial TUI wizard for beginner-guided measurement and fit.
 5. Implement the GUI skeleton and main navigation flow.
-6. Preload shared saved config values in the GUI and TUI.
-7. Add a run/history browser in the TUI and GUI using `run_summary.json` as the stable summary source.
+6. [done] Preload shared saved config values in the TUI and shared frontend helpers.
+7. [done] Add a run/history browser in the TUI plus shared history-loading helpers using `run_summary.json` as the stable summary source.
 
 ## P1 — remaining product polish
 
-8. Improve output folder discoverability further, including a short README section that explains what each generated file means.
-9. Add a documented install and first-run path for Linux users.
-10. Package example configs and sample data.
+8. [done] Improve output folder discoverability further, including a short README section that explains what each generated file means.
+9. [done] Add a documented install and first-run path for Linux users.
+10. [done] Package example configs and sample data.
 
 ## P2 — capture and analysis robustness
 

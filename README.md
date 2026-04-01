@@ -44,7 +44,12 @@ For testing, install the test dependencies:
 pip install -r requirements-test.txt
 ```
 
-## CLI overview
+## Interaction modes
+
+`headmatch` currently ships with:
+- **CLI** for scripted and explicit workflows
+- **TUI** (`headmatch tui`) for a guided terminal-first flow with recent-run browsing
+- **GUI** (`headmatch-gui`) as a lightweight desktop shell that preloads the same config and shows recent-run summaries
 
 Check the installed app identity at any time:
 
@@ -72,6 +77,33 @@ headmatch fit-offline
 headmatch clone-target
 headmatch iterate
 ```
+
+## Config file and first-run behavior
+
+`headmatch` keeps shared user defaults in a single JSON config file so the CLI, TUI, and any later GUI can reuse the same settings.
+
+Default location:
+- `$XDG_CONFIG_HOME/headmatch/config.json`
+- fallback: `~/.config/headmatch/config.json`
+
+Behavior:
+- on first run, `headmatch` creates that file with safe starter defaults
+- saved PipeWire input/output target strings and common sweep/fit defaults preload automatically
+- explicit CLI flags still win over saved values for the current command
+- you can point at a different file with `--config /path/to/config.json`
+
+An example config lives at `docs/examples/headmatch.config.json`.
+
+Launch the interactive frontends at any time with:
+
+```bash
+headmatch tui
+headmatch-gui
+```
+
+The TUI preloads saved device/default values, can start online or offline workflows, and can browse recent runs by scanning for `run_summary.json` files under your output folder.
+
+The GUI currently focuses on the same shared defaults plus a lightweight history view backed by the same `run_summary.json` / `README.txt` files.
 
 ## Online workflow: fully automated with PipeWire
 
@@ -114,6 +146,10 @@ Outputs:
 - measurement CSVs
 
 The JSON and YAML outputs include a `generated_by` / `metadata.generated_by` block with the app name and version so saved folders can be traced back to the build that created them.
+
+For quick review later, open either:
+- `run_summary.json` for the stable machine-readable summary the TUI/history browser reads
+- `README.txt` for the plain-language guide to that output folder
 
 ### 5) Iterate automatically
 

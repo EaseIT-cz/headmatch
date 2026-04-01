@@ -16,6 +16,8 @@ dependencies = [
 
 [project.scripts]
 headmatch = "headmatch.cli:main"
+headmatch-tui = "headmatch.tui:main"
+headmatch-gui = "headmatch.gui:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "headmatch.__version__"}

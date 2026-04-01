@@ -65,6 +65,12 @@ Design implication: the system should prefer opinionated workflows over flexibil
   - iterative measurement loop
 - `cli.py`
   - command-line entry points
+- `settings.py`
+  - shared config loading/saving and first-run defaults
+- `tui.py`
+  - guided terminal workflow and recent-run browsing
+- `history.py`
+  - stable run-summary discovery for interactive frontends
 
 ## Architecture decisions
 
@@ -149,12 +155,37 @@ Users should always be able to tell what version they are running.
 
 Implication:
 - keep one canonical in-package version source (`headmatch.app_identity`)
-- expose version in CLI, TUI, and future GUI entry points
+- expose version in CLI, TUI, and any later GUI entry points
 - include version in generated outputs
 - prefer semantic versions with optional build metadata
+
+### 8. Shared config lives in one predictable user path
+
+CLI, TUI, and GUI should all read the same persisted user settings.
+
+Policy:
+- default path is `$XDG_CONFIG_HOME/headmatch/config.json`
+- if `XDG_CONFIG_HOME` is unset, fall back to `~/.config/headmatch/config.json`
+- frontends may allow an explicit override path for testing or advanced use
+- the stored schema should stay small and stable, centered on PipeWire targets and common sweep/fit defaults
+
+First-run behavior:
+- if the config file is missing, create it with safe starter defaults
+- missing PipeWire targets stay `null`; the app should not guess devices yet
+- saved values preload into frontends, but explicit CLI flags still override them for that run
 
 ## Future product direction
 
 If the repo grows, the likely next step is a small guided app or wizard-like CLI that reduces the number of choices exposed to the user at once.
 
 The right shape for this audience is not “more options.” It is “fewer ways to get lost.”
+
+
+### 9. Run history should use `run_summary.json` as the stable contract
+
+Interactive frontends should discover prior runs by scanning output folders for `run_summary.json` and then optionally opening the sibling `README.txt` guide.
+
+Implication:
+- keep `run_summary.json` compact and stable
+- treat `README.txt` as the friendly explanation layer
+- share history-loading code so the TUI and a later GUI do not drift

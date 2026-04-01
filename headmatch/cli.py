@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .app_identity import get_app_identity
+from .settings import load_or_create_config, save_config, update_config_from_args
 
 
 DEFAULT_START_ITERATIONS = 1
@@ -22,14 +23,14 @@ def parse_seconds(value: str) -> float:
     return seconds
 
 
-def add_common_sweep_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--sample-rate", type=int, default=48000)
-    p.add_argument("--duration", type=parse_seconds, default=8.0)
-    p.add_argument("--f-start", type=float, default=20.0)
-    p.add_argument("--f-end", type=float, default=22000.0)
-    p.add_argument("--pre-silence", type=parse_seconds, default=0.5)
-    p.add_argument("--post-silence", type=parse_seconds, default=1.0)
-    p.add_argument("--amplitude", type=float, default=0.2)
+def add_common_sweep_args(p: argparse.ArgumentParser, config) -> None:
+    p.add_argument("--sample-rate", type=int, default=config.sample_rate)
+    p.add_argument("--duration", type=parse_seconds, default=config.duration_s)
+    p.add_argument("--f-start", type=float, default=config.f_start_hz)
+    p.add_argument("--f-end", type=float, default=config.f_end_hz)
+    p.add_argument("--pre-silence", type=parse_seconds, default=config.pre_silence_s)
+    p.add_argument("--post-silence", type=parse_seconds, default=config.post_silence_s)
+    p.add_argument("--amplitude", type=float, default=config.amplitude)
 
 
 def spec_from_args(args):
@@ -46,7 +47,7 @@ def spec_from_args(args):
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(config) -> argparse.ArgumentParser:
     identity = get_app_identity()
     parser = argparse.ArgumentParser(
         prog="headmatch",
@@ -58,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument('--version', action='version', version=f'%(prog)s {identity.version_display}')
+    parser.add_argument('--config', default=None, help='Optional path to a JSON config file. Default: ~/.config/headmatch/config.json or $XDG_CONFIG_HOME/headmatch/config.json.')
     sub = parser.add_subparsers(dest="cmd")
 
     p = sub.add_parser(
@@ -68,52 +70,52 @@ def build_parser() -> argparse.ArgumentParser:
             "This is the easiest place to start."
         ),
     )
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and YAML exports.")
-    p.add_argument("--target-csv", default=None, help="Optional target curve CSV. If omitted, fit toward flat.")
-    p.add_argument("--output-target", default=None, help="Optional PipeWire playback node match string.")
-    p.add_argument("--input-target", default=None, help="Optional PipeWire capture node match string.")
-    p.add_argument("--max-filters", type=int, default=8, help="Maximum PEQ filters per channel.")
+    p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional PipeWire playback node match string.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional PipeWire capture node match string.")
+    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Maximum PEQ filters per channel.")
     p.add_argument(
         "--iterations",
         type=int,
-        default=DEFAULT_START_ITERATIONS,
+        default=config.start_iterations,
         help="Number of online measure-and-fit passes. Default: 1 for a simple first run.",
     )
 
     p = sub.add_parser("render-sweep", help="Generate a sweep WAV file.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("measure", help="Play sweep via PipeWire and record the transfer.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--output-target", default=None)
-    p.add_argument("--input-target", default=None)
+    p.add_argument("--output-target", default=config.pipewire_output_target)
+    p.add_argument("--input-target", default=config.pipewire_input_target)
 
     p = sub.add_parser("prepare-offline", help="Create sweep + metadata for Zoom/H2n or SD-card recording workflows.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--notes", default="")
 
     p = sub.add_parser("analyze", help="Analyze a recording WAV and write FR CSVs.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
 
     p = sub.add_parser("fit", help="Analyze a recording and build CamillaDSP EQ.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--target-csv", default=None)
-    p.add_argument("--max-filters", type=int, default=8)
+    p.add_argument("--target-csv", default=config.preferred_target_csv)
+    p.add_argument("--max-filters", type=int, default=config.max_filters)
 
     p = sub.add_parser("fit-offline", help="Analyze an imported offline recording and build CamillaDSP EQ.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--target-csv", default=None)
-    p.add_argument("--max-filters", type=int, default=8)
+    p.add_argument("--target-csv", default=config.preferred_target_csv)
+    p.add_argument("--max-filters", type=int, default=config.max_filters)
 
     p = sub.add_parser("clone-target", help="Create a clone target curve from source and target FR CSVs.")
     p.add_argument("--source-csv", required=True)
@@ -125,13 +127,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p = sub.add_parser("iterate", help="Measure -> fit -> export, repeated.")
-    add_common_sweep_args(p)
+    add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--target-csv", default=None)
-    p.add_argument("--output-target", default=None)
-    p.add_argument("--input-target", default=None)
-    p.add_argument("--iterations", type=int, default=2)
-    p.add_argument("--max-filters", type=int, default=8)
+    p.add_argument("--target-csv", default=config.preferred_target_csv)
+    p.add_argument("--output-target", default=config.pipewire_output_target)
+    p.add_argument("--input-target", default=config.pipewire_input_target)
+    p.add_argument("--iterations", type=int, default=config.iterate_iterations)
+    p.add_argument("--max-filters", type=int, default=config.max_filters)
+
+    sub.add_parser(
+        "tui",
+        help="Launch the interactive beginner wizard.",
+        description="Run a simple terminal wizard for online or offline measurement workflows.",
+    )
     return parser
 
 
@@ -179,6 +187,15 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Clone target written to {args.out}.")
         print("Next: pass that CSV to fit, fit-offline, or start with --target-csv.")
+    elif cmd == "tui":
+        print()
+        result = getattr(args, "tui_result", None)
+        if getattr(result, "workflow", None) == "history":
+            print(f"History browser finished. Review outputs in {result.out_dir}.")
+            if getattr(result, "details", ""):
+                print(f"Guide: {result.details}")
+        else:
+            print("Wizard finished. Reopen 'headmatch tui' any time for another guided run.")
 
 
 def format_user_error(cmd: str, exc: ValueError) -> str:
@@ -202,11 +219,20 @@ def format_user_error(cmd: str, exc: ValueError) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = build_parser()
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument("--config", default=None)
+    bootstrap_args, _ = bootstrap.parse_known_args(argv)
+    config, config_path, created = load_or_create_config(bootstrap_args.config)
+
+    parser = build_parser(config)
     args = parser.parse_args(argv)
 
     if not args.cmd:
         print_beginner_guide(parser)
+        print()
+        print(f"Config path: {config_path}")
+        if created:
+            print("Created a default config file with safe starter values.")
         raise SystemExit(0)
 
     from .analysis import analyze_measurement
@@ -219,9 +245,13 @@ def main(argv: list[str] | None = None) -> None:
         run_pipewire_measurement,
     )
     from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
+    from .tui import run_tui
 
     try:
-        if args.cmd == "start":
+        if args.cmd == "tui":
+            from sys import stdin, stdout
+            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda: config)
+        elif args.cmd == "start":
             print(f"Starting guided measurement workflow in {args.out_dir} ...")
             iterative_measure_and_fit(
                 output_dir=args.out_dir,
@@ -270,6 +300,8 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
+    if args.cmd != 'tui':
+        save_config(update_config_from_args(args, existing=config), config_path)
     print_next_steps(args.cmd, args)
 
 
