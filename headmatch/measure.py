@@ -31,6 +31,15 @@ class OfflineMeasurementPlan:
 
 
 
+
+
+def _require_target(value: Optional[str], label: str) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        raise ValueError(f'{label} cannot be empty')
+    return value
 def require_executable(name: str) -> None:
     if shutil.which(name) is None:
         raise RuntimeError(f"Required executable not found: {name}")
@@ -76,6 +85,7 @@ def prepare_offline_measurement(spec: SweepSpec, plan: OfflineMeasurementPlan) -
 def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: PipeWireDeviceConfig) -> Path:
     require_executable("pw-play")
     require_executable("pw-record")
+    device = PipeWireDeviceConfig(output_target=_require_target(device.output_target, 'output_target'), input_target=_require_target(device.input_target, 'input_target'))
     paths.sweep_wav.parent.mkdir(parents=True, exist_ok=True)
     paths.recording_wav.parent.mkdir(parents=True, exist_ok=True)
     render_sweep_file(spec, paths.sweep_wav)

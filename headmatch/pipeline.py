@@ -25,6 +25,27 @@ class IterationSummary:
 
 
 
+
+
+def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> dict:
+    target_resampled = resample_curve(target, result.freqs_hz)
+    return {
+        'kind': kind,
+        'out_dir': str(out_dir),
+        'sample_rate': sample_rate,
+        'frequency_points': int(len(result.freqs_hz)),
+        'target': target_resampled.name,
+        'filters': {
+            'left': len(left_bands),
+            'right': len(right_bands),
+        },
+        'predicted_error_db': {
+            'left_rms': report['predicted_left_rms_error_db'],
+            'right_rms': report['predicted_right_rms_error_db'],
+            'left_max': report['predicted_left_max_error_db'],
+            'right_max': report['predicted_right_max_error_db'],
+        },
+    }
 def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
     err = measured_db - target_db
     mask = (np.arange(len(err)) >= 0)
@@ -65,7 +86,9 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
     save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
+    summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
     save_json(out_dir / 'fit_report.json', report)
+    save_json(out_dir / 'run_summary.json', summary)
     return report
 
 
@@ -108,5 +131,6 @@ def iterative_measure_and_fit(
         summary = IterationSummary(i, l_rms, r_rms, l_max, r_max)
         summaries.append(asdict(summary))
         save_json(iter_dir / 'fit_report.json', report)
-    save_json(output_dir / 'iterations_summary.json', {'iterations': summaries})
+        save_json(iter_dir / 'run_summary.json', _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate))
+    save_json(output_dir / 'iterations_summary.json', {'iterations': summaries, 'count': len(summaries)})
     return summaries

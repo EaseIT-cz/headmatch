@@ -7,7 +7,7 @@ from typing import Dict
 import numpy as np
 from scipy import signal
 
-from .io_utils import read_wav, save_fr_csv
+from .io_utils import read_wav, save_fr_csv, validate_stereo_audio
 from .signals import SweepSpec, fractional_octave_smoothing, geometric_log_grid
 
 
@@ -43,7 +43,7 @@ def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: i
     nfft = int(2 ** np.ceil(np.log2(max(len(reference), len(response)))))
     ref_fft = np.fft.rfft(reference, n=nfft)
     resp_fft = np.fft.rfft(response, n=nfft)
-    h = resp_fft / np.maximum(ref_fft, 1e-12)
+    h = resp_fft / np.where(np.abs(ref_fft) > 1e-12, ref_fft, 1e-12)
     freqs = np.fft.rfftfreq(nfft, d=1.0 / sample_rate)
     mask = (freqs >= f_min) & (freqs <= f_max)
     return freqs[mask], 20 * np.log10(np.maximum(np.abs(h[mask]), 1e-12))
@@ -52,8 +52,12 @@ def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: i
 
 def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
     recording, sr = read_wav(recording_wav)
+    validate_stereo_audio(recording, recording_wav)
     if sr != sweep_spec.sample_rate:
         raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
+    min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
+    if len(recording) < min_len:
+        raise ValueError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
     from .signals import generate_log_sweep
     _, reference = generate_log_sweep(sweep_spec)
     # extract the padded sweep actually played on one channel

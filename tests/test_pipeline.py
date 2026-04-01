@@ -8,7 +8,7 @@ from scipy import signal
 from headmatch.analysis import analyze_measurement
 from headmatch.io_utils import write_wav
 from headmatch.peq import fit_peq, peq_chain_response_db
-from headmatch.pipeline import fit_from_measurement
+from headmatch.pipeline import fit_from_measurement, process_single_measurement
 from headmatch.signals import SweepSpec, generate_log_sweep
 from headmatch.targets import TargetCurve
 
@@ -62,3 +62,29 @@ def test_measurement_and_fit(tmp_path: Path):
     right_after = np.sqrt(np.mean((result.right_db + peq_chain_response_db(result.freqs_hz, spec.sample_rate, right_bands))**2))
     assert left_after < left_before
     assert right_after < right_before
+
+
+
+def test_process_single_measurement_writes_run_summary(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    out_dir = tmp_path / 'fit'
+    report = process_single_measurement(recording, out_dir, spec, target_path=None, max_filters=4)
+    assert report['predicted_left_rms_error_db'] >= 0
+    summary = (out_dir / 'run_summary.json').read_text()
+    assert 'predicted_error_db' in summary
+    assert (out_dir / 'camilladsp_full.yaml').exists()
+    assert (out_dir / 'camilladsp_filters_only.yaml').exists()
+
+
+
+def test_analyze_rejects_mono_recording(tmp_path: Path):
+    spec = SweepSpec(sample_rate=48000, duration_s=4.0, pre_silence_s=0.2, post_silence_s=0.5, amplitude=0.35)
+    mono = np.zeros((1024, 1))
+    path = tmp_path / 'mono.wav'
+    write_wav(path, mono, spec.sample_rate)
+    try:
+        analyze_measurement(path, spec, out_dir=tmp_path)
+    except ValueError as exc:
+        assert 'stereo' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')

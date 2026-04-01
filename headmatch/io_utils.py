@@ -22,6 +22,15 @@ def read_wav(path: str | Path) -> Tuple[np.ndarray, int]:
     return data.astype(np.float64), sr
 
 
+def validate_stereo_audio(data: np.ndarray, path: str | Path) -> None:
+    if data.ndim != 2:
+        raise ValueError(f'{path} must be a 2D audio array')
+    if data.shape[1] != 2:
+        raise ValueError(f'{path} must be stereo; found {data.shape[1]} channels')
+    if len(data) == 0:
+        raise ValueError(f'{path} is empty')
+
+
 
 def save_fr_csv(path: str | Path, freqs_hz: np.ndarray, values_db: np.ndarray, column_name: str = 'response_db') -> None:
     path = Path(path)

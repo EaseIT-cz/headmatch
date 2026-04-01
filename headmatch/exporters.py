@@ -9,6 +9,15 @@ from .peq import PEQBand
 
 
 
+def _band_payload(band: PEQBand) -> dict:
+    return {
+        'type': {'peaking': 'Peaking', 'lowshelf': 'Lowshelf', 'highshelf': 'Highshelf'}[band.kind],
+        'freq': round(band.freq, 3),
+        'q': round(band.q, 4) if band.kind == 'peaking' else round(max(0.1, min(1.0, band.q)), 4),
+        'gain': round(band.gain_db, 3),
+    }
+
+
 def export_camilladsp_filters_yaml(path: str | Path, bands_left: List[PEQBand], bands_right: List[PEQBand], samplerate: int = 48000) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -17,27 +26,11 @@ def export_camilladsp_filters_yaml(path: str | Path, bands_left: List[PEQBand], 
     for i, band in enumerate(bands_left, 1):
         name = f'L_{i}_{band.kind}'
         left_names.append(name)
-        filters[name] = {
-            'type': 'Biquad',
-            'parameters': {
-                'type': {'peaking': 'Peaking', 'lowshelf': 'Lowshelf', 'highshelf': 'Highshelf'}[band.kind],
-                'freq': round(band.freq, 3),
-                'q': round(band.q, 4) if band.kind == 'peaking' else round(max(0.1, min(1.0, band.q)), 4),
-                'gain': round(band.gain_db, 3),
-            },
-        }
+        filters[name] = {'type': 'Biquad', 'parameters': _band_payload(band)}
     for i, band in enumerate(bands_right, 1):
         name = f'R_{i}_{band.kind}'
         right_names.append(name)
-        filters[name] = {
-            'type': 'Biquad',
-            'parameters': {
-                'type': {'peaking': 'Peaking', 'lowshelf': 'Lowshelf', 'highshelf': 'Highshelf'}[band.kind],
-                'freq': round(band.freq, 3),
-                'q': round(band.q, 4) if band.kind == 'peaking' else round(max(0.1, min(1.0, band.q)), 4),
-                'gain': round(band.gain_db, 3),
-            },
-        }
+        filters[name] = {'type': 'Biquad', 'parameters': _band_payload(band)}
 
     data = {
         'samplerate': samplerate,
