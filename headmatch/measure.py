@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+from .app_identity import get_app_identity
 from .io_utils import save_json, write_wav
 from .signals import SweepSpec, generate_log_sweep
 
@@ -57,7 +58,9 @@ def prepare_offline_measurement(spec: SweepSpec, plan: OfflineMeasurementPlan) -
     plan.sweep_wav.parent.mkdir(parents=True, exist_ok=True)
     plan.metadata_json.parent.mkdir(parents=True, exist_ok=True)
     render_sweep_file(spec, plan.sweep_wav)
+    identity = get_app_identity()
     payload = {
+        'generated_by': identity.as_metadata(),
         "mode": "offline",
         "recommended_recorder": "Zoom H2n",
         "recommended_format": {

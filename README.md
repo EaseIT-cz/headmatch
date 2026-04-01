@@ -46,6 +46,12 @@ pip install -r requirements-test.txt
 
 ## CLI overview
 
+Check the installed app identity at any time:
+
+```bash
+headmatch --version
+```
+
 The easiest first run is:
 
 ```bash
@@ -104,7 +110,10 @@ Outputs:
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
 - `fit_report.json`
+- `run_summary.json`
 - measurement CSVs
+
+The JSON and YAML outputs include a `generated_by` / `metadata.generated_by` block with the app name and version so saved folders can be traced back to the build that created them.
 
 ### 5) Iterate automatically
 

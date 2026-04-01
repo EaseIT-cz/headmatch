@@ -72,8 +72,11 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert report['predicted_left_rms_error_db'] >= 0
     summary = (out_dir / 'run_summary.json').read_text()
     assert 'predicted_error_db' in summary
+    assert 'generated_by' in summary
     assert (out_dir / 'camilladsp_full.yaml').exists()
     assert (out_dir / 'camilladsp_filters_only.yaml').exists()
+    assert 'generated_by' in (out_dir / 'fit_report.json').read_text()
+    assert 'generated_by' in (out_dir / 'camilladsp_full.yaml').read_text()
     guide = (out_dir / 'README.txt').read_text()
     assert 'headmatch fit results' in guide
     assert 'camilladsp_full.yaml' in guide

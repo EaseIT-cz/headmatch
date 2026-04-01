@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "default_output_dir": "out/session_01",
+  "preferred_target_csv": "targets/my_target.csv",
+  "pipewire_output_target": "alsa_output.usb-Example_DAC-00.analog-stereo",
+  "pipewire_input_target": "alsa_input.usb-ZOOM_H2n-00.stereo-input",
+  "sample_rate": 48000,
+  "duration_s": 8.0,
+  "f_start_hz": 20.0,
+  "f_end_hz": 22000.0,
+  "pre_silence_s": 0.5,
+  "post_silence_s": 1.0,
+  "amplitude": 0.2,
+  "max_filters": 8,
+  "start_iterations": 1,
+  "iterate_iterations": 2
+}

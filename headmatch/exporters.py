@@ -5,6 +5,7 @@ from typing import Iterable, List
 
 import yaml
 
+from .app_identity import get_app_identity
 from .peq import PEQBand
 
 
@@ -32,7 +33,11 @@ def export_camilladsp_filters_yaml(path: str | Path, bands_left: List[PEQBand], 
         right_names.append(name)
         filters[name] = {'type': 'Biquad', 'parameters': _band_payload(band)}
 
+    identity = get_app_identity()
     data = {
+        'metadata': {
+            'generated_by': identity.as_metadata(),
+        },
         'samplerate': samplerate,
         'channels': {'in': 2, 'out': 2},
         'filters': filters,
@@ -83,6 +88,7 @@ def export_camilladsp_filter_snippet_yaml(path: str | Path, bands_left: List[PEQ
                     'gain': round(band.gain_db, 3),
                 }
             }
+    identity = get_app_identity()
     pipeline = [{'channel': 0, 'names': names[0]}, {'channel': 1, 'names': names[1]}]
-    path.write_text(yaml.safe_dump({'filters': filters, 'pipeline': pipeline}, sort_keys=False))
+    path.write_text(yaml.safe_dump({'metadata': {'generated_by': identity.as_metadata()}, 'filters': filters, 'pipeline': pipeline}, sort_keys=False))
     return path

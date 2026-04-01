@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .app_identity import get_app_identity
+
 
 DEFAULT_START_ITERATIONS = 1
 
@@ -45,6 +47,7 @@ def spec_from_args(args):
 
 
 def build_parser() -> argparse.ArgumentParser:
+    identity = get_app_identity()
     parser = argparse.ArgumentParser(
         prog="headmatch",
         description="Beginner-first headphone measurement and EQ fitting.",
@@ -54,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
             "if you want to record first and import later."
         ),
     )
+    parser.add_argument('--version', action='version', version=f'%(prog)s {identity.version_display}')
     sub = parser.add_subparsers(dest="cmd")
 
     p = sub.add_parser(
@@ -132,8 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
-    print("headmatch beginner path")
-    print("=======================")
+    identity = get_app_identity()
+    print(f"headmatch beginner path ({identity.version_display})")
+    print("================================")
     print("1) First try: headmatch start --out-dir out/session_01")
     print("   This runs one online measurement pass and exports CamillaDSP EQ files.")
     print()
@@ -197,6 +202,13 @@ def format_user_error(cmd: str, exc: ValueError) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.cmd:
+        print_beginner_guide(parser)
+        raise SystemExit(0)
+
     from .analysis import analyze_measurement
     from .measure import (
         MeasurementPaths,
@@ -207,13 +219,6 @@ def main(argv: list[str] | None = None) -> None:
         run_pipewire_measurement,
     )
     from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
-
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
-    if not args.cmd:
-        print_beginner_guide(parser)
-        raise SystemExit(0)
 
     try:
         if args.cmd == "start":

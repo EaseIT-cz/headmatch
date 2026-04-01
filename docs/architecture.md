@@ -143,6 +143,16 @@ Build around three layers:
    - file system outputs
    - recorder import/export
 
+### 7. Versioning must be visible everywhere
+
+Users should always be able to tell what version they are running.
+
+Implication:
+- keep one canonical in-package version source (`headmatch.app_identity`)
+- expose version in CLI, TUI, and future GUI entry points
+- include version in generated outputs
+- prefer semantic versions with optional build metadata
+
 ## Future product direction
 
 If the repo grows, the likely next step is a small guided app or wizard-like CLI that reduces the number of choices exposed to the user at once.

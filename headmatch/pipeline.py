@@ -7,6 +7,7 @@ from typing import Dict, Optional
 import numpy as np
 
 from .analysis import MeasurementResult, analyze_measurement
+from .app_identity import get_app_identity
 from .exporters import export_camilladsp_filter_snippet_yaml, export_camilladsp_filters_yaml
 from .io_utils import save_fr_csv, save_json
 from .measure import MeasurementPaths, PipeWireDeviceConfig, run_pipewire_measurement
@@ -75,8 +76,10 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
 
 
 def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> dict:
+    identity = get_app_identity()
     target_resampled = resample_curve(target, result.freqs_hz)
     return {
+        'generated_by': identity.as_metadata(),
         'kind': kind,
         'out_dir': str(out_dir),
         'sample_rate': sample_rate,
@@ -112,7 +115,9 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
     right_pred = result.right_db + peq_chain_response_db(result.freqs_hz, sample_rate, right_bands)
     l_rms, l_max = _metrics(left_pred, target_resampled.values_db)
     r_rms, r_max = _metrics(right_pred, target_resampled.values_db)
+    identity = get_app_identity()
     report = {
+        'generated_by': identity.as_metadata(),
         'predicted_left_rms_error_db': l_rms,
         'predicted_right_rms_error_db': r_rms,
         'predicted_left_max_error_db': l_max,
@@ -181,5 +186,6 @@ def iterative_measure_and_fit(
         save_json(iter_dir / 'fit_report.json', report)
         save_json(iter_dir / 'run_summary.json', _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate))
         write_results_guide(iter_dir, kind='iteration')
-    save_json(output_dir / 'iterations_summary.json', {'iterations': summaries, 'count': len(summaries)})
+    identity = get_app_identity()
+    save_json(output_dir / 'iterations_summary.json', {'generated_by': identity.as_metadata(), 'iterations': summaries, 'count': len(summaries)})
     return summaries
