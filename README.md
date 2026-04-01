@@ -85,6 +85,14 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+If you are not sure your local setup is ready yet, run:
+
+```bash
+headmatch doctor
+```
+
+It gives a small readiness check for the config file, PipeWire tools, and device discovery before your first measurement.
+
 For tests:
 
 ```bash
@@ -95,7 +103,13 @@ pip install -r requirements-test.txt
 
 ## Recommended first run
 
-If PipeWire playback and recording are working, start here:
+If you are unsure whether your machine is ready for online measurement, start with:
+
+```bash
+headmatch doctor
+```
+
+If the doctor output looks good and PipeWire playback and recording are working, continue with:
 
 ```bash
 headmatch list-targets
@@ -109,6 +123,8 @@ This will:
 4. fit EQ toward the selected target
 5. export Equalizer APO and CamillaDSP files
 6. write a human-readable `README.txt`, machine-readable `run_summary.json`, and reviewable fit graphs
+
+If `headmatch doctor` reports missing PipeWire tools or no usable devices, fix that first or use the recorder-first offline path instead.
 
 If you prefer the recorder-first path:
 
@@ -161,6 +177,7 @@ docs/examples/headmatch.config.json
 
 ### Guided online path
 ```bash
+headmatch doctor
 headmatch list-targets
 headmatch start --out-dir out/session_01
 ```
@@ -204,6 +221,13 @@ headmatch iterate \
   --input-target "your-capture-node" \
   --iterations 3
 ```
+
+### Quick setup check
+```bash
+headmatch doctor
+```
+
+Use this when install or device setup feels uncertain. It is the fastest way to confirm the config file, PipeWire tools, and basic device discovery are in place.
 
 ### Clone target generation
 ```bash
