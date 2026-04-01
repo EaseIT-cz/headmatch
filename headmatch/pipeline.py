@@ -227,6 +227,31 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
     }
 
 
+def _write_fit_artifacts(
+    out_dir: Path,
+    *,
+    kind: str,
+    result: MeasurementResult,
+    target: TargetCurve,
+    left_bands: list[PEQBand],
+    right_bands: list[PEQBand],
+    report: dict,
+    sample_rate: int,
+    write_target_curve_csv: bool,
+) -> dict:
+    export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
+    export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+    export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
+    if write_target_curve_csv:
+        save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
+    render_fit_graphs(out_dir, result, target, sample_rate, left_bands, right_bands)
+    summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate)
+    save_json(out_dir / 'fit_report.json', report)
+    save_json(out_dir / 'run_summary.json', summary)
+    write_results_guide(out_dir, kind=kind, trust_summary=summary['confidence'])
+    return summary
+
+
 def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
     err = measured_db - target_db
     mask = (np.arange(len(err)) >= 0)
@@ -268,15 +293,17 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     result = analyze_measurement(recording_wav, sweep_spec, out_dir=out_dir)
     target = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
     left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters)
-    export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
-    export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
-    export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
-    save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
-    render_fit_graphs(out_dir, result, target, sweep_spec.sample_rate, left_bands, right_bands)
-    summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
-    save_json(out_dir / 'fit_report.json', report)
-    save_json(out_dir / 'run_summary.json', summary)
-    write_results_guide(out_dir, kind='fit', trust_summary=summary['confidence'])
+    _write_fit_artifacts(
+        out_dir,
+        kind='fit',
+        result=result,
+        target=target,
+        left_bands=left_bands,
+        right_bands=right_bands,
+        report=report,
+        sample_rate=sweep_spec.sample_rate,
+        write_target_curve_csv=True,
+    )
     return report
 
 
@@ -309,21 +336,19 @@ def iterative_measure_and_fit(
         if target_curve is None:
             target_curve = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
         left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters)
-        export_camilladsp_filters_yaml(iter_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
-        export_camilladsp_filter_snippet_yaml(iter_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
-        export_equalizer_apo_parametric_txt(iter_dir / 'equalizer_apo.txt', left_bands, right_bands)
-        render_fit_graphs(iter_dir, result, target_curve, sweep_spec.sample_rate, left_bands, right_bands)
-        predicted_left = result.left_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, left_bands)
-        predicted_right = result.right_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, right_bands)
-        t = resample_curve(target_curve, result.freqs_hz).values_db
-        l_rms, l_max = _metrics(predicted_left, t)
-        r_rms, r_max = _metrics(predicted_right, t)
-        summary = IterationSummary(i, l_rms, r_rms, l_max, r_max)
-        summaries.append(asdict(summary))
-        run_summary = _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate)
-        save_json(iter_dir / 'fit_report.json', report)
-        save_json(iter_dir / 'run_summary.json', run_summary)
-        write_results_guide(iter_dir, kind='iteration', trust_summary=run_summary['confidence'])
+        run_summary = _write_fit_artifacts(
+            iter_dir,
+            kind='iteration',
+            result=result,
+            target=target_curve,
+            left_bands=left_bands,
+            right_bands=right_bands,
+            report=report,
+            sample_rate=sweep_spec.sample_rate,
+            write_target_curve_csv=False,
+        )
+        predicted = run_summary['predicted_error_db']
+        summaries.append(asdict(IterationSummary(i, predicted['left_rms'], predicted['right_rms'], predicted['left_max'], predicted['right_max'])))
     identity = get_app_identity()
     save_json(output_dir / 'iterations_summary.json', {'generated_by': identity.as_metadata(), 'iterations': summaries, 'count': len(summaries)})
     return summaries
