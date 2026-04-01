@@ -2,8 +2,6 @@
 
 ## Current status
 
-There are no immediate implementation tasks open.
-
 The current shipped state includes:
 - beginner-first CLI workflow
 - TUI wizard and history browsing
@@ -15,15 +13,19 @@ The current shipped state includes:
 - clone examples and cross-source validation
 - deterministic end-to-end synthetic integration tests
 - GitHub Actions coverage for both main and integration test suites
-- measured-vs-target SVG review graphs in fit and iteration result folders
+- PipeWire device guidance
+- measured-vs-target graph rendering
+- Equalizer APO-compatible parametric preset export by default
 
 ## Active
 
-1. Improve PipeWire device discovery and guidance so users can more easily choose playback and capture targets.
+No immediate implementation tasks are open.
 
 ## Future follow-up candidates
 
-3. Add export formats beyond CamillaDSP if users actually need them.
+1. Add GraphicEQ export if there is a clear user need beyond parametric APO presets.
+2. Add export formats beyond CamillaDSP and APO if users actually need them.
+3. Improve PipeWire device discovery and guidance further if users still struggle with manual target matching.
 4. Add result interpretation and confidence scoring so users can tell whether a run is trustworthy.
 5. Add a guided troubleshooting flow for common setup and measurement failures.
 6. Add preset/run comparison workflows so users can compare stock, corrected, and clone-target results more easily.

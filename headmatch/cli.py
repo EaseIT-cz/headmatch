@@ -66,12 +66,12 @@ def build_parser(config) -> argparse.ArgumentParser:
         "start",
         help="Beginner-first: measure once and build an EQ preset.",
         description=(
-            "Run one guided online measurement pass and export CamillaDSP EQ files. "
+            "Run one guided online measurement pass and export Equalizer APO and CamillaDSP EQ files. "
             "This is the easiest place to start."
         ),
     )
     add_common_sweep_args(p, config)
-    p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and YAML exports.")
+    p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and EQ export files.")
     p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
     p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional PipeWire playback node.name or match string. Run 'headmatch list-targets' to discover likely values.")
     p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional PipeWire capture node.name or match string. Run 'headmatch list-targets' to discover likely values.")
@@ -103,14 +103,14 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
 
-    p = sub.add_parser("fit", help="Analyze a recording and build CamillaDSP EQ.")
+    p = sub.add_parser("fit", help="Analyze a recording and build Equalizer APO and CamillaDSP EQ exports.")
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     p.add_argument("--max-filters", type=int, default=config.max_filters)
 
-    p = sub.add_parser("fit-offline", help="Analyze an imported offline recording and build CamillaDSP EQ.")
+    p = sub.add_parser("fit-offline", help="Analyze an imported offline recording and build Equalizer APO and CamillaDSP EQ exports.")
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
@@ -136,7 +136,7 @@ def build_parser(config) -> argparse.ArgumentParser:
         ),
     )
 
-    p = sub.add_parser("iterate", help="Measure -> fit -> export, repeated.")
+    p = sub.add_parser("iterate", help="Measure -> fit -> export Equalizer APO and CamillaDSP files, repeated.")
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--target-csv", default=config.preferred_target_csv)
@@ -158,7 +158,7 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     print(f"headmatch beginner path ({identity.version_display})")
     print("================================")
     print("1) First try: headmatch start --out-dir out/session_01")
-    print("   This runs one online measurement pass and exports CamillaDSP EQ files.")
+    print("   This runs one online measurement pass and exports Equalizer APO and CamillaDSP EQ files.")
     print()
     print("2) If your recorder is more reliable offline:")
     print("   headmatch prepare-offline --out-dir out/session_01")
@@ -176,7 +176,7 @@ def print_next_steps(cmd: str, args) -> None:
     if cmd == "start":
         print()
         print(f"Done. Review outputs in {out_dir}.")
-        print("Start with run_summary.json and camilladsp_full.yaml.")
+        print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
         print("If PipeWire did not pick the right devices, run 'headmatch list-targets' and rerun with --output-target and/or --input-target.")
     elif cmd == "measure":
         print()
@@ -193,7 +193,7 @@ def print_next_steps(cmd: str, args) -> None:
     elif cmd in {"fit", "fit-offline", "iterate"}:
         print()
         print(f"Done. Review outputs in {out_dir}.")
-        print("Start with run_summary.json and camilladsp_full.yaml.")
+        print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
     elif cmd == "clone-target":
         print()
         print(f"Clone target written to {args.out}.")

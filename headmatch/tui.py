@@ -233,7 +233,7 @@ class HeadMatchWizard:
         self.io.write()
         next_steps = (
             f"Review outputs in {state.out_dir}.",
-            "Start with run_summary.json and camilladsp_full.yaml.",
+            "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.",
             "If the wrong devices were used, rerun the wizard with playback/capture target matches.",
         )
         for step in next_steps:

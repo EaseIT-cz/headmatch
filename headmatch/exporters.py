@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import Iterable, List
 
 import yaml
 
@@ -10,6 +10,7 @@ from .peq import PEQBand
 
 
 FILTER_TYPE_NAMES = {'peaking': 'Peaking', 'lowshelf': 'Lowshelf', 'highshelf': 'Highshelf'}
+APO_FILTER_TYPE_NAMES = {'peaking': 'PK', 'lowshelf': 'LS', 'highshelf': 'HS'}
 
 
 
@@ -98,4 +99,36 @@ def export_camilladsp_filter_snippet_yaml(path: str | Path, bands_left: List[PEQ
         ],
     }
     path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    return path
+
+
+def _apo_preamp_db(bands: Iterable[PEQBand]) -> float:
+    boost = max((band.gain_db for band in bands), default=0.0)
+    preamp = round(-max(0.0, boost), 2)
+    return 0.0 if abs(preamp) < 0.005 else preamp
+
+
+def _format_apo_channel(channel: str, bands: List[PEQBand]) -> list[str]:
+    lines = [f'Channel: {channel}', f'Preamp: {_apo_preamp_db(bands):.2f} dB']
+    for index, band in enumerate(bands, 1):
+        lines.append(
+            f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} ' 
+            f'Fc {band.freq:.2f} Hz Gain {band.gain_db:.2f} dB Q {band.q:.2f}'
+        )
+    return lines
+
+
+def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBand], bands_right: List[PEQBand]) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        '; headmatch Equalizer APO parametric preset',
+        '; Generated for stereo headphones with per-channel filter sections.',
+        '',
+        *_format_apo_channel('L', bands_left),
+        '',
+        *_format_apo_channel('R', bands_right),
+        '',
+    ]
+    path.write_text('\n'.join(lines))
     return path

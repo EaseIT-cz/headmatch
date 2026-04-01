@@ -5,7 +5,7 @@ HeadMatch is a beginner-friendly headphone measurement and EQ tool for Linux.
 It helps you:
 - measure headphone response with **PipeWire** or an offline recorder workflow
 - fit a conservative **parametric EQ** toward a target curve
-- export ready-to-use **CamillaDSP** configurations
+- export ready-to-use **CamillaDSP** configurations and **Equalizer APO** presets
 - build **clone targets** from your own measurements or published CSV curves
 - use the same core workflow from the **CLI**, **TUI**, or **GUI**
 
@@ -24,8 +24,8 @@ Generate a sweep package, record it with an external recorder, then import the W
 ### 3. EQ fitting
 Analyze the measured response and generate a conservative PEQ profile aimed at audible improvement without overfitting.
 
-### 4. CamillaDSP export
-Write both a full CamillaDSP config and a filters-only version.
+### 4. EQ export
+Write both **Equalizer APO** preset files and **CamillaDSP** configs from the same fit result.
 
 ### 5. Headphone cloning
 Create a target curve that moves one headphone toward the tonal balance of another.
@@ -94,7 +94,7 @@ This will:
 2. run one measurement pass
 3. analyze the recording
 4. fit EQ toward the selected target
-5. export CamillaDSP files
+5. export Equalizer APO and CamillaDSP files
 6. write a human-readable `README.txt`, machine-readable `run_summary.json`, and reviewable fit graphs
 
 If you prefer the recorder-first path:
@@ -208,6 +208,7 @@ A typical fit output folder contains:
 - `fit_report.json` — detailed fit report
 - `measurement_left.csv`
 - `measurement_right.csv`
+- `equalizer_apo.txt`
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
 - `fit_overview.svg`
@@ -217,6 +218,7 @@ A typical fit output folder contains:
 The general rule is:
 - open `README.txt` if you want the human explanation
 - open `run_summary.json` if you want the stable machine-readable summary
+- use `equalizer_apo.txt` for Equalizer APO, or one of the CamillaDSP YAML files for CamillaDSP
 
 ---
 
@@ -255,7 +257,7 @@ python -m pytest -q
 HeadMatch is currently designed around:
 - Linux
 - PipeWire
-- CamillaDSP
+- CamillaDSP or Equalizer APO for applying the generated EQ
 - in-ear or binaural microphone setups
 - optional external recorder workflows
 

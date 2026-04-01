@@ -3,7 +3,11 @@ from __future__ import annotations
 import numpy as np
 import yaml
 
-from headmatch.exporters import export_camilladsp_filter_snippet_yaml, export_camilladsp_filters_yaml
+from headmatch.exporters import (
+    export_camilladsp_filter_snippet_yaml,
+    export_camilladsp_filters_yaml,
+    export_equalizer_apo_parametric_txt,
+)
 from headmatch.peq import PEQBand, fit_peq
 from headmatch.signals import geometric_log_grid
 
@@ -57,3 +61,23 @@ def test_export_camilladsp_snippet_uses_same_filter_payloads(tmp_path):
     assert payload['filters']['R_1_highshelf']['parameters']['q'] == 1.0
     assert payload['pipeline'][0]['names'] == ['L_1_peaking']
     assert payload['pipeline'][1]['names'] == ['R_1_highshelf']
+
+
+def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_path):
+    out = tmp_path / 'equalizer_apo.txt'
+    export_equalizer_apo_parametric_txt(
+        out,
+        [PEQBand('lowshelf', 105.0, 3.5, 0.7), PEQBand('peaking', 2500.0, -2.0, 1.23)],
+        [PEQBand('highshelf', 8500.0, -1.5, 0.7)],
+    )
+
+    text = out.read_text()
+
+    assert '; headmatch Equalizer APO parametric preset' in text
+    assert 'Channel: L' in text
+    assert 'Preamp: -3.50 dB' in text
+    assert 'Filter 1: ON LS Fc 105.00 Hz Gain 3.50 dB Q 0.70' in text
+    assert 'Filter 2: ON PK Fc 2500.00 Hz Gain -2.00 dB Q 1.23' in text
+    assert 'Channel: R' in text
+    assert 'Preamp: 0.00 dB' in text
+    assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.70' in text

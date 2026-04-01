@@ -419,7 +419,7 @@ class HeadMatchGuiApp:
                 summary=f"The guided online run finished in {output_dir}.",
                 steps=(
                     f"Review outputs in {output_dir}.",
-                    "Start with run_summary.json and camilladsp_full.yaml.",
+                    "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.",
                     "If the wrong devices were used, rerun with clearer playback/capture target matches.",
                 ),
             ),
@@ -469,7 +469,7 @@ class HeadMatchGuiApp:
                 summary=f"The imported recording was analyzed and fitted into {out_dir}.",
                 steps=(
                     f"Review outputs in {out_dir}.",
-                    "Start with run_summary.json and camilladsp_full.yaml.",
+                    "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.",
                     "If the fit looks wrong, re-record without trimming and try again.",
                 ),
             ),

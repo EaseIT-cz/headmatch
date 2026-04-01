@@ -30,7 +30,7 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 5. normalize at 1 kHz
 6. smooth the curves
 7. fit conservative PEQ bands
-8. export CamillaDSP output
+8. export Equalizer APO and CamillaDSP output
 9. render shared measured-vs-target review graphs
 10. write summary/report artifacts for later review
 
@@ -63,6 +63,7 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - conservative fitting heuristics
 
 ### `exporters.py`
+- Equalizer APO preset export generation
 - CamillaDSP export generation
 
 ### `plots.py`
@@ -145,6 +146,7 @@ Important artifacts:
 - `README.txt` — human-readable explanation of the output folder
 - `run_summary.json` — stable machine-readable summary
 - `fit_report.json` — detailed fit report
+- Equalizer APO preset export
 - CamillaDSP YAML exports
 - measurement CSVs
 - shared SVG review graphs
@@ -180,6 +182,7 @@ The shipped product now includes:
 - GUI shell, history browsing, and measurement wizard
 - shared config persistence and preload
 - clone-target support
+- Equalizer APO export
 - CamillaDSP export
 - deterministic end-to-end synthetic integration tests
 - measured-vs-target SVG review graphs in fit output folders

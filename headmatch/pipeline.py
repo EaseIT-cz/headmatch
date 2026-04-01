@@ -8,7 +8,11 @@ import numpy as np
 
 from .analysis import MeasurementResult, analyze_measurement
 from .app_identity import get_app_identity
-from .exporters import export_camilladsp_filter_snippet_yaml, export_camilladsp_filters_yaml
+from .exporters import (
+    export_camilladsp_filter_snippet_yaml,
+    export_camilladsp_filters_yaml,
+    export_equalizer_apo_parametric_txt,
+)
 from .io_utils import save_fr_csv, save_json
 from .measure import MeasurementPaths, PipeWireDeviceConfig, run_pipewire_measurement
 from .peq import PEQBand, fit_peq, peq_chain_response_db
@@ -36,6 +40,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
         files = [
             ('run_summary.json', 'Plain-language machine-readable summary of the run and predicted error after EQ.'),
             ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('equalizer_apo.txt', 'Ready-to-load Equalizer APO preset file for this result.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device placeholders before use.'),
             ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
             ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
@@ -47,7 +52,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
         ]
         next_steps = [
             'Open run_summary.json first if you want the quickest overview.',
-            'Use camilladsp_full.yaml if you need a starter CamillaDSP config, or camilladsp_filters_only.yaml if you already have one.',
+            'Use equalizer_apo.txt for Equalizer APO, or use the CamillaDSP YAML files for CamillaDSP.',
             'If the result still looks off, repeat the measurement with a fresh reseat before adding more filters.',
         ]
     else:
@@ -58,6 +63,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             ('recording.wav', 'The recorded response captured for this iteration.'),
             ('run_summary.json', 'Summary of this iteration and predicted error after EQ.'),
             ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('equalizer_apo.txt', 'Equalizer APO preset file for this iteration.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template for this iteration.'),
             ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
             ('measurement_left.csv', 'Estimated left-channel response for this iteration.'),
@@ -67,6 +73,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
+            'Use equalizer_apo.txt for Equalizer APO, or use the CamillaDSP YAML files for CamillaDSP.',
             'Compare this folder with the other iter_* folders if you want to see whether the predicted residual improved.',
             'Check the top-level iterations_summary.json for the per-iteration error overview.',
         ]
@@ -150,6 +157,7 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters)
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+    export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
     save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
     render_fit_graphs(out_dir, result, target, sweep_spec.sample_rate, left_bands, right_bands)
     summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
@@ -190,6 +198,7 @@ def iterative_measure_and_fit(
         left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters)
         export_camilladsp_filters_yaml(iter_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
         export_camilladsp_filter_snippet_yaml(iter_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+        export_equalizer_apo_parametric_txt(iter_dir / 'equalizer_apo.txt', left_bands, right_bands)
         render_fit_graphs(iter_dir, result, target_curve, sweep_spec.sample_rate, left_bands, right_bands)
         predicted_left = result.left_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, left_bands)
         predicted_right = result.right_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, right_bands)

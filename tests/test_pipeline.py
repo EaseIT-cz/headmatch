@@ -87,6 +87,7 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert 'fit_overview.svg' in summary
     assert (out_dir / 'camilladsp_full.yaml').exists()
     assert (out_dir / 'camilladsp_filters_only.yaml').exists()
+    assert (out_dir / 'equalizer_apo.txt').exists()
     assert (out_dir / 'fit_overview.svg').exists()
     assert (out_dir / 'fit_left.svg').exists()
     assert (out_dir / 'fit_right.svg').exists()
@@ -95,6 +96,7 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     guide = (out_dir / 'README.txt').read_text()
     assert 'headmatch fit results' in guide
     assert 'camilladsp_full.yaml' in guide
+    assert 'equalizer_apo.txt' in guide
 
 
 
@@ -123,6 +125,7 @@ def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path
     assert 'headmatch iteration results' in guide
     assert 'iterations_summary.json' in guide
     assert (tmp_path / 'iterative' / 'iter_01' / 'fit_overview.svg').exists()
+    assert (tmp_path / 'iterative' / 'iter_01' / 'equalizer_apo.txt').exists()
 
 
 
