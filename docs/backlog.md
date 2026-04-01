@@ -15,6 +15,7 @@ The currently shipped product now includes:
 - improved alignment robustness tests
 - conservative PEQ/export polish
 - clone examples and cross-source validation
+- deterministic end-to-end synthetic integration tests
 
 ## Future follow-up candidates
 
