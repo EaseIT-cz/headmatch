@@ -20,7 +20,7 @@ The current shipped state includes:
 
 ## Active
 
-1. Add preset/run comparison workflows so users can compare stock, corrected, and clone-target results more easily.
+1. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
 
 ## Recently completed
 
@@ -30,13 +30,13 @@ The current shipped state includes:
 - strengthened typed confidence/run-summary contracts
 - added conservative troubleshooting guidance tied to low-confidence results
 - improved PipeWire target guidance in the CLI and GUI
+- added a first GUI run-comparison slice in history
 
 ## Future follow-up candidates
 
 1. Add GraphicEQ export if there is a clear user need beyond parametric APO presets.
 2. Add export formats beyond CamillaDSP and APO if users actually need them.
-3. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
-4. Add more published curve examples if clone-target workflows generate repeated support questions.
-5. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
-6. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
-7. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
+3. Add more published curve examples if clone-target workflows generate repeated support questions.
+4. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
+5. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
+6. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
