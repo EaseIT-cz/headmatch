@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.cmd == "tui":
             from sys import stdin, stdout
-            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda: config)
+            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda path=None: load_or_create_config(bootstrap_args.config or path), config_path=bootstrap_args.config)
         elif args.cmd == "start":
             print(f"Starting guided measurement workflow in {args.out_dir} ...")
             iterative_measure_and_fit(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from pathlib import Path
 
 from headmatch.contracts import FrontendConfig
 from headmatch import tui
@@ -26,7 +27,7 @@ def test_run_tui_online_reuses_pipeline_and_preloads_saved_device_values(monkeyp
     stdin = StringIO("1\n\n\n\n\n\n\n")
     stdout = StringIO()
 
-    result = tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda: config)
+    result = tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda _path=None: (config, Path("/tmp/config.json"), False))
 
     assert result.workflow == "start"
     assert calls["output_dir"] == "saved/session"
@@ -53,7 +54,7 @@ def test_run_tui_offline_writes_measurement_plan(monkeypatch, tmp_path):
     stdin = StringIO(f"2\n{tmp_path}\n\n\n\n5\n1\nbring recorder\n")
     stdout = StringIO()
 
-    result = tui.run_tui(stdin=stdin, stdout=stdout)
+    result = tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda _path=None: (FrontendConfig(), Path("/tmp/config.json"), False))
 
     assert result.workflow == "prepare-offline"
     assert calls["plan"].sweep_wav == tmp_path / "sweep.wav"
@@ -86,7 +87,7 @@ def test_run_tui_history_browser_shows_recent_run(tmp_path):
     stdin = StringIO(f"3\n{tmp_path}\n1\n")
     stdout = StringIO()
 
-    result = tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda: config)
+    result = tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda _path=None: (config, Path("/tmp/config.json"), False))
 
     assert result.workflow == "history"
     assert result.out_dir == str(run_dir)
@@ -94,3 +95,34 @@ def test_run_tui_history_browser_shows_recent_run(tmp_path):
     assert "Recent runs" in out
     assert "headmatch fit results" in out
     assert "predicted error dB" in out
+
+
+
+def test_run_tui_persists_selected_targets(monkeypatch, tmp_path):
+    saved = {}
+
+    def fake_save_config(config, path):
+        saved["config"] = config
+        saved["path"] = path
+        return path
+
+    def fake_iterative_measure_and_fit(**kwargs):
+        return []
+
+    monkeypatch.setattr("headmatch.tui.save_config", fake_save_config)
+    monkeypatch.setattr("headmatch.tui.iterative_measure_and_fit", fake_iterative_measure_and_fit)
+
+    config = FrontendConfig()
+    stdin = StringIO("1\nout/session_02\nout-node\nin-node\n\n\n\n")
+    stdout = StringIO()
+
+    tui.run_tui(
+        stdin=stdin,
+        stdout=stdout,
+        config_loader=lambda _path=None: (config, tmp_path / "config.json", False),
+    )
+
+    assert saved["path"] == tmp_path / "config.json"
+    assert saved["config"].pipewire_output_target == "out-node"
+    assert saved["config"].pipewire_input_target == "in-node"
+    assert saved["config"].default_output_dir == "out/session_02"

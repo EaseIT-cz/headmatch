@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TextIO
@@ -9,9 +10,9 @@ from .history import load_recent_runs, read_results_guide
 from .measure import OfflineMeasurementPlan, prepare_offline_measurement
 from .pipeline import iterative_measure_and_fit
 from .signals import SweepSpec
-from .settings import load_config
+from .settings import load_or_create_config, save_config
 
-ConfigLoader = Callable[[], FrontendConfig | None]
+ConfigLoader = Callable[[str | Path | None], tuple[FrontendConfig, Path, bool]]
 
 
 @dataclass(frozen=True)
@@ -69,18 +70,19 @@ class WizardIO:
             self.write(f"Please enter one of: {', '.join(options)}")
 
 
-def default_config_loader() -> FrontendConfig | None:
-    return load_config()
+def default_config_loader(config_path: str | Path | None = None) -> tuple[FrontendConfig, Path, bool]:
+    return load_or_create_config(config_path)
 
 
 class HeadMatchWizard:
-    def __init__(self, io: WizardIO, config_loader: ConfigLoader = default_config_loader):
+    def __init__(self, io: WizardIO, config_loader: ConfigLoader = default_config_loader, config_path: str | Path | None = None):
         self.io = io
         self.config_loader = config_loader
+        self.config_path = config_path
 
     def run(self) -> WizardResult:
-        config = self.config_loader() or FrontendConfig()
-        self._print_header(config)
+        config, resolved_path, created = self.config_loader(self.config_path)
+        self._print_header(config, resolved_path=resolved_path, created=created)
         mode = self.io.choose(
             "How do you want to start?",
             {
@@ -93,11 +95,11 @@ class HeadMatchWizard:
         if mode == "3":
             return self._browse_history(config)
         state = self._collect_state(config, mode)
-        if mode == "1":
-            return self._run_online(state, config)
-        return self._run_offline(state, config)
+        result = self._run_online(state, config) if mode == "1" else self._run_offline(state, config)
+        self._persist_config(config, resolved_path, state)
+        return result
 
-    def _print_header(self, config: FrontendConfig) -> None:
+    def _print_header(self, config: FrontendConfig, *, resolved_path: Path, created: bool) -> None:
         self.io.write("headmatch TUI wizard")
         self.io.write("====================")
         self.io.write("This wizard keeps the first run simple and reuses the existing measurement pipeline.")
@@ -105,6 +107,9 @@ class HeadMatchWizard:
             self.io.write("Saved device targets were found and preloaded below.")
         else:
             self.io.write("No saved device targets were found. Press Enter to accept safe defaults.")
+        self.io.write(f"Config path: {resolved_path}")
+        if created:
+            self.io.write("Created a default config file with safe starter values.")
         self.io.write()
 
     def _collect_state(self, config: FrontendConfig, mode: str) -> WizardState:
@@ -186,6 +191,19 @@ class HeadMatchWizard:
         )
         return WizardResult(workflow="history", mode="online", out_dir=summary.out_dir, next_steps=next_steps, details=str(selected.guide_path))
 
+    def _persist_config(self, config: FrontendConfig, config_path: Path, state: WizardState) -> None:
+        config.default_output_dir = state.out_dir
+        config.pipewire_output_target = state.output_target
+        config.pipewire_input_target = state.input_target
+        config.preferred_target_csv = state.target_csv
+        config.max_filters = state.max_filters
+        if state.mode == "online":
+            config.start_iterations = state.iterations
+        try:
+            save_config(config, config_path)
+        except OSError:
+            self.io.write("Note: could not save updated defaults to the config file.")
+
     def _optional_prompt(self, label: str, default: str | None) -> str | None:
         value = self.io.prompt(label, default=default or "")
         return value or None
@@ -264,12 +282,30 @@ class HeadMatchWizard:
         return WizardResult(workflow="prepare-offline", mode=state.mode, out_dir=state.out_dir, next_steps=next_steps)
 
 
-def run_tui(stdin: TextIO, stdout: TextIO, config_loader: ConfigLoader = default_config_loader) -> WizardResult:
-    wizard = HeadMatchWizard(WizardIO(stdin=stdin, stdout=stdout), config_loader=config_loader)
+def run_tui(
+    stdin: TextIO,
+    stdout: TextIO,
+    *,
+    config_path: str | Path | None = None,
+    config_loader: ConfigLoader = default_config_loader,
+) -> WizardResult:
+    wizard = HeadMatchWizard(WizardIO(stdin=stdin, stdout=stdout), config_loader=config_loader, config_path=config_path)
     return wizard.run()
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="headmatch-tui", description="Launch the HeadMatch terminal wizard.")
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Optional path to a JSON config file. Default: ~/.config/headmatch/config.json or $XDG_CONFIG_HOME/headmatch/config.json.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
     import sys
 
-    run_tui(stdin=sys.stdin, stdout=sys.stdout)
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    run_tui(stdin=sys.stdin, stdout=sys.stdout, config_path=args.config)

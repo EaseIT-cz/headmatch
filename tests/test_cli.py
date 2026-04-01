@@ -76,7 +76,7 @@ def test_measure_still_dispatches_existing_command(monkeypatch, capsys, tmp_path
 def test_tui_subcommand_launches_wizard(monkeypatch, capsys):
     calls = {}
 
-    def fake_run_tui(*, stdin, stdout, config_loader):
+    def fake_run_tui(*, stdin, stdout, config_loader, config_path=None):
         calls["stdin"] = stdin
         calls["stdout"] = stdout
         calls["config"] = config_loader()
@@ -160,7 +160,7 @@ def test_tui_history_result_updates_cli_message(monkeypatch, capsys, tmp_path):
     guide = tmp_path / "README.txt"
     guide.write_text("guide\n")
 
-    def fake_run_tui(*, stdin, stdout, config_loader):
+    def fake_run_tui(*, stdin, stdout, config_loader, config_path=None):
         _ = (stdin, stdout, config_loader)
         return type("Result", (), {"workflow": "history", "out_dir": str(tmp_path), "details": str(guide)})()
 
