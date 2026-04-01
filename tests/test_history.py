@@ -55,3 +55,55 @@ def test_load_recent_runs_sorts_latest_first_and_skips_bad_json(tmp_path):
 def test_read_results_guide_returns_fallback_when_missing(tmp_path):
     message = read_results_guide(tmp_path / "missing.txt")
     assert "Results guide not found" in message
+
+
+def test_build_history_selection_exposes_two_run_comparison(tmp_path):
+    older = tmp_path / "older"
+    older.mkdir()
+    (older / "README.txt").write_text("older guide\n")
+    (older / "run_summary.json").write_text(
+        json.dumps(
+            {
+                "kind": "fit",
+                "out_dir": str(older),
+                "sample_rate": 48000,
+                "frequency_points": 256,
+                "target": "flat",
+                "filters": {"left": 4, "right": 4},
+                "predicted_error_db": {"left_rms": 1.0, "right_rms": 1.1, "left_max": 3.0, "right_max": 3.1},
+                "confidence": {"score": 90, "label": "high", "headline": "This run looks trustworthy.", "interpretation": "Looks clean.", "reasons": [], "warnings": [], "metrics": {}},
+                "results_guide": str(older / "README.txt"),
+            }
+        )
+    )
+    newer = tmp_path / "newer"
+    newer.mkdir()
+    (newer / "README.txt").write_text("newer guide\n")
+    (newer / "run_summary.json").write_text(
+        json.dumps(
+            {
+                "kind": "iteration",
+                "out_dir": str(newer),
+                "sample_rate": 44100,
+                "frequency_points": 512,
+                "target": "custom",
+                "filters": {"left": 5, "right": 6},
+                "predicted_error_db": {"left_rms": 0.8, "right_rms": 0.9, "left_max": 2.5, "right_max": 2.6},
+                "confidence": {"score": 68, "label": "medium", "headline": "This run looks usable, but review it before trusting it fully.", "interpretation": "Some signals are only fair.", "reasons": [], "warnings": ["Check the graphs."], "metrics": {}},
+                "results_guide": str(newer / "README.txt"),
+            }
+        )
+    )
+
+    from headmatch.history import build_history_selection
+
+    selection = build_history_selection(tmp_path)
+
+    assert selection.comparison is not None
+    assert selection.comparison.left_entry.summary.out_dir == str(newer)
+    assert selection.comparison.right_entry.summary.out_dir == str(older)
+    fields = {field.label: (field.left, field.right) for field in selection.comparison.fields}
+    assert fields["Target"] == ("custom", "flat")
+    assert fields["Filters (L/R)"] == ("5/6", "4/4")
+    assert "L rms 0.80" in fields["Predicted error"][0]
+    assert "Medium (68/100)" in fields["Confidence"][0]

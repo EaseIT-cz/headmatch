@@ -190,8 +190,24 @@ def render_history_results(ttk, frame, *, selection) -> None:
             justify="left",
         ).grid(row=idx * 3 + 2, column=0, sticky="w", pady=(0, 8))
 
+    next_row = 4
+    comparison = selection.comparison
+    if comparison is not None:
+        compare = ttk.LabelFrame(frame, text="Compare the two most recent runs", padding=16)
+        compare.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        compare.columnconfigure(1, weight=1)
+        compare.columnconfigure(2, weight=1)
+        ttk.Label(compare, text="Field", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(compare, text=comparison.left_entry.summary.out_dir, font=("TkDefaultFont", 10, "bold"), wraplength=260, justify="left").grid(row=0, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(compare, text=comparison.right_entry.summary.out_dir, font=("TkDefaultFont", 10, "bold"), wraplength=260, justify="left").grid(row=0, column=2, sticky="w")
+        for idx, field in enumerate(comparison.fields, start=1):
+            ttk.Label(compare, text=field.label, font=("TkDefaultFont", 10, "bold")).grid(row=idx, column=0, sticky="nw", padx=(0, 12), pady=(6, 0))
+            ttk.Label(compare, text=field.left, wraplength=260, justify="left").grid(row=idx, column=1, sticky="w", padx=(0, 12), pady=(6, 0))
+            ttk.Label(compare, text=field.right, wraplength=260, justify="left").grid(row=idx, column=2, sticky="w", pady=(6, 0))
+        next_row = 5
+
     guide = ttk.LabelFrame(frame, text="Selected run summary", padding=16)
-    guide.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+    guide.grid(row=next_row, column=0, sticky="ew", pady=(12, 0))
     guide.columnconfigure(0, weight=1)
     summary_text = selection.selected_summary or "No summary selected."
     ttk.Label(guide, text=f"Summary: {summary_text}", wraplength=620, justify="left").grid(row=0, column=0, sticky="w")

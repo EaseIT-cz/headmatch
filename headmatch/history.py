@@ -16,11 +16,26 @@ class RunHistoryEntry:
 
 
 @dataclass(frozen=True)
+class RunComparisonField:
+    label: str
+    left: str
+    right: str
+
+
+@dataclass(frozen=True)
+class RunHistoryComparison:
+    left_entry: RunHistoryEntry
+    right_entry: RunHistoryEntry
+    fields: tuple[RunComparisonField, ...]
+
+
+@dataclass(frozen=True)
 class HistorySelection:
     search_root: str
     selected_summary: str | None
     selected_guide: str | None
     selected_entry: RunHistoryEntry | None
+    comparison: RunHistoryComparison | None
     items: tuple[RunHistoryEntry, ...]
 
 
@@ -48,6 +63,43 @@ def load_recent_runs(root: str | Path, *, limit: int = 10) -> list[RunHistoryEnt
     return entries
 
 
+def _format_predicted_error(summary: FrontendRunSummary) -> str:
+    error = summary.predicted_error_db
+    return f"L rms {error.left_rms:.2f}, R rms {error.right_rms:.2f}, L max {error.left_max:.2f}, R max {error.right_max:.2f} dB"
+
+
+def _format_confidence(summary: FrontendRunSummary) -> str:
+    confidence = summary.confidence
+    return f"{confidence.label.title()} ({confidence.score}/100) — {confidence.headline}"
+
+
+def build_run_comparison(entries: tuple[RunHistoryEntry, ...] | list[RunHistoryEntry]) -> RunHistoryComparison | None:
+    if len(entries) < 2:
+        return None
+    left_entry = entries[0]
+    right_entry = entries[1]
+    left = left_entry.summary
+    right = right_entry.summary
+    return RunHistoryComparison(
+        left_entry=left_entry,
+        right_entry=right_entry,
+        fields=(
+            RunComparisonField("Target", left.target, right.target),
+            RunComparisonField("Kind", left.kind, right.kind),
+            RunComparisonField("Sample rate", f"{left.sample_rate} Hz", f"{right.sample_rate} Hz"),
+            RunComparisonField("Filters (L/R)", f"{left.filters.left}/{left.filters.right}", f"{right.filters.left}/{right.filters.right}"),
+            RunComparisonField("Predicted error", _format_predicted_error(left), _format_predicted_error(right)),
+            RunComparisonField("Confidence", _format_confidence(left), _format_confidence(right)),
+            RunComparisonField("Interpretation", left.confidence.interpretation or "—", right.confidence.interpretation or "—"),
+            RunComparisonField(
+                "Warnings",
+                "; ".join(left.confidence.warnings[:3]) or "None",
+                "; ".join(right.confidence.warnings[:3]) or "None",
+            ),
+        ),
+    )
+
+
 def read_results_guide(path: str | Path) -> str:
     guide_path = Path(path).expanduser()
     if not guide_path.exists():
@@ -66,5 +118,6 @@ def build_history_selection(search_root: str | Path, config_root: str | Path | N
         selected_summary=selected_summary,
         selected_guide=selected_guide,
         selected_entry=selected_entry,
+        comparison=build_run_comparison(entries),
         items=tuple(entries),
     )

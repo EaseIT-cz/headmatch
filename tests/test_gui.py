@@ -214,6 +214,7 @@ def test_gui_history_selection_reads_recent_runs(tmp_path):
     assert selection.items[0].summary.out_dir == str(run_dir)
     assert selection.selected_entry is not None
     assert selection.selected_entry.summary.confidence.score == 82
+    assert selection.comparison is None
 
 
 
@@ -346,3 +347,83 @@ def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     assert state.pipewire_input_target == f"capture-{suffix}"
     assert state.start_iterations == 7
     assert state.max_filters == 5
+
+
+def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
+    first = tmp_path / "session_01"
+    first.mkdir()
+    (first / "README.txt").write_text("first\n")
+    (first / "run_summary.json").write_text(
+        """{
+  "kind": "fit",
+  "out_dir": "%s",
+  "sample_rate": 48000,
+  "frequency_points": 512,
+  "target": "flat",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.0, "right_rms": 1.1, "left_max": 3.0, "right_max": 3.1},
+  "confidence": {
+    "score": 82,
+    "label": "medium",
+    "headline": "This run looks usable, but review it before trusting it fully.",
+    "interpretation": "Nothing looks catastrophically wrong, but one or more stability signals are only fair.",
+    "warnings": ["Residual error is still noticeable."],
+    "reasons": [],
+    "metrics": {}
+  },
+  "results_guide": "%s"
+}
+""" % (first, first / "README.txt")
+    )
+    second = tmp_path / "session_02"
+    second.mkdir()
+    (second / "README.txt").write_text("second\n")
+    (second / "run_summary.json").write_text(
+        """{
+  "kind": "iteration",
+  "out_dir": "%s",
+  "sample_rate": 44100,
+  "frequency_points": 512,
+  "target": "custom",
+  "filters": {"left": 5, "right": 6},
+  "predicted_error_db": {"left_rms": 0.8, "right_rms": 0.9, "left_max": 2.5, "right_max": 2.6},
+  "confidence": {
+    "score": 90,
+    "label": "high",
+    "headline": "This run looks trustworthy.",
+    "interpretation": "Looks clean.",
+    "warnings": [],
+    "reasons": [],
+    "metrics": {}
+  },
+  "results_guide": "%s"
+}
+""" % (second, second / "README.txt")
+    )
+
+    first_summary = first / "run_summary.json"
+    second_summary = second / "run_summary.json"
+    first_summary.touch()
+    second_summary.touch()
+
+    state = load_gui_state(config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / "out" / "session_01")), tmp_path / "config.json", False))
+    app = object.__new__(__import__("headmatch.gui", fromlist=["HeadMatchGuiApp"]).HeadMatchGuiApp)
+    app.state = state
+
+    class DummyHistoryVar:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    app.history_root_var = DummyHistoryVar(str(tmp_path))
+
+    selection = app.build_history_selection()
+
+    assert selection.comparison is not None
+    assert selection.comparison.left_entry.summary.out_dir == str(second)
+    assert selection.comparison.right_entry.summary.out_dir == str(first)
+    fields = {field.label: (field.left, field.right) for field in selection.comparison.fields}
+    assert fields["Target"] == ("custom", "flat")
+    assert fields["Filters (L/R)"] == ("5/6", "4/4")
