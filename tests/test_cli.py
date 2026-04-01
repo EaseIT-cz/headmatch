@@ -171,3 +171,51 @@ def test_tui_history_result_updates_cli_message(monkeypatch, capsys, tmp_path):
     out = capsys.readouterr().out
     assert "History browser finished" in out
     assert str(guide) in out
+
+
+def test_main_without_subcommand_mentions_list_targets(capsys):
+    with pytest.raises(SystemExit):
+        cli.main([])
+    out = capsys.readouterr().out
+    assert "headmatch list-targets" in out
+
+
+def test_list_targets_prints_pipewire_guidance(monkeypatch, capsys):
+    from headmatch.measure import PipeWireTarget
+
+    monkeypatch.setattr(
+        "headmatch.measure.list_pipewire_targets",
+        lambda: [
+            PipeWireTarget(
+                kind="playback",
+                node_name="alsa_output.usb-dac",
+                description="USB DAC",
+                nick="",
+                media_class="Audio/Sink",
+            ),
+            PipeWireTarget(
+                kind="capture",
+                node_name="alsa_input.usb-mic",
+                description="USB Mic",
+                nick="",
+                media_class="Audio/Source",
+            ),
+        ],
+    )
+
+    cli.main(["list-targets"])
+
+    out = capsys.readouterr().out
+    assert "Playback targets (--output-target)" in out
+    assert "USB DAC -> alsa_output.usb-dac" in out
+    assert "Capture targets (--input-target)" in out
+    assert "USB Mic -> alsa_input.usb-mic" in out
+
+
+def test_start_next_steps_mentions_list_targets(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr("headmatch.pipeline.iterative_measure_and_fit", lambda **_kwargs: None)
+
+    cli.main(["start", "--out-dir", str(tmp_path)])
+
+    out = capsys.readouterr().out
+    assert "headmatch list-targets" in out

@@ -31,7 +31,8 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 6. smooth the curves
 7. fit conservative PEQ bands
 8. export CamillaDSP output
-9. write summary/report artifacts for later review
+9. render shared measured-vs-target review graphs
+10. write summary/report artifacts for later review
 
 ---
 
@@ -63,6 +64,10 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 
 ### `exporters.py`
 - CamillaDSP export generation
+
+### `plots.py`
+- dependency-free SVG review graph generation
+- shared measured-vs-target fitted overlays
 
 ### `pipeline.py`
 - measurement-to-fit orchestration
@@ -142,6 +147,7 @@ Important artifacts:
 - `fit_report.json` — detailed fit report
 - CamillaDSP YAML exports
 - measurement CSVs
+- shared SVG review graphs
 
 The TUI and GUI history views use `run_summary.json` plus `README.txt` as the stable review contract.
 
@@ -176,6 +182,7 @@ The shipped product now includes:
 - clone-target support
 - CamillaDSP export
 - deterministic end-to-end synthetic integration tests
+- measured-vs-target SVG review graphs in fit output folders
 
 ---
 

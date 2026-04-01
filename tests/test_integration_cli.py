@@ -161,6 +161,10 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     assert (out_dir / "measurement_left.csv").exists()
     assert (out_dir / "measurement_right.csv").exists()
     assert (out_dir / "target_curve.csv").exists()
+    assert (out_dir / "fit_overview.svg").exists()
+    assert (out_dir / "fit_left.svg").exists()
+    assert (out_dir / "fit_right.svg").exists()
+    assert summary["plots"]["overview"].endswith("fit_overview.svg")
     assert "headmatch fit results" in guide
     assert "camilladsp_full.yaml" in guide
 
@@ -220,4 +224,5 @@ def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_out
     assert (iter_dir / "camilladsp_filters_only.yaml").exists()
     assert (iter_dir / "recording.wav").exists()
     assert (iter_dir / "sweep.wav").exists()
+    assert (iter_dir / "fit_overview.svg").exists()
     assert "headmatch iteration results" in (iter_dir / "README.txt").read_text()

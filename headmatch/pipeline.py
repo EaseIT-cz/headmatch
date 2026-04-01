@@ -12,6 +12,7 @@ from .exporters import export_camilladsp_filter_snippet_yaml, export_camilladsp_
 from .io_utils import save_fr_csv, save_json
 from .measure import MeasurementPaths, PipeWireDeviceConfig, run_pipewire_measurement
 from .peq import PEQBand, fit_peq, peq_chain_response_db
+from .plots import render_fit_graphs
 from .signals import SweepSpec
 from .targets import TargetCurve, create_flat_target, load_curve, resample_curve, clone_target_from_source_target
 
@@ -40,6 +41,9 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
             ('measurement_left.csv', 'Estimated left-channel headphone response from the recording.'),
             ('measurement_right.csv', 'Estimated right-channel headphone response from the recording.'),
+            ('fit_overview.svg', 'Two-panel SVG graph comparing raw measurement, smoothed measurement, target curve, and predicted fitted result.'),
+            ('fit_left.svg', 'Left-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
+            ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
             'Open run_summary.json first if you want the quickest overview.',
@@ -58,6 +62,9 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
             ('measurement_left.csv', 'Estimated left-channel response for this iteration.'),
             ('measurement_right.csv', 'Estimated right-channel response for this iteration.'),
+            ('fit_overview.svg', 'Two-panel SVG graph comparing raw measurement, smoothed measurement, target curve, and predicted fitted result.'),
+            ('fit_left.svg', 'Left-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
+            ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
             'Compare this folder with the other iter_* folders if you want to see whether the predicted residual improved.',
@@ -95,6 +102,12 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
             'left_max': report['predicted_left_max_error_db'],
             'right_max': report['predicted_right_max_error_db'],
         },
+        'plots': {
+            'overview': str(out_dir / 'fit_overview.svg'),
+            'left': str(out_dir / 'fit_left.svg'),
+            'right': str(out_dir / 'fit_right.svg'),
+        },
+        'results_guide': str(out_dir / RESULTS_GUIDE_NAME),
     }
 def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
     err = measured_db - target_db
@@ -138,6 +151,7 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
     save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
+    render_fit_graphs(out_dir, result, target, sweep_spec.sample_rate, left_bands, right_bands)
     summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
     save_json(out_dir / 'fit_report.json', report)
     save_json(out_dir / 'run_summary.json', summary)
@@ -176,6 +190,7 @@ def iterative_measure_and_fit(
         left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters)
         export_camilladsp_filters_yaml(iter_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sweep_spec.sample_rate)
         export_camilladsp_filter_snippet_yaml(iter_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+        render_fit_graphs(iter_dir, result, target_curve, sweep_spec.sample_rate, left_bands, right_bands)
         predicted_left = result.left_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, left_bands)
         predicted_right = result.right_db + peq_chain_response_db(result.freqs_hz, sweep_spec.sample_rate, right_bands)
         t = resample_curve(target_curve, result.freqs_hz).values_db

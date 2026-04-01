@@ -42,6 +42,7 @@ Best for explicit control, scripting, and repeatable workflows.
 ```bash
 headmatch --version
 headmatch start --out-dir out/session_01
+headmatch list-targets
 ```
 
 ### TUI
@@ -85,6 +86,7 @@ If PipeWire playback and recording are working, start here:
 
 ```bash
 headmatch start --out-dir out/session_01
+headmatch list-targets
 ```
 
 This will:
@@ -93,7 +95,7 @@ This will:
 3. analyze the recording
 4. fit EQ toward the selected target
 5. export CamillaDSP files
-6. write a human-readable `README.txt` and machine-readable `run_summary.json`
+6. write a human-readable `README.txt`, machine-readable `run_summary.json`, and reviewable fit graphs
 
 If you prefer the recorder-first path:
 
@@ -145,14 +147,15 @@ docs/examples/headmatch.config.json
 ### Guided online path
 ```bash
 headmatch start --out-dir out/session_01
+headmatch list-targets
 ```
 
 ### Manual online measurement
 ```bash
 headmatch measure \
   --out-dir out/measure_usb_01 \
-  --output-target "your-playback-node" \
-  --input-target "your-capture-node"
+  --output-target "alsa_output.usb-..." \
+  --input-target "alsa_input.usb-..."
 ```
 
 ### Fit an existing recording
@@ -207,6 +210,9 @@ A typical fit output folder contains:
 - `measurement_right.csv`
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
+- `fit_overview.svg`
+- `fit_left.svg`
+- `fit_right.svg`
 
 The general rule is:
 - open `README.txt` if you want the human explanation

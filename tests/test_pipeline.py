@@ -84,8 +84,12 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     summary = (out_dir / 'run_summary.json').read_text()
     assert 'predicted_error_db' in summary
     assert 'generated_by' in summary
+    assert 'fit_overview.svg' in summary
     assert (out_dir / 'camilladsp_full.yaml').exists()
     assert (out_dir / 'camilladsp_filters_only.yaml').exists()
+    assert (out_dir / 'fit_overview.svg').exists()
+    assert (out_dir / 'fit_left.svg').exists()
+    assert (out_dir / 'fit_right.svg').exists()
     assert 'generated_by' in (out_dir / 'fit_report.json').read_text()
     assert 'generated_by' in (out_dir / 'camilladsp_full.yaml').read_text()
     guide = (out_dir / 'README.txt').read_text()
@@ -118,6 +122,7 @@ def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path
     guide = (tmp_path / 'iterative' / 'iter_01' / 'README.txt').read_text()
     assert 'headmatch iteration results' in guide
     assert 'iterations_summary.json' in guide
+    assert (tmp_path / 'iterative' / 'iter_01' / 'fit_overview.svg').exists()
 
 
 

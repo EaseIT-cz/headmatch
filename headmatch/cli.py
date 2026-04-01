@@ -73,8 +73,8 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and YAML exports.")
     p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
-    p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional PipeWire playback node match string.")
-    p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional PipeWire capture node match string.")
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional PipeWire playback node.name or match string. Run 'headmatch list-targets' to discover likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional PipeWire capture node.name or match string. Run 'headmatch list-targets' to discover likely values.")
     p.add_argument("--max-filters", type=int, default=config.max_filters, help="Maximum PEQ filters per channel.")
     p.add_argument(
         "--iterations",
@@ -90,8 +90,8 @@ def build_parser(config) -> argparse.ArgumentParser:
     p = sub.add_parser("measure", help="Play sweep via PipeWire and record the transfer.")
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--output-target", default=config.pipewire_output_target)
-    p.add_argument("--input-target", default=config.pipewire_input_target)
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
 
     p = sub.add_parser("prepare-offline", help="Create sweep + metadata for Zoom/H2n or SD-card recording workflows.")
     add_common_sweep_args(p, config)
@@ -126,12 +126,22 @@ def build_parser(config) -> argparse.ArgumentParser:
         help="Write the clone target to a new CSV file. Do not point this at your source or target input file.",
     )
 
+
+    sub.add_parser(
+        "list-targets",
+        help="List likely PipeWire playback and capture targets.",
+        description=(
+            "Inspect PipeWire nodes and print beginner-friendly suggestions for "
+            "--output-target and --input-target."
+        ),
+    )
+
     p = sub.add_parser("iterate", help="Measure -> fit -> export, repeated.")
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--target-csv", default=config.preferred_target_csv)
-    p.add_argument("--output-target", default=config.pipewire_output_target)
-    p.add_argument("--input-target", default=config.pipewire_input_target)
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
     p.add_argument("--iterations", type=int, default=config.iterate_iterations)
     p.add_argument("--max-filters", type=int, default=config.max_filters)
 
@@ -155,6 +165,7 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     print("   ...record the sweep, then run:")
     print("   headmatch fit-offline --recording out/session_01/recording.wav --out-dir out/session_01/fit")
     print()
+    print("Need device names? Run: headmatch list-targets")
     print("Developer commands are still available below.")
     print()
     parser.print_help()
@@ -166,7 +177,7 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json and camilladsp_full.yaml.")
-        print("If PipeWire did not pick the right devices, rerun with --output-target and/or --input-target.")
+        print("If PipeWire did not pick the right devices, run 'headmatch list-targets' and rerun with --output-target and/or --input-target.")
     elif cmd == "measure":
         print()
         print(f"Measurement saved in {out_dir}.")
@@ -240,6 +251,8 @@ def main(argv: list[str] | None = None) -> None:
         MeasurementPaths,
         OfflineMeasurementPlan,
         PipeWireDeviceConfig,
+        format_pipewire_targets,
+        list_pipewire_targets,
         prepare_offline_measurement,
         render_sweep_file,
         run_pipewire_measurement,
@@ -264,6 +277,8 @@ def main(argv: list[str] | None = None) -> None:
             )
         elif args.cmd == "render-sweep":
             render_sweep_file(spec_from_args(args), args.out)
+        elif args.cmd == "list-targets":
+            print(format_pipewire_targets(list_pipewire_targets()))
         elif args.cmd == "measure":
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -300,7 +315,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
-    if args.cmd != 'tui':
+    if args.cmd not in {'tui', 'list-targets'}:
         try:
             save_config(update_config_from_args(args, existing=config), config_path)
         except OSError:

@@ -15,14 +15,15 @@ The current shipped state includes:
 - clone examples and cross-source validation
 - deterministic end-to-end synthetic integration tests
 - GitHub Actions coverage for both main and integration test suites
+- measured-vs-target SVG review graphs in fit and iteration result folders
+
+## Active
+
+1. Improve PipeWire device discovery and guidance so users can more easily choose playback and capture targets.
 
 ## Future follow-up candidates
 
-These are not active tasks yet. They are the most likely next areas of work.
-
-1. Add measured-vs-target graph generation so users can visually compare raw measurement, target curve, and fitted result.
-2. Add export formats beyond CamillaDSP if users actually need them.
-3. Improve PipeWire device discovery and guidance if users struggle with manual target matching.
+3. Add export formats beyond CamillaDSP if users actually need them.
 4. Add result interpretation and confidence scoring so users can tell whether a run is trustworthy.
 5. Add a guided troubleshooting flow for common setup and measurement failures.
 6. Add preset/run comparison workflows so users can compare stock, corrected, and clone-target results more easily.
