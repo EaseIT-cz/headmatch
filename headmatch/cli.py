@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
+
+from .contracts import FrontendRunSummary
 
 from .app_identity import get_app_identity
 from .settings import load_or_create_config, save_config, update_config_from_args
@@ -171,9 +174,49 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     parser.print_help()
 
 
+def _confidence_display(label: str) -> str:
+    return label.replace("_", " ").title()
+
+
+def _run_summary_path(cmd: str, args) -> Path | None:
+    out_dir = getattr(args, "out_dir", None)
+    if not out_dir:
+        return None
+    base = Path(out_dir)
+    if cmd in {"fit", "fit-offline"}:
+        return base / "run_summary.json"
+    if cmd in {"start", "iterate"}:
+        iterations = getattr(args, "iterations", None)
+        if isinstance(iterations, int) and iterations > 0:
+            return base / f"iter_{iterations:02d}" / "run_summary.json"
+    return None
+
+
+def print_run_confidence(cmd: str, args) -> None:
+    summary_path = _run_summary_path(cmd, args)
+    if summary_path is None or not summary_path.exists():
+        return
+
+    try:
+        summary = FrontendRunSummary.from_dict(json.loads(summary_path.read_text()))
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return
+
+    confidence = summary.confidence
+    print()
+    print(
+        f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100) — {confidence.headline}"
+    )
+    if confidence.interpretation:
+        print(confidence.interpretation)
+    for warning in confidence.warnings[:3]:
+        print(f"Warning: {warning}")
+
+
 def print_next_steps(cmd: str, args) -> None:
     out_dir = getattr(args, "out_dir", None)
     if cmd == "start":
+        print_run_confidence(cmd, args)
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
@@ -191,6 +234,7 @@ def print_next_steps(cmd: str, args) -> None:
         print(f"Analysis written to {out_dir}.")
         print("Review the CSVs, or run fit/fit-offline to build EQ.")
     elif cmd in {"fit", "fit-offline", "iterate"}:
+        print_run_confidence(cmd, args)
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")

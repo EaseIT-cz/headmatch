@@ -219,3 +219,74 @@ def test_start_next_steps_mentions_list_targets(monkeypatch, capsys, tmp_path):
 
     out = capsys.readouterr().out
     assert "headmatch list-targets" in out
+
+
+def test_fit_next_steps_prints_confidence_summary(capsys, tmp_path):
+    summary_dir = tmp_path / "fit"
+    summary_dir.mkdir()
+    (summary_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "fit",
+  "out_dir": "/tmp/demo",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {
+    "score": 82,
+    "label": "medium",
+    "headline": "This run looks usable, but review it before trusting it fully.",
+    "interpretation": "Some signals are only fair.",
+    "reasons": [],
+    "warnings": ["Check the graphs."],
+    "metrics": {}
+  },
+  "plots": {},
+  "results_guide": "/tmp/demo/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("fit", type("Args", (), {"out_dir": str(summary_dir)})())
+
+    out = capsys.readouterr().out
+    assert "Confidence: Medium (82/100)" in out
+    assert "Some signals are only fair." in out
+    assert "Warning: Check the graphs." in out
+
+
+def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):
+    iter_dir = tmp_path / "iter_02"
+    iter_dir.mkdir(parents=True)
+    (iter_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "iteration",
+  "out_dir": "/tmp/demo/iter_02",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {
+    "score": 91,
+    "label": "high",
+    "headline": "This run looks trustworthy.",
+    "interpretation": "The main stability signals look clean.",
+    "reasons": [],
+    "warnings": [],
+    "metrics": {}
+  },
+  "plots": {},
+  "results_guide": "/tmp/demo/iter_02/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("start", type("Args", (), {"out_dir": str(tmp_path), "iterations": 2})())
+
+    out = capsys.readouterr().out
+    assert "Confidence: High (91/100)" in out
+    assert "The main stability signals look clean." in out
