@@ -180,6 +180,33 @@ def test_main_without_subcommand_mentions_list_targets(capsys):
     assert "headmatch list-targets" in out
 
 
+def test_doctor_prints_readiness_report(monkeypatch, capsys, tmp_path):
+    from headmatch.measure import DoctorCheck
+
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(
+        "headmatch.cli.load_or_create_config",
+        lambda _path=None: (FrontendConfig(pipewire_output_target="hp", pipewire_input_target="mic"), config_path, False),
+    )
+    monkeypatch.setattr(
+        "headmatch.measure.collect_doctor_checks",
+        lambda path, config: [
+            DoctorCheck(name="config file", ok=True, detail=f"Using {path}"),
+            DoctorCheck(name="PipeWire discovery", ok=False, detail="Found 0 playback and 1 capture target(s).", action="Check your output device."),
+        ],
+    )
+
+    cli.main(["doctor"])
+
+    out = capsys.readouterr().out
+    assert "HeadMatch doctor" in out
+    assert f"Config path: {config_path}" in out
+    assert "Readiness: 1/2 checks look good." in out
+    assert "[OK] config file" in out
+    assert "[WARN] PipeWire discovery: Found 0 playback and 1 capture target(s)." in out
+    assert "- PipeWire discovery: Check your output device." in out
+
+
 def test_list_targets_prints_pipewire_guidance(monkeypatch, capsys):
     from headmatch.measure import PipeWireTarget
 

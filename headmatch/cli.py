@@ -150,6 +150,12 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--max-filters", type=int, default=config.max_filters)
 
     sub.add_parser(
+        "doctor",
+        help="Check whether the local HeadMatch environment looks ready.",
+        description="Run a small beginner-friendly readiness check for config, PipeWire tools, and device discovery.",
+    )
+
+    sub.add_parser(
         "tui",
         help="Launch the interactive beginner wizard.",
         description="Run a simple terminal wizard for online or offline measurement workflows.",
@@ -301,6 +307,8 @@ def main(argv: list[str] | None = None) -> None:
         MeasurementPaths,
         OfflineMeasurementPlan,
         PipeWireDeviceConfig,
+        collect_doctor_checks,
+        format_doctor_report,
         format_pipewire_targets,
         list_pipewire_targets,
         prepare_offline_measurement,
@@ -329,6 +337,8 @@ def main(argv: list[str] | None = None) -> None:
             render_sweep_file(spec_from_args(args), args.out)
         elif args.cmd == "list-targets":
             print(format_pipewire_targets(list_pipewire_targets()))
+        elif args.cmd == "doctor":
+            print(format_doctor_report(collect_doctor_checks(config_path, config), config_path=config_path))
         elif args.cmd == "measure":
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -365,7 +375,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
-    if args.cmd not in {'tui', 'list-targets'}:
+    if args.cmd not in {'doctor', 'tui', 'list-targets'}:
         try:
             save_config(update_config_from_args(args, existing=config), config_path)
         except OSError:

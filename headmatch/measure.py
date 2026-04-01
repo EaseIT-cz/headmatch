@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .app_identity import get_app_identity
+from .contracts import FrontendConfig
 from .io_utils import save_json, write_wav
 from .signals import SweepSpec, generate_log_sweep
 
@@ -129,6 +130,133 @@ def format_pipewire_targets(targets: list[PipeWireTarget]) -> str:
         'Tip: if you are unsure, copy the exact node.name values first, get one successful run, then shorten them later if you want.',
     ])
     return '\n'.join(lines)
+
+
+@dataclass(frozen=True)
+class DoctorCheck:
+    name: str
+    ok: bool
+    detail: str
+    action: str | None = None
+
+
+def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[DoctorCheck]:
+    checks = [
+        DoctorCheck(
+            name='config file',
+            ok=config_path.exists(),
+            detail=f'Using {config_path}',
+            action='Run any HeadMatch command once to create the default config file.' if not config_path.exists() else None,
+        )
+    ]
+
+    for executable in ('pw-dump', 'pw-play', 'pw-record'):
+        resolved = shutil.which(executable)
+        checks.append(
+            DoctorCheck(
+                name=executable,
+                ok=resolved is not None,
+                detail=resolved or f'{executable} was not found on PATH',
+                action='Install PipeWire user tools and make sure they are on PATH.' if resolved is None else None,
+            )
+        )
+
+    if shutil.which('pw-dump') is None:
+        checks.append(
+            DoctorCheck(
+                name='PipeWire discovery',
+                ok=False,
+                detail='Skipped because pw-dump is not available.',
+                action="Install pw-dump, then rerun 'headmatch doctor' or 'headmatch list-targets'.",
+            )
+        )
+    else:
+        try:
+            targets = list_pipewire_targets()
+            playback = sum(target.kind == 'playback' for target in targets)
+            capture = sum(target.kind == 'capture' for target in targets)
+            ok = playback > 0 and capture > 0
+            detail = f'Found {playback} playback and {capture} capture target(s).'
+            action = None if ok else "Make sure PipeWire is running and your audio devices are connected, then try 'headmatch list-targets'."
+            checks.append(DoctorCheck(name='PipeWire discovery', ok=ok, detail=detail, action=action))
+        except RuntimeError as exc:
+            checks.append(
+                DoctorCheck(
+                    name='PipeWire discovery',
+                    ok=False,
+                    detail=str(exc),
+                    action="Confirm PipeWire is running, then rerun 'headmatch list-targets'.",
+                )
+            )
+
+    if config.pipewire_output_target:
+        checks.append(DoctorCheck(name='saved output target', ok=True, detail=f"Configured: {config.pipewire_output_target}"))
+    else:
+        checks.append(
+            DoctorCheck(
+                name='saved output target',
+                ok=False,
+                detail='No default --output-target saved yet.',
+                action="Run a measure/start command with --output-target once if auto-selection is unreliable.",
+            )
+        )
+
+    if config.pipewire_input_target:
+        checks.append(DoctorCheck(name='saved input target', ok=True, detail=f"Configured: {config.pipewire_input_target}"))
+    else:
+        checks.append(
+            DoctorCheck(
+                name='saved input target',
+                ok=False,
+                detail='No default --input-target saved yet.',
+                action="Run a measure/start command with --input-target once if auto-selection is unreliable.",
+            )
+        )
+
+    checks.append(
+        DoctorCheck(
+            name='starter sweep settings',
+            ok=config.sample_rate > 0 and config.duration_s > 0,
+            detail=(
+                f'{config.sample_rate} Hz, {config.duration_s:g} s, '
+                f'{config.f_start_hz:g}-{config.f_end_hz:g} Hz sweep, amplitude {config.amplitude:g}'
+            ),
+            action='Reset the config file if these values look wrong for a beginner setup.' if config.sample_rate <= 0 or config.duration_s <= 0 else None,
+        )
+    )
+
+    return checks
+
+
+def format_doctor_report(checks: list[DoctorCheck], *, config_path: Path) -> str:
+    ok_count = sum(check.ok for check in checks)
+    lines = [
+        'HeadMatch doctor',
+        '================',
+        f'Config path: {config_path}',
+        f'Readiness: {ok_count}/{len(checks)} checks look good.',
+        '',
+    ]
+
+    actions: list[str] = []
+    for check in checks:
+        status = 'OK' if check.ok else 'WARN'
+        lines.append(f'[{status}] {check.name}: {check.detail}')
+        if check.action:
+            actions.append(f'- {check.name}: {check.action}')
+
+    if actions:
+        lines.extend(['', 'Suggested next steps:'])
+        lines.extend(actions)
+    else:
+        lines.extend([
+            '',
+            'Suggested next step:',
+            "- Try 'headmatch list-targets' to confirm the exact PipeWire node names before your first measurement.",
+        ])
+
+    return '\n'.join(lines)
+
 
 @dataclass
 class PipeWireDeviceConfig:
