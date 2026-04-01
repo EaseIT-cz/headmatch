@@ -27,3 +27,6 @@ Once the shell exists, the GUI needs the actual end-user workflow: measurement, 
 - `headmatch/measure.py`
 - `headmatch/targets.py`
 - tests
+
+## Status
+Done. The GUI now ships a beginner-oriented online measurement wizard, an offline recorder package + offline fit flow, progress/completion screens, and tests for the workflow wiring.

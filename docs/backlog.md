@@ -2,40 +2,37 @@
 
 Priority is ordered top to bottom.
 
-## P0 — configuration and interaction foundation
+## Active
 
-1. [done] Implement config persistence/loading against the shared interaction contract, including PipeWire target preload.
-2. [done] Add a default config file location strategy plus first-run creation behavior.
-3. [done] Expose a lightweight settings API usable by CLI, TUI, and GUI.
+### P2 — capture and analysis robustness
 
-## P1 — GUI and TUI core workflows
+1. Improve PipeWire node selection and recording/playback coordination.
+2. Make offline measurement import more tolerant of real recorder files.
+3. Strengthen alignment and sweep detection for noisy or delayed recordings.
+4. Add more synthetic tests for left/right imbalance, noise, and delay.
 
-4. [done] Implement the initial TUI wizard for beginner-guided measurement and fit.
-5. Implement the GUI skeleton and main navigation flow.
-6. [done] Preload shared saved config values in the TUI and shared frontend helpers.
-7. [done] Add a run/history browser in the TUI plus shared history-loading helpers using `run_summary.json` as the stable summary source.
+### P2 — EQ fitting and export polish
 
-## P1 — remaining product polish
+5. Refine PEQ fitting heuristics for safer shelf selection and fewer narrow corrections.
+6. Improve CamillaDSP export templates for real-world setups.
+7. Add export formats beyond CamillaDSP only if there is an immediate user need.
 
-8. [done] Improve output folder discoverability further, including a short README section that explains what each generated file means.
-9. [done] Add a documented install and first-run path for Linux users.
-10. [done] Package example configs and sample data.
+### P2 — target curves and cloning follow-up
 
-## P2 — capture and analysis robustness
+8. Add example clone targets and documentation for common headphone pairs.
+9. Validate clone curve generation against multiple curve sources.
+10. Expand target curve loading to handle more CSV layouts safely if new formats appear in the wild.
 
-11. Improve PipeWire node selection and recording/playback coordination.
-12. Make offline measurement import more tolerant of real recorder files.
-13. Strengthen alignment and sweep detection for noisy or delayed recordings.
-14. Add more synthetic tests for left/right imbalance, noise, and delay.
+## Completed recently
 
-## P2 — EQ fitting and export polish
-
-15. Refine PEQ fitting heuristics for safer shelf selection and fewer narrow corrections.
-16. Improve CamillaDSP export templates for real-world setups.
-17. Add export formats beyond CamillaDSP only if there is an immediate user need.
-
-## P2 — target curves and cloning follow-up
-
-18. Add example clone targets and documentation for common headphone pairs.
-19. Validate clone curve generation against multiple curve sources.
-20. Expand target curve loading to handle more CSV layouts safely if new formats appear in the wild.
+- Beginner-first CLI workflow
+- Versioning and app identity
+- Shared frontend interaction contract
+- Shared settings persistence and preload
+- Initial TUI wizard
+- TUI run/history browsing
+- GUI shell and navigation
+- GUI measurement wizard for online and offline flows
+- Shared TUI/GUI history browsing
+- Output-folder guides and first-run docs
+- Packaged config/example documentation

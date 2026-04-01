@@ -103,7 +103,7 @@ headmatch-gui
 
 The TUI preloads saved device/default values, can start online or offline workflows, and can browse recent runs by scanning for `run_summary.json` files under your output folder.
 
-The GUI currently focuses on the same shared defaults plus a lightweight history view backed by the same `run_summary.json` / `README.txt` files.
+The GUI now includes the same saved defaults, a guided online measurement flow, an offline recorder-first package + fit flow, progress/completion screens, and the lightweight history view that scans for `run_summary.json` files and shows the paired `README.txt` guide.
 
 ## Online workflow: fully automated with PipeWire
 

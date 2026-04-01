@@ -53,8 +53,11 @@ def load_or_create_config(path: str | Path | None = None) -> tuple[FrontendConfi
     if config_path.exists():
         return load_config(config_path), config_path, created
     config = FrontendConfig()
-    save_config(config, config_path)
-    created = True
+    try:
+        save_config(config, config_path)
+        created = True
+    except OSError:
+        created = False
     return config, config_path, created
 
 

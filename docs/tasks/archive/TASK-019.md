@@ -18,7 +18,7 @@ The interactive frontends should not only start workflows. They should also help
 
 ## Acceptance criteria
 - Users can see recent runs.
-- Users can inspect a run’s summary from the TUI or GUI.
+- [done] Users can inspect a run’s summary from the TUI or GUI.
 - The workflow fits the same beginner-friendly tone as the rest of the app.
 
 ## Suggested files/components
@@ -26,3 +26,8 @@ The interactive frontends should not only start workflows. They should also help
 - future `headmatch/gui.py`
 - `headmatch/pipeline.py`
 - `headmatch/io_utils.py`
+
+
+## Status
+
+Done. The TUI and GUI both read the shared `run_summary.json` / `README.txt` history contract.

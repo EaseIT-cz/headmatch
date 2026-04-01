@@ -301,7 +301,10 @@ def main(argv: list[str] | None = None) -> None:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
     if args.cmd != 'tui':
-        save_config(update_config_from_args(args, existing=config), config_path)
+        try:
+            save_config(update_config_from_args(args, existing=config), config_path)
+        except OSError:
+            pass
     print_next_steps(args.cmd, args)
 
 
