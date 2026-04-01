@@ -247,6 +247,8 @@ Example:
 headmatch clone-target   --source-csv data/ananda_nano.csv   --target-csv data/hd800s.csv   --out out/ananda_to_hd800s.csv
 ```
 
+Small documented sample inputs also live under `docs/examples/clone-targets/`.
+
 Then:
 
 ```bash

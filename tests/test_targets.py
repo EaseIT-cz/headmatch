@@ -52,3 +52,39 @@ def test_clone_target_normalizes_each_curve_before_diff(tmp_path):
     idx = min(range(len(curve.freqs_hz)), key=lambda i: abs(curve.freqs_hz[i] - 1000.0))
     assert curve.values_db[idx] == pytest.approx(0.0, abs=1e-6)
     assert out.exists()
+
+
+def test_clone_target_matches_across_mixed_curve_source_shapes(tmp_path):
+    source_measurement = tmp_path / 'source_measurement.csv'
+    target_published = tmp_path / 'target_published.csv'
+    source_measurement.write_text(
+        'frequency_hz,response_db\n'
+        '20,7\n'
+        '100,3\n'
+        '1000,1\n'
+        '5000,0\n'
+        '10000,-2\n'
+        '20000,-4\n'
+    )
+    target_published.write_text(
+        '# third-party export\n'
+        'Freq (Hz),Amplitude (dB),Label\n'
+        '20000,-1,air\n'
+        '10000,1,treble\n'
+        '5000,0,presence\n'
+        '1000,3,anchor\n'
+        '100,1,bass\n'
+        '20,6,sub\n'
+    )
+
+    curve = clone_target_from_source_target(source_measurement, target_published)
+
+    idx_20 = min(range(len(curve.freqs_hz)), key=lambda i: abs(curve.freqs_hz[i] - 20.0))
+    idx_100 = min(range(len(curve.freqs_hz)), key=lambda i: abs(curve.freqs_hz[i] - 100.0))
+    idx_10k = min(range(len(curve.freqs_hz)), key=lambda i: abs(curve.freqs_hz[i] - 10000.0))
+    idx_20k = min(range(len(curve.freqs_hz)), key=lambda i: abs(curve.freqs_hz[i] - 20000.0))
+
+    assert curve.values_db[idx_20] == pytest.approx(-3.0, abs=0.25)
+    assert curve.values_db[idx_100] == pytest.approx(-4.0, abs=0.25)
+    assert curve.values_db[idx_10k] == pytest.approx(1.0, abs=0.25)
+    assert curve.values_db[idx_20k] == pytest.approx(1.0, abs=0.25)

@@ -79,6 +79,67 @@ def _residual_priority_weights(freqs_hz: np.ndarray) -> np.ndarray:
 
 
 
+def _band_mean(freqs_hz: np.ndarray, values_db: np.ndarray, low_hz: float, high_hz: float) -> float:
+    mask = (freqs_hz >= low_hz) & (freqs_hz <= high_hz)
+    if not np.any(mask):
+        return 0.0
+    return float(np.mean(values_db[mask]))
+
+
+
+def _same_sign_fraction(values: np.ndarray, sign: float) -> float:
+    if len(values) == 0:
+        return 0.0
+    return float(np.mean(np.sign(values) == np.sign(sign)))
+
+
+
+def _maybe_add_edge_shelf(bands: List[PEQBand], freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> None:
+    if kind == 'lowshelf':
+        edge_mask = freqs_hz <= 140
+        compare_mean = _band_mean(freqs_hz, eq_target, 180, 600)
+        edge_mean = _band_mean(freqs_hz, eq_target, 20, 140)
+        freq = 105.0
+    else:
+        edge_mask = freqs_hz >= 7000
+        compare_mean = _band_mean(freqs_hz, eq_target, 2500, 5500)
+        edge_mean = _band_mean(freqs_hz, eq_target, 7000, min(float(freqs_hz[-1]), 16000.0))
+        freq = 8500.0
+
+    if not np.any(edge_mask):
+        return
+    edge_values = eq_target[edge_mask]
+    if abs(edge_mean) < 1.25:
+        return
+    if abs(edge_mean - compare_mean) < 0.75:
+        return
+    if _same_sign_fraction(edge_values, edge_mean) < 0.7:
+        return
+    bands.append(PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7))
+
+
+
+def _max_q_for_frequency(freq_hz: float, requested_max_q: float) -> float:
+    if freq_hz < 120:
+        return min(requested_max_q, 2.0)
+    if freq_hz > 6000:
+        return min(requested_max_q, 3.0)
+    return requested_max_q
+
+
+
+def _nearby_same_sign_band_exists(bands: List[PEQBand], candidate: PEQBand) -> bool:
+    for band in bands:
+        if band.kind != candidate.kind:
+            continue
+        if np.sign(band.gain_db) != np.sign(candidate.gain_db):
+            continue
+        if abs(np.log2(max(band.freq, 1.0) / max(candidate.freq, 1.0))) < 0.2:
+            return True
+    return False
+
+
+
 def fit_peq(
     freqs_hz: np.ndarray,
     target_eq_db: np.ndarray,
@@ -92,15 +153,8 @@ def fit_peq(
     bands: List[PEQBand] = []
     weights = _residual_priority_weights(freqs_hz)
 
-    # Broad shelves first.
-    bass_mask = freqs_hz <= 120
-    treble_mask = freqs_hz >= 6000
-    bass_mean = float(np.mean(eq_target[bass_mask])) if np.any(bass_mask) else 0.0
-    treble_mean = float(np.mean(eq_target[treble_mask])) if np.any(treble_mask) else 0.0
-    if abs(bass_mean) > 1.0:
-        bands.append(PEQBand('lowshelf', 105.0, float(np.clip(bass_mean, -max_gain_db, max_gain_db)), 0.7))
-    if abs(treble_mean) > 1.0:
-        bands.append(PEQBand('highshelf', 8500.0, float(np.clip(treble_mean, -max_gain_db, max_gain_db)), 0.7))
+    _maybe_add_edge_shelf(bands, freqs_hz, eq_target, kind='lowshelf', max_gain_db=max_gain_db)
+    _maybe_add_edge_shelf(bands, freqs_hz, eq_target, kind='highshelf', max_gain_db=max_gain_db)
 
     for _ in range(max_filters - len(bands)):
         current = peq_chain_response_db(freqs_hz, sample_rate, bands)
@@ -111,9 +165,8 @@ def fit_peq(
         peak_db = float(weighted[idx] / weights[idx])
         if abs(peak_db) < 0.75:
             break
-        fc = float(freqs_hz[idx])
+        fc = float(np.clip(freqs_hz[idx], 35.0, sample_rate / 2 - 500.0))
 
-        # Estimate width from contiguous region above half height.
         threshold = abs(peak_db) * 0.5
         l = idx
         while l > 0 and abs(residual[l]) >= threshold:
@@ -123,8 +176,16 @@ def fit_peq(
             r += 1
         f1, f2 = max(freqs_hz[l], 20.0), min(freqs_hz[r], sample_rate / 2 - 100)
         bw_oct = max(np.log2(f2 / f1), 0.12)
-        q = float(np.clip(1.0 / bw_oct, 0.4, max_q))
+        q_limit = _max_q_for_frequency(fc, max_q)
+        q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
         gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
-        bands.append(PEQBand('peaking', fc, gain, q))
+        if q >= 2.8:
+            gain *= 0.85
+        candidate = PEQBand('peaking', fc, gain, q)
+        if abs(candidate.gain_db) < 0.6:
+            break
+        if _nearby_same_sign_band_exists(bands, candidate):
+            continue
+        bands.append(candidate)
 
     return bands

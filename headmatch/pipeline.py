@@ -35,7 +35,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
         files = [
             ('run_summary.json', 'Plain-language machine-readable summary of the run and predicted error after EQ.'),
             ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
-            ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device names before use.'),
+            ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device placeholders before use.'),
             ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
             ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
             ('measurement_left.csv', 'Estimated left-channel headphone response from the recording.'),

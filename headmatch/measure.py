@@ -32,8 +32,6 @@ class OfflineMeasurementPlan:
 
 
 
-
-
 def _require_target(value: Optional[str], label: str) -> Optional[str]:
     if value is None:
         return None
@@ -41,6 +39,8 @@ def _require_target(value: Optional[str], label: str) -> Optional[str]:
     if not value:
         raise ValueError(f'{label} cannot be empty')
     return value
+
+
 def require_executable(name: str) -> None:
     if shutil.which(name) is None:
         raise RuntimeError(f"Required executable not found: {name}")
@@ -88,12 +88,15 @@ def prepare_offline_measurement(spec: SweepSpec, plan: OfflineMeasurementPlan) -
 def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: PipeWireDeviceConfig) -> Path:
     require_executable("pw-play")
     require_executable("pw-record")
-    device = PipeWireDeviceConfig(output_target=_require_target(device.output_target, 'output_target'), input_target=_require_target(device.input_target, 'input_target'))
+    device = PipeWireDeviceConfig(
+        output_target=_require_target(device.output_target, 'output_target'),
+        input_target=_require_target(device.input_target, 'input_target'),
+    )
     paths.sweep_wav.parent.mkdir(parents=True, exist_ok=True)
     paths.recording_wav.parent.mkdir(parents=True, exist_ok=True)
     render_sweep_file(spec, paths.sweep_wav)
 
-    total_seconds = spec.pre_silence_s + spec.duration_s + spec.post_silence_s + 0.75
+    capture_guard_s = 1.0
     rec_cmd = ["pw-record", "--rate", str(spec.sample_rate), "--channels", "2", str(paths.recording_wav)]
     play_cmd = ["pw-play", "--rate", str(spec.sample_rate), "--channels", "2", str(paths.sweep_wav)]
     if device.input_target:
@@ -101,11 +104,14 @@ def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: P
     if device.output_target:
         play_cmd.extend(["--target", device.output_target])
 
-    rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        time.sleep(0.35)
-        subprocess.run(play_cmd, capture_output=True, text=True, check=True)
-        time.sleep(total_seconds - (spec.duration_s + spec.pre_silence_s + spec.post_silence_s))
+        time.sleep(max(0.35, spec.pre_silence_s * 0.75))
+        play_result = subprocess.run(play_cmd, capture_output=True, text=True, check=False)
+        if play_result.returncode != 0:
+            message = (play_result.stderr or play_result.stdout or 'pw-play failed').strip()
+            raise RuntimeError(f'PipeWire playback failed. {message}')
+        time.sleep(capture_guard_s)
     except Exception:
         rec_proc.terminate()
         raise
@@ -113,7 +119,18 @@ def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: P
         time.sleep(0.25)
         rec_proc.terminate()
         try:
-            rec_proc.wait(timeout=3)
+            rec_proc.wait(timeout=max(3.0, capture_guard_s + spec.post_silence_s + 1.0))
         except subprocess.TimeoutExpired:
             rec_proc.kill()
+            rec_proc.wait(timeout=2)
+
+    if not paths.recording_wav.exists() or paths.recording_wav.stat().st_size == 0:
+        stderr = ''
+        if rec_proc.stderr is not None:
+            stderr = rec_proc.stderr.read().strip()
+        raise RuntimeError(
+            'PipeWire capture did not produce a usable WAV file. '
+            'Confirm the playback/capture targets and try again.'
+            + (f' {stderr}' if stderr else '')
+        )
     return paths.recording_wav

@@ -7,7 +7,7 @@ from typing import Dict
 import numpy as np
 from scipy import signal
 
-from .io_utils import read_wav, save_fr_csv, validate_stereo_audio
+from .io_utils import read_wav, save_fr_csv
 from .signals import SweepSpec, fractional_octave_smoothing, geometric_log_grid
 
 
@@ -21,10 +21,54 @@ class MeasurementResult:
 
 
 
+def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
+    if data.ndim != 2:
+        raise ValueError(f'{path} must be a 2D audio array')
+    if len(data) == 0:
+        raise ValueError(f'{path} is empty')
+    if data.shape[1] == 1:
+        return np.repeat(data, 2, axis=1)
+    if data.shape[1] >= 2:
+        return data[:, :2]
+    raise ValueError(f'{path} must contain at least one channel')
+
+
+def _alignment_reference_score(segment: np.ndarray, reference: np.ndarray) -> float:
+    segment = segment - np.mean(segment)
+    reference = reference - np.mean(reference)
+    denom = np.linalg.norm(segment) * np.linalg.norm(reference)
+    if denom <= 1e-12:
+        return 0.0
+    return float(np.dot(segment, reference) / denom)
+
+
+
 def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) -> np.ndarray:
     mono_rec = np.mean(recording, axis=1)
-    corr = signal.fftconvolve(mono_rec, reference[::-1], mode='full')
-    offset = int(np.argmax(np.abs(corr)) - len(reference) + 1)
+    mono_rec = mono_rec - np.mean(mono_rec)
+    ref = reference - np.mean(reference)
+    energy = np.abs(ref)
+    gate = energy >= (0.12 * np.max(energy))
+    corr = signal.fftconvolve(mono_rec, ref[::-1], mode='full')
+    candidate_offsets = np.argsort(np.abs(corr))[-8:]
+    candidate_offsets = np.unique(candidate_offsets - len(reference) + 1)
+
+    best_offset = 0
+    best_score = float('-inf')
+    for raw_offset in candidate_offsets:
+        offset = int(raw_offset)
+        start = max(offset, 0)
+        end = min(offset + len(reference), len(recording))
+        segment = np.zeros(len(reference), dtype=np.float64)
+        if end > start:
+            seg_start = max(-offset, 0)
+            segment[seg_start:seg_start + (end - start)] = mono_rec[start:end]
+        score = _alignment_reference_score(segment[gate], ref[gate])
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+
+    offset = best_offset
     if offset < 0:
         recording = recording[-offset:]
         offset = 0
@@ -52,7 +96,7 @@ def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: i
 
 def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
     recording, sr = read_wav(recording_wav)
-    validate_stereo_audio(recording, recording_wav)
+    recording = _coerce_measurement_audio(recording, recording_wav)
     if sr != sweep_spec.sample_rate:
         raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
     min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
