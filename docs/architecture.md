@@ -214,3 +214,48 @@ If future work resumes, the most sensible candidates are:
 - stronger device guidance
 - additional export formats if there is real demand
 - more real-world published-curve examples
+
+---
+
+## Refactor direction for the current phase
+
+The codebase does not need a broad redesign, but two targeted refactors are now justified because they directly support the active product work.
+
+### 1. Keep the pipeline contract stable, but reduce output-writing duplication
+
+`pipeline.py` currently owns both the fitting logic and the repeated artifact-writing flow for single runs and iterative runs.
+
+The intended direction is:
+- keep one shared fit/output contract
+- extract repeated artifact writing behind a small helper or result-writer layer
+- avoid changing output filenames or summary schema unless explicitly planned
+
+This is a maintainability refactor, not a product redesign.
+
+### 2. Treat the GUI as a shell plus workflow views, not one growing class
+
+`gui.py` currently combines:
+- shell layout
+- view rendering
+- local form state
+- background task orchestration
+- history display
+- completion/error presentation
+
+Because the GUI is the primary product surface, future work should move toward:
+- a thin app shell/controller
+- smaller view-rendering helpers or components
+- shared presentation helpers for confidence/result messaging where practical
+
+The goal is to make GUI-first product polish easier without changing the backend workflow contract.
+
+### 3. Strengthen typed frontend-facing summary contracts
+
+Confidence and run-summary payloads now matter to the product experience, not just internal reporting.
+
+The intended direction is:
+- keep `run_summary.json` as the stable frontend contract
+- introduce clearer typed structures for confidence and summary payloads
+- make GUI/CLI/TUI presentation changes safer by reducing ad-hoc dict usage
+
+This should remain lightweight: dataclasses or `TypedDict`-level structure is enough.

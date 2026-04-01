@@ -21,6 +21,10 @@ The current shipped state includes:
 ## Active
 
 1. Surface confidence and interpretation more clearly in the GUI and CLI.
+2. Refactor the main hotspots blocking that polish without changing product behavior:
+   - reduce duplicated fit artifact writing in `pipeline.py`
+   - split the GUI shell from view-rendering concerns
+   - strengthen typed confidence/run-summary contracts
 
 ## Future follow-up candidates
 
