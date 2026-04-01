@@ -98,6 +98,7 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert 'headmatch fit results' in guide
     assert 'camilladsp_full.yaml' in guide
     assert 'equalizer_apo.txt' in guide
+    assert 'What to try next' not in guide
 
 
 
@@ -132,6 +133,8 @@ def test_confidence_summary_flags_suspicious_run(tmp_path: Path):
     guide = (out_dir / 'README.txt').read_text()
     assert 'This run looks suspicious.' in summary
     assert 'Confidence: low' in guide
+    assert 'What to try next:' in guide
+    assert 'Try one fresh rerun before keeping this EQ preset.' in guide
 
 
 def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path: Path):

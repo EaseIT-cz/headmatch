@@ -255,6 +255,8 @@ def test_fit_next_steps_prints_confidence_summary(capsys, tmp_path):
     assert "Confidence: Medium (82/100)" in out
     assert "Some signals are only fair." in out
     assert "Warning: Check the graphs." in out
+    assert "Troubleshooting:" in out
+    assert "Open the fit graphs before using the preset" in out
 
 
 def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):

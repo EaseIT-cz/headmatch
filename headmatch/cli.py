@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .contracts import FrontendRunSummary
+from .troubleshooting import confidence_troubleshooting_steps
 
 from .app_identity import get_app_identity
 from .settings import load_or_create_config, save_config, update_config_from_args
@@ -211,6 +212,11 @@ def print_run_confidence(cmd: str, args) -> None:
         print(confidence.interpretation)
     for warning in confidence.warnings[:3]:
         print(f"Warning: {warning}")
+    steps = confidence_troubleshooting_steps(confidence)
+    if steps:
+        print("Troubleshooting:")
+        for step in steps:
+            print(f"- {step}")
 
 
 def print_next_steps(cmd: str, args) -> None:

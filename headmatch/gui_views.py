@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .history import build_history_selection
+from .troubleshooting import confidence_troubleshooting_steps
 
 
 ONLINE_STEPS = (
@@ -208,5 +209,12 @@ def render_history_results(ttk, frame, *, selection) -> None:
             row += 1
             for warning in confidence.warnings[:3]:
                 ttk.Label(guide, text=f"- {warning}", wraplength=620, justify="left").grid(row=row, column=0, sticky="w", pady=(2, 0))
+                row += 1
+        steps = confidence_troubleshooting_steps(confidence)
+        if steps:
+            ttk.Label(guide, text="What to try next", font=("TkDefaultFont", 10, "bold")).grid(row=row, column=0, sticky="w", pady=(8, 0))
+            row += 1
+            for step in steps:
+                ttk.Label(guide, text=f"- {step}", wraplength=620, justify="left").grid(row=row, column=0, sticky="w", pady=(2, 0))
                 row += 1
         ttk.Label(guide, text=selection.selected_guide or "", wraplength=620, justify="left").grid(row=row, column=0, sticky="w", pady=(10, 0))

@@ -26,6 +26,7 @@ from .peq import PEQBand, fit_peq, peq_chain_response_db
 from .plots import render_fit_graphs
 from .signals import SweepSpec
 from .targets import TargetCurve, create_flat_target, load_curve, resample_curve, clone_target_from_source_target
+from .troubleshooting import confidence_troubleshooting_steps
 
 
 RESULTS_GUIDE_NAME = 'README.txt'
@@ -189,6 +190,11 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             lines.append('- Warnings:')
             for warning in trust_summary.warnings:
                 lines.append(f'  - {warning}')
+        troubleshooting = confidence_troubleshooting_steps(trust_summary)
+        if troubleshooting:
+            lines.append('- What to try next:')
+            for step in troubleshooting:
+                lines.append(f'  - {step}')
     lines.extend(['', 'Files', '-----'])
     for name, description in files:
         lines.append(f'- {name}: {description}')
