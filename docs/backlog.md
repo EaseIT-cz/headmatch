@@ -31,6 +31,7 @@ The current shipped state includes:
 - added conservative troubleshooting guidance tied to low-confidence results
 - improved PipeWire target guidance in the CLI and GUI
 - added a first GUI run-comparison slice in history
+- added a first CLI environment diagnostics command (`headmatch doctor`)
 
 ## Future follow-up candidates
 
