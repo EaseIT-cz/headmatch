@@ -1,191 +1,187 @@
-# headmatch architecture
+# HeadMatch architecture
 
-## Product intent
+## Product shape
 
-`headmatch` is a beginner-friendly headphone measurement and EQ toolkit for audiophiles and audio enthusiasts.
+HeadMatch is a Linux-first headphone measurement and EQ tool built for non-technical audio enthusiasts.
 
-Primary product goals:
-- make headphone measurement feel simple and guided
-- support both automatic Linux/PipeWire capture and offline recorder-first workflows
-- generate conservative EQ that improves tonality without chasing tiny measurement artifacts
-- support headphone cloning from measurements or published FR CSVs
-- keep outputs understandable for non-technical users
+It provides one shared measurement/fitting backend with three user-facing frontends:
+- **CLI** for explicit and scriptable workflows
+- **TUI** for guided terminal interaction
+- **GUI** for a simple desktop workflow
 
-## Audience assumptions
+The product direction is deliberately conservative:
+- guided workflows over flexible-but-confusing ones
+- safe defaults over maximum tweakability
+- readable output folders over opaque internal artifacts
+- conservative EQ over aggressive overfitting
 
-The primary audience is not technical.
-They want:
-- a clear starting point
-- minimal configuration
-- visible progress
-- stable, repeatable results
-- safe defaults
-- readable output files and presets
+---
 
-Design implication: the system should prefer opinionated workflows over flexibility-first APIs.
+## Core workflow
 
-## Current system shape
+The shared backend performs the same high-level pipeline regardless of frontend:
 
-### Core pipeline
-
-1. generate a log sweep
-2. play and record it, or prepare an offline package
+1. generate a logarithmic sweep
+2. either:
+   - play/record it with PipeWire, or
+   - export an offline sweep package for recorder-first use
 3. align the recording to the reference sweep
 4. estimate left/right frequency response
 5. normalize at 1 kHz
-6. smooth measurement curves
+6. smooth the curves
 7. fit conservative PEQ bands
-8. export CamillaDSP YAML
-9. optionally repeat in an iterative loop
+8. export CamillaDSP output
+9. write summary/report artifacts for later review
 
-### Modules
+---
 
-- `signals.py`
-  - sweep generation
-  - smoothing helpers
-  - frequency grid helpers
-- `measure.py`
-  - render sweep WAV
-  - PipeWire-based measurement
-  - offline measurement package generation
-- `analysis.py`
-  - recording alignment
-  - FR estimation
-  - measurement CSV export
-- `targets.py`
-  - target curve loading and normalization
-  - clone target generation
-- `peq.py`
-  - RBJ biquad modeling
-  - greedy PEQ fitting
-- `exporters.py`
-  - CamillaDSP YAML export
-- `pipeline.py`
-  - measurement-to-fit orchestration
-  - iterative measurement loop
-- `cli.py`
-  - command-line entry points
-- `settings.py`
-  - shared config loading/saving and first-run defaults
-- `tui.py`
-  - guided terminal workflow and recent-run browsing
-- `history.py`
-  - stable run-summary discovery for interactive frontends
+## Main modules
 
-## Architecture decisions
+### `signals.py`
+- sweep generation
+- smoothing helpers
+- frequency-grid helpers
 
-### 1. Opinionated workflows over generic primitives
+### `measure.py`
+- sweep rendering
+- PipeWire playback/recording coordination
+- offline measurement package generation
 
-The repo already exposes low-level pieces, but the product should behave like a guided tool.
+### `analysis.py`
+- recording alignment
+- frequency-response estimation
+- measurement CSV export
 
-Implication:
-- keep the CLI simple and prescriptive
-- prefer a few named workflows over many knobs
-- hide advanced controls unless they materially improve success rate
+### `targets.py`
+- target loading
+- target normalization
+- clone-target generation
 
-### 2. Two capture modes, one mental model
+### `peq.py`
+- PEQ band modeling
+- conservative fitting heuristics
 
-The product should present one measurement concept with two capture implementations:
-- online: PipeWire playback/recording
-- offline: recorder-first workflow with later import
+### `exporters.py`
+- CamillaDSP export generation
 
-Implication:
-- the UI/CLI should surface a single “measure” story
-- offline mode should feel like a fallback, not a separate product
+### `pipeline.py`
+- measurement-to-fit orchestration
+- iterative workflow support
+- result-summary generation
 
-### 3. Conservative EQ is a feature
+### `settings.py`
+- shared config loading/saving
+- first-run defaults
 
-For headphone users, small resonant fixes are less important than not making things worse.
+### `history.py`
+- shared run-summary discovery for TUI and GUI
 
-Implication:
-- limit filter count
-- clamp gain and Q
-- bias toward broad tonal correction
-- avoid overfitting treble noise
+### `cli.py`
+- command-line entry points
 
-### 4. Cloning is a target-generation step, not a separate fitting engine
+### `tui.py`
+- guided terminal workflow
+- history browsing
 
-A clone curve should simply produce a target delta curve that can be fed back into the normal fit pipeline.
+### `gui.py`
+- guided desktop workflow
+- history browsing
 
-Implication:
-- keep clone generation as a curve transformation
-- keep fitting logic centralized
+---
 
-### 5. File outputs must be understandable
+## Interaction model
 
-The audience should be able to open folders and understand what happened.
+### CLI
+The CLI is the most explicit layer.
+It exposes both:
+- a beginner-first guided command (`start`)
+- lower-level commands for manual control
 
-Implication:
-- predictable output names
-- clear metadata files
-- readable summaries and reports
-- avoid deeply nested or cryptic artifacts
+### TUI
+The TUI is a guided terminal layer.
+It exists for users who want help without leaving the terminal.
 
-## Current constraints / risks
+### GUI
+The GUI is the most approachable layer.
+It is intended to surface the same shared workflows with the least friction.
 
-- The measurement math is still relatively simple and may need refinement for real-world recordings.
-- PipeWire device handling is likely the most fragile integration point.
-- The current export surface is useful, but a beginner-friendly orchestration layer is still missing.
-- The current codebase has good building blocks, but the product experience is not yet fully shaped around non-technical users.
+All three frontends share:
+- the same persisted config
+- the same measurement pipeline
+- the same output artifacts
+- the same run-summary contract
 
-## Recommended near-term direction
+---
 
-Build around three layers:
+## Configuration model
 
-1. **workflow layer**
-   - opinionated user journeys
-   - guided capture and fit
-   - beginner-oriented summaries
+HeadMatch uses one shared config file for CLI, TUI, and GUI.
 
-2. **domain layer**
-   - measurement analysis
-   - target curve handling
-   - EQ fitting
-   - clone curve generation
+Default path:
+- `$XDG_CONFIG_HOME/headmatch/config.json`
+- fallback: `~/.config/headmatch/config.json`
 
-3. **integration layer**
-   - PipeWire
-   - CamillaDSP
-   - file system outputs
-   - recorder import/export
+The config stores small, stable user preferences such as:
+- output directory defaults
+- PipeWire playback target
+- PipeWire capture target
+- preferred target CSV
+- sweep/fit defaults
 
-### 7. Versioning must be visible everywhere
+Explicit CLI flags override saved config for the current run.
 
-Users should always be able to tell what version they are running.
+---
 
-Implication:
-- keep one canonical in-package version source (`headmatch.app_identity`)
-- expose version in CLI, TUI, and any later GUI entry points
-- include version in generated outputs
-- prefer semantic versions with optional build metadata
+## Output contract
 
-### 8. Shared config lives in one predictable user path
+Each run should produce outputs that are understandable without digging through code.
 
-CLI, TUI, and GUI should all read the same persisted user settings.
+Important artifacts:
+- `README.txt` — human-readable explanation of the output folder
+- `run_summary.json` — stable machine-readable summary
+- `fit_report.json` — detailed fit report
+- CamillaDSP YAML exports
+- measurement CSVs
 
-Policy:
-- default path is `$XDG_CONFIG_HOME/headmatch/config.json`
-- if `XDG_CONFIG_HOME` is unset, fall back to `~/.config/headmatch/config.json`
-- frontends may allow an explicit override path for testing or advanced use
-- the stored schema should stay small and stable, centered on PipeWire targets and common sweep/fit defaults
+The TUI and GUI history views use `run_summary.json` plus `README.txt` as the stable review contract.
 
-First-run behavior:
-- if the config file is missing, create it with safe starter defaults
-- missing PipeWire targets stay `null`; the app should not guess devices yet
-- saved values preload into frontends, but explicit CLI flags still override them for that run
+---
 
-## Future product direction
+## Design decisions
 
-If the repo grows, the likely next step is a small guided app or wizard-like CLI that reduces the number of choices exposed to the user at once.
+### 1. Guided workflows over low-level complexity
+The intended audience values successful completion more than flexibility.
 
-The right shape for this audience is not “more options.” It is “fewer ways to get lost.”
+### 2. One backend, multiple frontends
+The frontends should orchestrate the same core logic, not reimplement it.
 
+### 3. Offline mode is first-class
+Recorder-first workflows are part of the product, not a fallback hack.
 
-### 9. Run history should use `run_summary.json` as the stable contract
+### 4. Conservative EQ is a feature
+The goal is useful tonal correction, not maximally clever curve chasing.
 
-Interactive frontends should discover prior runs by scanning output folders for `run_summary.json` and then optionally opening the sibling `README.txt` guide.
+### 5. Output clarity matters
+Users should be able to open a folder and understand what happened.
 
-Implication:
-- keep `run_summary.json` compact and stable
-- treat `README.txt` as the friendly explanation layer
-- share history-loading code so the TUI and a later GUI do not drift
+---
+
+## Current state
+
+The shipped product now includes:
+- beginner-first CLI workflow
+- TUI wizard and history browsing
+- GUI shell, history browsing, and measurement wizard
+- shared config persistence and preload
+- clone-target support
+- CamillaDSP export
+- deterministic end-to-end synthetic integration tests
+
+---
+
+## Likely future work
+
+If future work resumes, the most sensible candidates are:
+- better PipeWire device discovery/help
+- additional export formats if there is real demand
+- more real-world published-curve examples

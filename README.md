@@ -1,35 +1,68 @@
-# headmatch
+# HeadMatch
 
-A Python toolkit for:
-- measuring headphone transfer functions on **Linux + PipeWire**
-- fitting **CamillaDSP** EQ presets
-- building **headphone cloning** targets from measurements or published CSV data
-- repeating the loop until the residual is small enough
-- supporting both **online / fully automated capture** and **offline recorder-first capture**
+HeadMatch is a beginner-friendly headphone measurement and EQ tool for Linux.
 
-## What it does
+It helps you:
+- measure headphone response with **PipeWire** or an offline recorder workflow
+- fit a conservative **parametric EQ** toward a target curve
+- export ready-to-use **CamillaDSP** configurations
+- build **clone targets** from your own measurements or published CSV curves
+- use the same core workflow from the **CLI**, **TUI**, or **GUI**
 
-1. renders a logarithmic sweep WAV
-2. either records the in-ear response with `pw-record` **or** prepares an offline sweep package for Zoom/H2n
-3. estimates left/right frequency response
-4. fits a conservative PEQ set
-5. exports a **CamillaDSP** YAML preset
-6. can build a **clone target** such as `Ananda Nano -> HD800S`
-7. can iterate the whole process multiple times when capture is online
+The design goal is simple: make headphone measurement usable for audio enthusiasts who do **not** want to fight the tooling.
 
-## Recommended Linux stack
+---
 
-- PipeWire (`pw-play`, `pw-record`, `wpctl status`)
-- Python 3.10+
-- CamillaDSP
-- Roland CS-10EM or another in-ear/binaural mic system
-- Zoom H2n if you want USB-interface mode or SD-card fallback
+## What HeadMatch supports
 
-## Hardware notes
+### 1. Online measurement
+Use PipeWire playback and recording to run a guided measurement directly on Linux.
 
-The Roland **CS-10EM** microphone section needs **2 V to 10 V plug-in power**. The Zoom **H2n** can act as a USB audio interface and its official manual says USB audio mode supports **44.1/48 kHz at 16-bit**. The H2n product page also says it can act as a **4-in/2-out audio interface**, and for clean measurements you should use the **external mic input**, enable plug-in power, and disable processing. citeturn354437search1turn354437search0turn354437search4
+### 2. Offline measurement
+Generate a sweep package, record it with an external recorder, then import the WAV and fit EQ later.
 
-## Install
+### 3. EQ fitting
+Analyze the measured response and generate a conservative PEQ profile aimed at audible improvement without overfitting.
+
+### 4. CamillaDSP export
+Write both a full CamillaDSP config and a filters-only version.
+
+### 5. Headphone cloning
+Create a target curve that moves one headphone toward the tonal balance of another.
+
+---
+
+## Interaction modes
+
+HeadMatch currently provides three ways to use the same shared pipeline.
+
+### CLI
+Best for explicit control, scripting, and repeatable workflows.
+
+```bash
+headmatch --version
+headmatch start --out-dir out/session_01
+```
+
+### TUI
+Best for a guided terminal workflow.
+
+```bash
+headmatch tui
+```
+
+### GUI
+Best for users who want a simple desktop shell.
+
+```bash
+headmatch-gui
+```
+
+All three modes share the same saved config, run summaries, and output formats.
+
+---
+
+## Installation
 
 ```bash
 cd headmatch
@@ -38,316 +71,197 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-For testing, install the test dependencies:
+For tests:
 
 ```bash
 pip install -r requirements-test.txt
 ```
 
-## Interaction modes
+---
 
-`headmatch` currently ships with:
-- **CLI** for scripted and explicit workflows
-- **TUI** (`headmatch tui`) for a guided terminal-first flow with recent-run browsing
-- **GUI** (`headmatch-gui`) as a lightweight desktop shell that preloads the same config and shows recent-run summaries
+## Recommended first run
 
-Check the installed app identity at any time:
-
-```bash
-headmatch --version
-```
-
-The easiest first run is:
+If PipeWire playback and recording are working, start here:
 
 ```bash
 headmatch start --out-dir out/session_01
 ```
 
-That guided path runs one online measurement pass and exports CamillaDSP EQ files.
+This will:
+1. generate a sweep
+2. run one measurement pass
+3. analyze the recording
+4. fit EQ toward the selected target
+5. export CamillaDSP files
+6. write a human-readable `README.txt` and machine-readable `run_summary.json`
 
-If you want the older explicit workflow, the lower-level commands are still available:
+If you prefer the recorder-first path:
 
 ```bash
-headmatch render-sweep
-headmatch measure
-headmatch prepare-offline
-headmatch analyze
-headmatch fit
-headmatch fit-offline
-headmatch clone-target
-headmatch iterate
+headmatch prepare-offline --out-dir out/session_01
 ```
 
-## Config file and first-run behavior
+Then record the sweep externally and run:
 
-`headmatch` keeps shared user defaults in a single JSON config file so the CLI, TUI, and any later GUI can reuse the same settings.
+```bash
+headmatch fit-offline \
+  --recording out/session_01/recording.wav \
+  --out-dir out/session_01/fit
+```
 
-Default location:
+---
+
+## Shared configuration
+
+HeadMatch stores shared defaults in one config file used by the CLI, TUI, and GUI.
+
+Default path:
 - `$XDG_CONFIG_HOME/headmatch/config.json`
 - fallback: `~/.config/headmatch/config.json`
 
-Behavior:
-- on first run, `headmatch` creates that file with safe starter defaults
-- saved PipeWire input/output target strings and common sweep/fit defaults preload automatically
-- explicit CLI flags still win over saved values for the current command
-- you can point at a different file with `--config /path/to/config.json`
+That config can store things like:
+- preferred output folder
+- PipeWire playback target
+- PipeWire capture target
+- preferred target CSV
+- sweep and fit defaults
 
-An example config lives at `docs/examples/headmatch.config.json`.
-
-Launch the interactive frontends at any time with:
-
-```bash
-headmatch tui
-headmatch-gui
-```
-
-The TUI preloads saved device/default values, can start online or offline workflows, and can browse recent runs by scanning for `run_summary.json` files under your output folder.
-
-The GUI now includes the same saved defaults, a guided online measurement flow, an offline recorder-first package + fit flow, progress/completion screens, and the lightweight history view that scans for `run_summary.json` files and shows the paired `README.txt` guide.
-
-## Online workflow: fully automated with PipeWire
-
-This is the preferred path when the H2n behaves as a USB interface.
-
-### 1) Put the H2n in USB audio-interface mode
-
-Set the H2n to USB audio mode, 48 kHz if possible, external mic input, manual gain, and disable AGC/limiter/low-cut. The generated defaults also use 48 kHz. citeturn354437search0turn354437search4
-
-### 2) Find the PipeWire nodes
+You can override the path with:
 
 ```bash
-wpctl status
+headmatch --config /path/to/config.json ...
 ```
 
-PipeWire's own docs use `pw-play` for playback testing and `pw-loopback` for creating loopback nodes; this is the same ecosystem these scripts use. citeturn354437search10turn354437search6
+An example config is included at:
 
-### 3) Make one online measurement
+```text
+docs/examples/headmatch.config.json
+```
 
+---
+
+## Main CLI commands
+
+### Guided online path
 ```bash
-headmatch measure   --out-dir out/measure_usb_01   --output-target "your-headphone-output-node"   --input-target "your-h2n-input-node"   --sample-rate 48000
+headmatch start --out-dir out/session_01
 ```
 
-This creates:
-- `out/measure_usb_01/sweep.wav`
-- `out/measure_usb_01/recording.wav`
-
-### 4) Fit EQ
-
+### Manual online measurement
 ```bash
-headmatch fit   --recording out/measure_usb_01/recording.wav   --out-dir out/fit_usb_01   --target-csv my_target.csv   --max-filters 8   --sample-rate 48000
+headmatch measure \
+  --out-dir out/measure_usb_01 \
+  --output-target "your-playback-node" \
+  --input-target "your-capture-node"
 ```
 
-Outputs:
-- `README.txt` — quick plain-language guide to the folder contents
+### Fit an existing recording
+```bash
+headmatch fit \
+  --recording out/measure_usb_01/recording.wav \
+  --out-dir out/fit_usb_01 \
+  --target-csv my_target.csv \
+  --max-filters 8
+```
+
+### Offline package generation
+```bash
+headmatch prepare-offline --out-dir out/offline_session_01
+```
+
+### Offline fitting
+```bash
+headmatch fit-offline \
+  --recording out/offline_session_01/recording.wav \
+  --out-dir out/offline_session_01/fit \
+  --target-csv my_target.csv
+```
+
+### Iterative online workflow
+```bash
+headmatch iterate \
+  --out-dir out/iterative_usb \
+  --target-csv my_target.csv \
+  --output-target "your-playback-node" \
+  --input-target "your-capture-node" \
+  --iterations 3
+```
+
+### Clone target generation
+```bash
+headmatch clone-target \
+  --source-csv source.csv \
+  --target-csv target.csv \
+  --out clone_target.csv
+```
+
+---
+
+## Output files
+
+A typical fit output folder contains:
+- `README.txt` — plain-language explanation of the run output
+- `run_summary.json` — stable summary used by the TUI/GUI history views
+- `fit_report.json` — detailed fit report
+- `measurement_left.csv`
+- `measurement_right.csv`
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
-- `fit_report.json`
-- `run_summary.json`
-- measurement CSVs
 
-The JSON and YAML outputs include a `generated_by` / `metadata.generated_by` block with the app name and version so saved folders can be traced back to the build that created them.
+The general rule is:
+- open `README.txt` if you want the human explanation
+- open `run_summary.json` if you want the stable machine-readable summary
 
-For quick review later, open either:
-- `run_summary.json` for the stable machine-readable summary the TUI/history browser reads
-- `README.txt` for the plain-language guide to that output folder
+---
 
-### 5) Iterate automatically
+## Clone-target examples
 
-```bash
-headmatch iterate   --out-dir out/iterative_usb   --target-csv my_target.csv   --output-target "your-headphone-output-node"   --input-target "your-h2n-input-node"   --iterations 3   --max-filters 8   --sample-rate 48000
+Documented examples live in:
+
+```text
+docs/examples/clone-targets/
 ```
 
-Each iteration gets its own folder, plus a `README.txt` in every iteration directory so you can tell the files apart without opening JSON first.
+These examples are useful if you want to:
+- understand the expected CSV shape
+- see a simple published-curve clone workflow
+- inspect a prebuilt example clone target
 
-## Offline workflow: record first, analyze later
+---
 
-Use this when:
-- the H2n USB interface is flaky on Linux
-- you want a stable SD-card workflow
-- you want to compare multiple recordings manually
+## Test coverage
 
-### 1) Prepare the sweep package
+The repo includes:
+- unit and functional tests
+- deterministic synthetic integration tests for the CLI workflow
+- GitHub Actions workflows for both the main test suite and integration tests
 
-```bash
-headmatch prepare-offline   --out-dir out/offline_session_01   --sample-rate 48000   --notes "Ananda Nano stock pads, no EQ"
-```
-
-This creates:
-- `out/offline_session_01/sweep.wav`
-- `out/offline_session_01/measurement_plan.json`
-
-Copy `sweep.wav` to your playback machine if needed.
-
-### 2) Record on the H2n
-
-Record the response to SD card or via any other recorder path. Keep the file as stereo PCM WAV. Do **not** trim the leading silence manually.
-
-### 3) Import the recording
-
-Copy the recorded WAV to the session folder, for example:
+Run locally with:
 
 ```bash
-cp /media/$USER/H2N/STE-0001.WAV out/offline_session_01/recording.wav
+python -m pytest -q
 ```
 
-### 4) Analyze or fit directly
+---
 
-Analyze only:
+## Recommended hardware / environment
 
-```bash
-headmatch analyze   --recording out/offline_session_01/recording.wav   --out-dir out/offline_session_01/analysis   --sample-rate 48000
-```
+HeadMatch is currently designed around:
+- Linux
+- PipeWire
+- CamillaDSP
+- in-ear or binaural microphone setups
+- optional external recorder workflows
 
-Or fit in one step:
+If your USB audio path is unstable, use the offline recorder-first workflow. That is a supported path, not a hack.
 
-```bash
-headmatch fit-offline   --recording out/offline_session_01/recording.wav   --out-dir out/offline_session_01/fit   --target-csv my_target.csv   --max-filters 8   --sample-rate 48000
-```
+---
 
-### 5) Offline validation loop
+## Project docs
 
-Offline iteration is manual by design:
-1. fit preset from recording A
-2. load preset into CamillaDSP
-3. record validation pass B on the H2n
-4. run `fit-offline` or `analyze` on pass B
-5. compare residuals in `fit_report.json`
-6. repeat only if needed
+Current project docs live in:
+- `docs/architecture.md`
+- `docs/backlog.md`
+- `docs/examples/`
 
-That gives you the same math as online mode, just without automatic recapture.
-
-## Headphone cloning
-
-There are three ways.
-
-### Option A: clone from your own measurements
-
-Measure headphone A, measure headphone B, then create the difference curve:
-
-```bash
-headmatch clone-target   --source-csv out/ananda/measurement_left.csv   --target-csv out/hd800s/measurement_left.csv   --out out/ananda_to_hd800s_left.csv
-```
-
-Then fit headphone A to that curve.
-
-### Option B: clone from published data
-
-Use any CSV with frequency + response data. This includes:
-- your own exported measurement CSVs
-- AutoEq-style CSVs if they include frequency and raw response columns
-- other measurement databases converted to CSV
-
-Safety notes:
-- keep `--out` pointed at a new file; `clone-target` now refuses to overwrite either input CSV
-- both source and target curves must span **1 kHz**, because clone targets are normalized there before diffing
-
-Example:
-
-```bash
-headmatch clone-target   --source-csv data/ananda_nano.csv   --target-csv data/hd800s.csv   --out out/ananda_to_hd800s.csv
-```
-
-Small documented sample inputs also live under `docs/examples/clone-targets/`.
-
-Then:
-
-```bash
-headmatch fit   --recording out/ananda_live/recording.wav   --out-dir out/ananda_clone_fit   --target-csv out/ananda_to_hd800s.csv
-```
-
-### Option C: mixed mode
-
-This is usually the smartest path:
-- use published data to define the broad clone target
-- use your own live measurement of the source headphone for the actual fit
-
-That way the preset tracks **your** coupling instead of blindly trusting a rig average.
-
-## CamillaDSP use
-
-CamillaDSP uses a YAML configuration file and supports biquad-based EQ blocks, which is exactly what the exporter generates. The official docs show `camilladsp /path/to/config.yml` as the basic run form. citeturn354437search3turn354437search7
-
-The script exports two YAML files.
-
-### `camilladsp_full.yaml`
-A full config template. You still need to replace:
-- `devices.capture.device`
-- `devices.playback.device`
-
-### `camilladsp_filters_only.yaml`
-Just the filter block and pipeline. Use this if you already have a working CamillaDSP base config.
-
-Typical run:
-
-```bash
-camilladsp -p 1234 -m -a 127.0.0.1 -c out/fit_usb_01/camilladsp_full.yaml
-```
-
-## Suggested H2n setups
-
-### H2n online / automated
-- H2n in USB audio mode
-- CS-10EM plugged into external mic input
-- plug-in power on
-- manual gain
-- no AGC / compressor / limiter / low cut
-- Linux sees H2n as capture device
-
-### H2n offline / robust fallback
-- H2n records to SD card
-- same mic/gain/processing rules
-- copy WAV into the session folder later
-- run `fit-offline`
-
-## CSV format rules
-
-The loader accepts:
-- `frequency_hz,response_db`
-- `frequency_hz,raw`
-- `frequency,response_db`
-- `freq`,`freq_hz`, or `Hz` style frequency headers
-- response headers such as `raw`, `raw_db`, `target_db`, `fr`, `equalization`, `Amplitude (dB)`, `Magnitude (dB)`, `Level (dB)`, or `SPL`
-- many AutoEq-like CSVs where the first frequency-like column and the first response-like column are used
-
-The CSV reader also ignores leading `#` comment lines, sorts rows into ascending frequency order when needed, and rejects duplicate frequency rows so clone inputs fail safely instead of producing ambiguous targets.
-
-Everything is normalized at **1 kHz** before diffing or fitting, so target and clone files should include a point below and above 1 kHz.
-
-## Practical advice
-
-- Use **multiple reseats**. Ear coupling changes a lot.
-- Do **left and right separately** when you are diagnosing pad-seal or cup-balance problems.
-- Keep the sweep amplitude conservative at first.
-- Do not overfit tiny >10 kHz wiggles.
-- For cloning, match the **broad shape**, not every microscopic notch.
-- On H2n, always prefer raw/manual capture over convenience features.
-
-## Suggested workflow for Ananda Nano -> HD800S
-
-1. get published FR CSVs or make your own measurements for both
-2. generate a clone target with `clone-target`
-3. measure your actual Ananda Nano on your ears
-4. fit that live measurement to the clone target
-5. listen
-6. validate once
-7. iterate only if the residual is still clearly worth fixing
-
-## Testing
-
-A synthetic test is included. It simulates a headphone response, measures it, fits EQ, and checks that the residual drops.
-
-```bash
-pip install -r requirements-test.txt
-pytest -q
-```
-
-GitHub Actions runs this test suite automatically on every pull request and on pushes to `main` via [`.github/workflows/pytest.yml`](/home/chaos/PycharmProjects/headmatch/.github/workflows/pytest.yml). To actually block merges when tests fail, mark the `Pytest` check as required in the repository branch protection rules for `main`.
-
-## Limits
-
-This toolkit is realistic for:
-- tonal correction
-- removing broad peaks like 3–4 kHz glare
-- making one headphone broadly resemble another
-
-It is **not** realistic for perfectly cloning staging, cup geometry, or driver behavior.
+These are kept as the current source of truth for architecture, status, and examples.
