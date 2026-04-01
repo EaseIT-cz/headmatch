@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 
 
+DEFAULT_START_ITERATIONS = 1
+
+
 def parse_seconds(value: str) -> float:
     text = value.strip().lower()
     if text.endswith("s"):
@@ -41,20 +44,38 @@ def spec_from_args(args):
     )
 
 
-def main() -> None:
-    from .analysis import analyze_measurement
-    from .measure import (
-        MeasurementPaths,
-        OfflineMeasurementPlan,
-        PipeWireDeviceConfig,
-        prepare_offline_measurement,
-        render_sweep_file,
-        run_pipewire_measurement,
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="headmatch",
+        description="Beginner-first headphone measurement and EQ fitting.",
+        epilog=(
+            "Beginner path: run 'headmatch start --out-dir out/session_01' for a guided "
+            "measure-and-fit pass, or 'headmatch prepare-offline --out-dir out/session_01' "
+            "if you want to record first and import later."
+        ),
     )
-    from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
+    sub = parser.add_subparsers(dest="cmd")
 
-    parser = argparse.ArgumentParser(prog="headmatch")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser(
+        "start",
+        help="Beginner-first: measure once and build an EQ preset.",
+        description=(
+            "Run one guided online measurement pass and export CamillaDSP EQ files. "
+            "This is the easiest place to start."
+        ),
+    )
+    add_common_sweep_args(p)
+    p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and YAML exports.")
+    p.add_argument("--target-csv", default=None, help="Optional target curve CSV. If omitted, fit toward flat.")
+    p.add_argument("--output-target", default=None, help="Optional PipeWire playback node match string.")
+    p.add_argument("--input-target", default=None, help="Optional PipeWire capture node match string.")
+    p.add_argument("--max-filters", type=int, default=8, help="Maximum PEQ filters per channel.")
+    p.add_argument(
+        "--iterations",
+        type=int,
+        default=DEFAULT_START_ITERATIONS,
+        help="Number of online measure-and-fit passes. Default: 1 for a simple first run.",
+    )
 
     p = sub.add_parser("render-sweep", help="Generate a sweep WAV file.")
     add_common_sweep_args(p)
@@ -103,9 +124,85 @@ def main() -> None:
     p.add_argument("--input-target", default=None)
     p.add_argument("--iterations", type=int, default=2)
     p.add_argument("--max-filters", type=int, default=8)
+    return parser
 
-    args = parser.parse_args()
-    if args.cmd == "render-sweep":
+
+def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
+    print("headmatch beginner path")
+    print("=======================")
+    print("1) First try: headmatch start --out-dir out/session_01")
+    print("   This runs one online measurement pass and exports CamillaDSP EQ files.")
+    print()
+    print("2) If your recorder is more reliable offline:")
+    print("   headmatch prepare-offline --out-dir out/session_01")
+    print("   ...record the sweep, then run:")
+    print("   headmatch fit-offline --recording out/session_01/recording.wav --out-dir out/session_01/fit")
+    print()
+    print("Developer commands are still available below.")
+    print()
+    parser.print_help()
+
+
+def print_next_steps(cmd: str, args) -> None:
+    out_dir = getattr(args, "out_dir", None)
+    if cmd == "start":
+        print()
+        print(f"Done. Review outputs in {out_dir}.")
+        print("Start with run_summary.json and camilladsp_full.yaml.")
+        print("If PipeWire did not pick the right devices, rerun with --output-target and/or --input-target.")
+    elif cmd == "measure":
+        print()
+        print(f"Measurement saved in {out_dir}.")
+        print(f"Next: headmatch fit --recording {Path(out_dir) / 'recording.wav'} --out-dir {Path(out_dir) / 'fit'}")
+    elif cmd == "prepare-offline":
+        print()
+        print(f"Offline package saved in {out_dir}.")
+        print("Record the sweep, copy the WAV to recording.wav, then run fit-offline.")
+    elif cmd == "analyze":
+        print()
+        print(f"Analysis written to {out_dir}.")
+        print("Review the CSVs, or run fit/fit-offline to build EQ.")
+    elif cmd in {"fit", "fit-offline", "iterate"}:
+        print()
+        print(f"Done. Review outputs in {out_dir}.")
+        print("Start with run_summary.json and camilladsp_full.yaml.")
+    elif cmd == "clone-target":
+        print()
+        print(f"Clone target written to {args.out}.")
+        print("Next: pass that CSV to fit, fit-offline, or start with --target-csv.")
+
+
+def main(argv: list[str] | None = None) -> None:
+    from .analysis import analyze_measurement
+    from .measure import (
+        MeasurementPaths,
+        OfflineMeasurementPlan,
+        PipeWireDeviceConfig,
+        prepare_offline_measurement,
+        render_sweep_file,
+        run_pipewire_measurement,
+    )
+    from .pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.cmd:
+        print_beginner_guide(parser)
+        raise SystemExit(0)
+
+    if args.cmd == "start":
+        print(f"Starting guided measurement workflow in {args.out_dir} ...")
+        iterative_measure_and_fit(
+            output_dir=args.out_dir,
+            sweep_spec=spec_from_args(args),
+            target_path=args.target_csv,
+            output_target=args.output_target,
+            input_target=args.input_target,
+            iterations=args.iterations,
+            max_filters=args.max_filters,
+        )
+    elif args.cmd == "render-sweep":
         render_sweep_file(spec_from_args(args), args.out)
     elif args.cmd == "measure":
         out_dir = Path(args.out_dir)
@@ -140,6 +237,8 @@ def main() -> None:
             iterations=args.iterations,
             max_filters=args.max_filters,
         )
+
+    print_next_steps(args.cmd, args)
 
 
 if __name__ == "__main__":
