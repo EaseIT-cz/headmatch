@@ -20,21 +20,23 @@ The current shipped state includes:
 
 ## Active
 
-1. Surface confidence and interpretation more clearly in the GUI and CLI.
-2. Refactor the main hotspots blocking that polish without changing product behavior:
-   - reduce duplicated fit artifact writing in `pipeline.py`
-   - split the GUI shell from view-rendering concerns
-   - strengthen typed confidence/run-summary contracts
+1. Improve PipeWire device discovery and guidance further if users still struggle with manual target matching.
+
+## Recently completed
+
+- surfaced confidence and interpretation more clearly in the GUI and CLI
+- reduced duplicated fit artifact writing in `pipeline.py`
+- split the GUI shell from view-rendering concerns
+- strengthened typed confidence/run-summary contracts
+- added conservative troubleshooting guidance tied to low-confidence results
 
 ## Future follow-up candidates
 
-1. Add a guided troubleshooting flow for common setup and measurement failures.
-2. Improve PipeWire device discovery and guidance further if users still struggle with manual target matching.
-3. Add GraphicEQ export if there is a clear user need beyond parametric APO presets.
-4. Add export formats beyond CamillaDSP and APO if users actually need them.
-5. Add preset/run comparison workflows so users can compare stock, corrected, and clone-target results more easily.
-6. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
-7. Add more published curve examples if clone-target workflows generate repeated support questions.
-8. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
-9. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
-10. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
+1. Add GraphicEQ export if there is a clear user need beyond parametric APO presets.
+2. Add export formats beyond CamillaDSP and APO if users actually need them.
+3. Add preset/run comparison workflows so users can compare stock, corrected, and clone-target results more easily.
+4. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
+5. Add more published curve examples if clone-target workflows generate repeated support questions.
+6. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
+7. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
+8. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
