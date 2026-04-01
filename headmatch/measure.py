@@ -100,6 +100,8 @@ def format_pipewire_targets(targets: list[PipeWireTarget]) -> str:
         'PipeWire targets you can pass to --output-target / --input-target',
         '',
         'Use the node.name value after the arrow. Partial matches usually work, but the full node name is safest.',
+        'Pick one playback target for the headphone or speaker output you want to test, and one capture target for the mic or recorder input that hears it.',
+        'Avoid monitor/loopback-style entries unless you intentionally want to record the computer output instead of the acoustic result.',
         '',
     ]
     grouped = {
@@ -108,16 +110,23 @@ def format_pipewire_targets(targets: list[PipeWireTarget]) -> str:
     }
     for kind, title in (('playback', 'Playback targets (--output-target)'), ('capture', 'Capture targets (--input-target)')):
         lines.append(title)
+        if kind == 'playback':
+            lines.append('  Choose the DAC, headphones, speakers, or interface output you expect the sweep to play through.')
+        else:
+            lines.append('  Choose the mic, recorder, or interface input connected to your measurement rig.')
         entries = grouped[kind]
         if not entries:
             lines.append('  (none found)')
         else:
             for target in entries:
-                lines.append(f'  - {target.label} -> {target.node_name}')
+                extra = '' if target.label == target.node_name else f' [{target.media_class}]'
+                lines.append(f'  - {target.label} -> {target.node_name}{extra}')
         lines.append('')
     lines.extend([
         'Example:',
         '  headmatch measure --out-dir out/session_01 --output-target alsa_output.usb-... --input-target alsa_input.usb-...',
+        '',
+        'Tip: if you are unsure, copy the exact node.name values first, get one successful run, then shorten them later if you want.',
     ])
     return '\n'.join(lines)
 

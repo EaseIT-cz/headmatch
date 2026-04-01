@@ -8,6 +8,9 @@ from .troubleshooting import confidence_troubleshooting_steps
 
 ONLINE_STEPS = (
     "Check the output folder and saved PipeWire targets.",
+    "Playback target = the DAC, headphones, speakers, or interface output that should play the sweep.",
+    "Capture target = the mic, recorder, or interface input that hears the sweep acoustically.",
+    "If you are unsure, run 'headmatch list-targets' in the terminal and paste the exact node names here first.",
     "Press Start when your measurement rig is ready.",
     "HeadMatch will run the shared online pipeline and then show the output folder.",
 )
@@ -62,7 +65,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     ttk.Label(frame, text="Online measurement wizard", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text="Use this when PipeWire playback and capture are available now. The GUI keeps the first run simple and uses the shared measure → analyze → fit pipeline.",
+        text="Use this when PipeWire playback and capture are available now. Playback target means the output that should play the sweep; capture target means the mic or recorder input that should hear it. The GUI keeps the first run simple and uses the shared measure → analyze → fit pipeline.",
         wraplength=650,
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(8, 12))
@@ -84,7 +87,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
     actions.grid(row=4, column=0, sticky="w")
     ttk.Button(actions, text="Start guided measurement", command=on_start).grid(row=0, column=0, sticky="w")
-    ttk.Label(actions, text="Make sure your headphone rig is connected and quiet before you start.").grid(
+    ttk.Label(actions, text="Make sure your headphone rig is connected and quiet before you start. If device names are unclear, check 'headmatch list-targets' first.").grid(
         row=0, column=1, sticky="w", padx=(12, 0)
     )
 

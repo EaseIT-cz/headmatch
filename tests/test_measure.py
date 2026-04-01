@@ -50,6 +50,10 @@ def test_format_pipewire_targets_groups_entries_for_cli_output():
     )
 
     assert "Playback targets (--output-target)" in text
-    assert "USB DAC -> alsa_output.usb-dac" in text
+    assert "Choose the DAC, headphones, speakers, or interface output" in text
+    assert "USB DAC -> alsa_output.usb-dac [Audio/Sink]" in text
     assert "Capture targets (--input-target)" in text
-    assert "USB Mic -> alsa_input.usb-mic" in text
+    assert "Choose the mic, recorder, or interface input connected to your measurement rig." in text
+    assert "USB Mic -> alsa_input.usb-mic [Audio/Source]" in text
+    assert "Avoid monitor/loopback-style entries" in text
+    assert "copy the exact node.name values first" in text

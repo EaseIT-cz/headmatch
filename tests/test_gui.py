@@ -129,6 +129,15 @@ def test_navigation_items_cover_shell_sections():
 
 
 
+def test_online_steps_explain_playback_vs_capture_targets():
+    from headmatch import gui_views
+
+    assert any("Playback target = the DAC, headphones, speakers, or interface output" in step for step in gui_views.ONLINE_STEPS)
+    assert any("Capture target = the mic, recorder, or interface input" in step for step in gui_views.ONLINE_STEPS)
+    assert any("headmatch list-targets" in step for step in gui_views.ONLINE_STEPS)
+
+
+
 def test_gui_main_reports_tcl_startup_errors(monkeypatch):
     monkeypatch.setattr("headmatch.gui.create_app", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 
