@@ -18,6 +18,7 @@ class MeasurementResult:
     right_db: np.ndarray
     left_raw_db: np.ndarray
     right_raw_db: np.ndarray
+    diagnostics: Dict[str, float]
 
 
 
@@ -33,6 +34,7 @@ def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
     raise ValueError(f'{path} must contain at least one channel')
 
 
+
 def _alignment_reference_score(segment: np.ndarray, reference: np.ndarray) -> float:
     segment = segment - np.mean(segment)
     reference = reference - np.mean(reference)
@@ -43,7 +45,7 @@ def _alignment_reference_score(segment: np.ndarray, reference: np.ndarray) -> fl
 
 
 
-def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) -> np.ndarray:
+def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, dict[str, float]]:
     mono_rec = np.mean(recording, axis=1)
     mono_rec = mono_rec - np.mean(mono_rec)
     ref = reference - np.mean(reference)
@@ -55,6 +57,9 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
 
     best_offset = 0
     best_score = float('-inf')
+    best_peak = 0.0
+    corr_abs = np.abs(corr)
+    corr_max = float(np.max(corr_abs)) if len(corr_abs) else 0.0
     for raw_offset in candidate_offsets:
         offset = int(raw_offset)
         start = max(offset, 0)
@@ -64,22 +69,40 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
             seg_start = max(-offset, 0)
             segment[seg_start:seg_start + (end - start)] = mono_rec[start:end]
         score = _alignment_reference_score(segment[gate], ref[gate])
+        peak_index = int(offset + len(reference) - 1)
+        peak = float(corr_abs[peak_index]) if 0 <= peak_index < len(corr_abs) else 0.0
         if score > best_score:
             best_score = score
             best_offset = offset
+            best_peak = peak
 
     offset = best_offset
+    truncated_head = 0
     if offset < 0:
+        truncated_head = -offset
         recording = recording[-offset:]
         offset = 0
     end = offset + len(reference)
+    truncated_tail = max(end - len(recording), 0)
     if end > len(recording):
         padded = np.zeros((len(reference), recording.shape[1]))
         avail = max(len(recording) - offset, 0)
         if avail > 0:
             padded[:avail] = recording[offset:offset + avail]
-        return padded
-    return recording[offset:end]
+        return padded, {
+            'alignment_offset_samples': float(best_offset),
+            'alignment_reference_score': float(best_score),
+            'alignment_peak_ratio': float(best_peak / corr_max) if corr_max > 1e-12 else 0.0,
+            'alignment_head_trimmed_samples': float(truncated_head),
+            'alignment_tail_padded_samples': float(truncated_tail),
+        }
+    return recording[offset:end], {
+        'alignment_offset_samples': float(best_offset),
+        'alignment_reference_score': float(best_score),
+        'alignment_peak_ratio': float(best_peak / corr_max) if corr_max > 1e-12 else 0.0,
+        'alignment_head_trimmed_samples': float(truncated_head),
+        'alignment_tail_padded_samples': 0.0,
+    }
 
 
 
@@ -94,6 +117,25 @@ def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: i
 
 
 
+def _band_mask(freqs_hz: np.ndarray, low_hz: float = 80.0, high_hz: float = 8000.0) -> np.ndarray:
+    return (freqs_hz >= low_hz) & (freqs_hz <= high_hz)
+
+
+
+def _roughness_db(raw_db: np.ndarray, smoothed_db: np.ndarray, mask: np.ndarray) -> float:
+    if not np.any(mask):
+        return 0.0
+    return float(np.sqrt(np.mean((raw_db[mask] - smoothed_db[mask]) ** 2)))
+
+
+
+def _channel_mismatch_db(left_db: np.ndarray, right_db: np.ndarray, mask: np.ndarray) -> float:
+    if not np.any(mask):
+        return 0.0
+    return float(np.sqrt(np.mean((left_db[mask] - right_db[mask]) ** 2)))
+
+
+
 def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
     recording, sr = read_wav(recording_wav)
     recording = _coerce_measurement_audio(recording, recording_wav)
@@ -104,12 +146,11 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         raise ValueError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
     from .signals import generate_log_sweep
     _, reference = generate_log_sweep(sweep_spec)
-    # extract the padded sweep actually played on one channel
     padded_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s + sweep_spec.post_silence_s) * sweep_spec.sample_rate))
     padded = np.zeros(padded_len)
     start = int(round(sweep_spec.pre_silence_s * sweep_spec.sample_rate))
     padded[start:start + len(reference)] = reference
-    aligned = _align_recording_to_reference(recording, padded)
+    aligned, alignment_diagnostics = _align_recording_to_reference(recording, padded)
     left = aligned[:, 0]
     right = aligned[:, 1]
 
@@ -122,12 +163,23 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
     right_norm = right_interp - np.interp(1000.0, grid, right_interp)
     left_s = fractional_octave_smoothing(grid, left_norm, fraction=12)
     right_s = fractional_octave_smoothing(grid, right_norm, fraction=12)
+
+    mask = _band_mask(grid)
+    diagnostics = {
+        **alignment_diagnostics,
+        'left_roughness_db': _roughness_db(left_norm, left_s, mask),
+        'right_roughness_db': _roughness_db(right_norm, right_s, mask),
+        'channel_mismatch_rms_db': _channel_mismatch_db(left_s, right_s, mask),
+        'capture_rms_dbfs': float(20 * np.log10(max(np.sqrt(np.mean(aligned ** 2)), 1e-12))),
+    }
+
     result = MeasurementResult(
         freqs_hz=grid,
         left_db=left_s,
         right_db=right_s,
         left_raw_db=left_norm,
         right_raw_db=right_norm,
+        diagnostics=diagnostics,
     )
     if out_dir:
         out_dir = Path(out_dir)

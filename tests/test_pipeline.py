@@ -83,6 +83,7 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert report['predicted_left_rms_error_db'] >= 0
     summary = (out_dir / 'run_summary.json').read_text()
     assert 'predicted_error_db' in summary
+    assert 'confidence' in summary
     assert 'generated_by' in summary
     assert 'fit_overview.svg' in summary
     assert (out_dir / 'camilladsp_full.yaml').exists()
@@ -98,6 +99,39 @@ def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     assert 'camilladsp_full.yaml' in guide
     assert 'equalizer_apo.txt' in guide
 
+
+
+
+
+def test_confidence_summary_marks_clean_run_as_trustworthy(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    out_dir = tmp_path / 'fit_clean'
+    report = process_single_measurement(recording, out_dir, spec, target_path=None, max_filters=4)
+    confidence = report['confidence']
+    assert confidence['score'] >= 70
+    assert confidence['label'] in {'high', 'medium'}
+    assert 'alignment_reference_score' in confidence['metrics']
+
+
+def test_confidence_summary_flags_suspicious_run(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(
+        tmp_path,
+        noise_scale=0.08,
+        right_gain=0.15,
+        extra_lead_in_s=4.0,
+        left_delay=4500,
+        right_delay=7000,
+    )
+    out_dir = tmp_path / 'fit_suspicious'
+    report = process_single_measurement(recording, out_dir, spec, target_path=None, max_filters=4)
+    confidence = report['confidence']
+    assert confidence['label'] == 'low'
+    assert confidence['score'] < 65
+    assert confidence['warnings']
+    summary = (out_dir / 'run_summary.json').read_text()
+    guide = (out_dir / 'README.txt').read_text()
+    assert 'This run looks suspicious.' in summary
+    assert 'Confidence: low' in guide
 
 
 def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path: Path):

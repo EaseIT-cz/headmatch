@@ -8,6 +8,7 @@ import numpy as np
 
 from .analysis import MeasurementResult, analyze_measurement
 from .app_identity import get_app_identity
+from .contracts import RUN_SUMMARY_SCHEMA_VERSION
 from .exporters import (
     export_camilladsp_filter_snippet_yaml,
     export_camilladsp_filters_yaml,
@@ -33,13 +34,103 @@ class IterationSummary:
     right_max_error_db: float
 
 
-def write_results_guide(out_dir: Path, kind: str) -> Path:
+
+def _confidence_penalty(value: float, good: float, bad: float) -> float:
+    if value <= good:
+        return 0.0
+    if value >= bad:
+        return 1.0
+    return float((value - good) / max(bad - good, 1e-9))
+
+
+
+def _summarize_trustworthiness(result: MeasurementResult, report: dict) -> dict:
+    diagnostics = result.diagnostics
+    roughness = max(diagnostics['left_roughness_db'], diagnostics['right_roughness_db'])
+    predicted_rms = max(report['predicted_left_rms_error_db'], report['predicted_right_rms_error_db'])
+    predicted_max = max(report['predicted_left_max_error_db'], report['predicted_right_max_error_db'])
+
+    penalties = {
+        'alignment': _confidence_penalty(1.0 - diagnostics['alignment_reference_score'], 0.20, 0.40),
+        'alignment_peak': _confidence_penalty(1.0 - diagnostics['alignment_peak_ratio'], 0.15, 0.35),
+        'channel_mismatch': _confidence_penalty(diagnostics['channel_mismatch_rms_db'], 0.8, 2.5),
+        'roughness': _confidence_penalty(roughness, 0.3, 1.5),
+        'residual_rms': _confidence_penalty(predicted_rms, 2.0, 4.5),
+        'residual_peak': _confidence_penalty(predicted_max, 4.0, 9.0),
+    }
+    penalty_points = (
+        penalties['alignment'] * 10
+        + penalties['alignment_peak'] * 8
+        + penalties['channel_mismatch'] * 36
+        + penalties['roughness'] * 28
+        + penalties['residual_rms'] * 12
+        + penalties['residual_peak'] * 6
+    )
+    score = max(0, min(100, int(round(100 - penalty_points))))
+
+    warnings: list[str] = []
+    if diagnostics['alignment_reference_score'] < 0.80:
+        warnings.append('Alignment to the sweep was weaker than expected, so the measurement timing may be unreliable.')
+    if diagnostics['alignment_peak_ratio'] < 0.85:
+        warnings.append('The sweep alignment peak was not clearly dominant, which can happen with extra noise or confusing echoes.')
+    if diagnostics['channel_mismatch_rms_db'] >= 0.8:
+        warnings.append('Left and right measurements differ more than usual, which often means the headset or microphones were not seated consistently.')
+    if roughness >= 0.3:
+        warnings.append('The raw trace is rougher than expected, suggesting noise, movement, or a leaky seal during capture.')
+    if predicted_rms >= 2.0:
+        warnings.append('The fitted result still leaves noticeable residual error, so the generated EQ should be treated as provisional.')
+    if predicted_max >= 4.0:
+        warnings.append('Some frequencies still miss the target by a wide margin, so inspect the graphs before trusting the preset.')
+
+    if score >= 85:
+        label = 'high'
+        headline = 'This run looks trustworthy.'
+        interpretation = 'The measurement aligned cleanly, the channels agree reasonably well, and the predicted post-EQ error is low enough for normal use.'
+    elif score >= 65:
+        label = 'medium'
+        headline = 'This run looks usable, but review it before trusting it fully.'
+        interpretation = 'Nothing looks catastrophically wrong, but one or more stability signals are only fair. Check the graphs and consider re-running if the sound seems off.'
+    else:
+        label = 'low'
+        headline = 'This run looks suspicious.'
+        interpretation = 'One or more stability signals suggest the measurement or fit may not be trustworthy. Re-seat the headphones or microphones and capture another run before relying on this EQ.'
+
+    reasons = [
+        f"Alignment score: {diagnostics['alignment_reference_score']:.3f} (higher is better).",
+        f"Alignment peak clarity: {diagnostics['alignment_peak_ratio']:.3f}.",
+        f"Channel mismatch: {diagnostics['channel_mismatch_rms_db']:.2f} dB RMS.",
+        f"Trace roughness: L {diagnostics['left_roughness_db']:.2f} dB, R {diagnostics['right_roughness_db']:.2f} dB.",
+        f"Predicted residual error: {predicted_rms:.2f} dB RMS, {predicted_max:.2f} dB max.",
+    ]
+
+    return {
+        'score': score,
+        'label': label,
+        'headline': headline,
+        'interpretation': interpretation,
+        'reasons': reasons,
+        'warnings': warnings,
+        'metrics': {
+            'alignment_reference_score': diagnostics['alignment_reference_score'],
+            'alignment_peak_ratio': diagnostics['alignment_peak_ratio'],
+            'channel_mismatch_rms_db': diagnostics['channel_mismatch_rms_db'],
+            'left_roughness_db': diagnostics['left_roughness_db'],
+            'right_roughness_db': diagnostics['right_roughness_db'],
+            'capture_rms_dbfs': diagnostics['capture_rms_dbfs'],
+            'predicted_rms_error_db': predicted_rms,
+            'predicted_max_error_db': predicted_max,
+        },
+    }
+
+
+
+def write_results_guide(out_dir: Path, kind: str, trust_summary: dict | None = None) -> Path:
     if kind == 'fit':
         title = 'headmatch fit results'
         overview = 'This folder contains one analyzed recording and the EQ files built from it.'
         files = [
-            ('run_summary.json', 'Plain-language machine-readable summary of the run and predicted error after EQ.'),
-            ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('run_summary.json', 'Plain-language machine-readable summary of the run, trust score, warnings, and predicted error after EQ.'),
+            ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether the fit looks trustworthy.'),
             ('equalizer_apo.txt', 'Ready-to-load Equalizer APO preset file for this result.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device placeholders before use.'),
             ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
@@ -51,7 +142,7 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
-            'Open run_summary.json first if you want the quickest overview.',
+            'Open run_summary.json first if you want the quickest overview, including the trust/confidence summary.',
             'Use equalizer_apo.txt for Equalizer APO, or use the CamillaDSP YAML files for CamillaDSP.',
             'If the result still looks off, repeat the measurement with a fresh reseat before adding more filters.',
         ]
@@ -61,8 +152,8 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
         files = [
             ('sweep.wav', 'The sweep played during this iteration.'),
             ('recording.wav', 'The recorded response captured for this iteration.'),
-            ('run_summary.json', 'Summary of this iteration and predicted error after EQ.'),
-            ('fit_report.json', 'Detailed PEQ band list and predicted left/right residual error values.'),
+            ('run_summary.json', 'Summary of this iteration, including trust/confidence cues and predicted error after EQ.'),
+            ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether this iteration looks trustworthy.'),
             ('equalizer_apo.txt', 'Equalizer APO preset file for this iteration.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template for this iteration.'),
             ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
@@ -78,7 +169,21 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
             'Check the top-level iterations_summary.json for the per-iteration error overview.',
         ]
 
-    lines = [title, '=' * len(title), '', overview, '', 'Files', '-----']
+    lines = [title, '=' * len(title), '', overview]
+    if trust_summary is not None:
+        lines.extend([
+            '',
+            'Trust summary',
+            '-------------',
+            f"- Confidence: {trust_summary['label']} ({trust_summary['score']}/100)",
+            f"- {trust_summary['headline']}",
+            f"- {trust_summary['interpretation']}",
+        ])
+        if trust_summary['warnings']:
+            lines.append('- Warnings:')
+            for warning in trust_summary['warnings']:
+                lines.append(f'  - {warning}')
+    lines.extend(['', 'Files', '-----'])
     for name, description in files:
         lines.append(f'- {name}: {description}')
     lines.extend(['', 'Next steps', '----------'])
@@ -89,10 +194,13 @@ def write_results_guide(out_dir: Path, kind: str) -> Path:
     return path
 
 
+
 def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> dict:
     identity = get_app_identity()
     target_resampled = resample_curve(target, result.freqs_hz)
+    trust_summary = _summarize_trustworthiness(result, report)
     return {
+        'schema_version': RUN_SUMMARY_SCHEMA_VERSION,
         'generated_by': identity.as_metadata(),
         'kind': kind,
         'out_dir': str(out_dir),
@@ -109,6 +217,7 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
             'left_max': report['predicted_left_max_error_db'],
             'right_max': report['predicted_right_max_error_db'],
         },
+        'confidence': trust_summary,
         'plots': {
             'overview': str(out_dir / 'fit_overview.svg'),
             'left': str(out_dir / 'fit_left.svg'),
@@ -116,6 +225,8 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
         },
         'results_guide': str(out_dir / RESULTS_GUIDE_NAME),
     }
+
+
 def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
     err = measured_db - target_db
     mask = (np.arange(len(err)) >= 0)
@@ -142,9 +253,11 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
         'predicted_right_rms_error_db': r_rms,
         'predicted_left_max_error_db': l_max,
         'predicted_right_max_error_db': r_max,
+        'measurement_diagnostics': result.diagnostics,
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
     }
+    report['confidence'] = _summarize_trustworthiness(result, report)
     return left_bands, right_bands, report
 
 
@@ -163,7 +276,7 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
     summary = _run_summary('fit', out_dir, result, target, left_bands, right_bands, report, sweep_spec.sample_rate)
     save_json(out_dir / 'fit_report.json', report)
     save_json(out_dir / 'run_summary.json', summary)
-    write_results_guide(out_dir, kind='fit')
+    write_results_guide(out_dir, kind='fit', trust_summary=summary['confidence'])
     return report
 
 
@@ -207,9 +320,10 @@ def iterative_measure_and_fit(
         r_rms, r_max = _metrics(predicted_right, t)
         summary = IterationSummary(i, l_rms, r_rms, l_max, r_max)
         summaries.append(asdict(summary))
+        run_summary = _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate)
         save_json(iter_dir / 'fit_report.json', report)
-        save_json(iter_dir / 'run_summary.json', _run_summary('iteration', iter_dir, result, target_curve, left_bands, right_bands, report, sweep_spec.sample_rate))
-        write_results_guide(iter_dir, kind='iteration')
+        save_json(iter_dir / 'run_summary.json', run_summary)
+        write_results_guide(iter_dir, kind='iteration', trust_summary=run_summary['confidence'])
     identity = get_app_identity()
     save_json(output_dir / 'iterations_summary.json', {'generated_by': identity.as_metadata(), 'iterations': summaries, 'count': len(summaries)})
     return summaries

@@ -5,15 +5,16 @@
 HeadMatch is a Linux-first headphone measurement and EQ tool built for non-technical audio enthusiasts.
 
 It provides one shared measurement/fitting backend with three user-facing frontends:
-- **CLI** for explicit and scriptable workflows
-- **TUI** for guided terminal interaction
-- **GUI** for a simple desktop workflow
+- **GUI** as the primary product experience
+- **CLI** for explicit, scriptable, and power-user workflows
+- **TUI** as a maintenance-only backup path, mainly for offline processing and non-desktop environments
 
 The product direction is deliberately conservative:
 - guided workflows over flexible-but-confusing ones
 - safe defaults over maximum tweakability
 - readable output folders over opaque internal artifacts
 - conservative EQ over aggressive overfitting
+- shared backend logic instead of per-frontend behavior drift
 
 ---
 
@@ -52,6 +53,7 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - recording alignment
 - frequency-response estimation
 - measurement CSV export
+- reliability diagnostics used by confidence scoring
 
 ### `targets.py`
 - target loading
@@ -74,42 +76,46 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - measurement-to-fit orchestration
 - iterative workflow support
 - result-summary generation
+- confidence/trust interpretation generation
 
 ### `settings.py`
 - shared config loading/saving
 - first-run defaults
 
 ### `history.py`
-- shared run-summary discovery for TUI and GUI
+- shared run-summary discovery for GUI and TUI
 
 ### `cli.py`
 - command-line entry points
-
-### `tui.py`
-- guided terminal workflow
-- history browsing
+- explicit workflow surface
 
 ### `gui.py`
-- guided desktop workflow
+- primary desktop workflow
 - history browsing
+- guided measurement flow
+
+### `tui.py`
+- maintenance-mode terminal workflow
+- backup path for offline/recovery use
 
 ---
 
 ## Interaction model
 
+### GUI
+The GUI is the primary product experience.
+It should be the first choice for most users.
+
 ### CLI
-The CLI is the most explicit layer.
-It exposes both:
-- a beginner-first guided command (`start`)
-- lower-level commands for manual control
+The CLI is the explicit and scriptable layer.
+It should remain fully usable and well-documented because it is also the most stable troubleshooting surface.
 
 ### TUI
-The TUI is a guided terminal layer.
-It exists for users who want help without leaving the terminal.
-
-### GUI
-The GUI is the most approachable layer.
-It is intended to surface the same shared workflows with the least friction.
+The TUI remains supported, but it is no longer a primary product investment area.
+Its role is:
+- backup operation when no desktop environment is available
+- offline processing / recovery workflows
+- lightweight terminal access
 
 All three frontends share:
 - the same persisted config
@@ -121,7 +127,7 @@ All three frontends share:
 
 ## Configuration model
 
-HeadMatch uses one shared config file for CLI, TUI, and GUI.
+HeadMatch uses one shared config file for GUI, CLI, and TUI.
 
 Default path:
 - `$XDG_CONFIG_HOME/headmatch/config.json`
@@ -135,6 +141,7 @@ The config stores small, stable user preferences such as:
 - sweep/fit defaults
 
 Explicit CLI flags override saved config for the current run.
+The GUI and TUI preload the same saved defaults.
 
 ---
 
@@ -146,12 +153,13 @@ Important artifacts:
 - `README.txt` — human-readable explanation of the output folder
 - `run_summary.json` — stable machine-readable summary
 - `fit_report.json` — detailed fit report
+- confidence / trust summary fields
 - Equalizer APO preset export
 - CamillaDSP YAML exports
 - measurement CSVs
 - shared SVG review graphs
 
-The TUI and GUI history views use `run_summary.json` plus `README.txt` as the stable review contract.
+The GUI and TUI history views use `run_summary.json` plus `README.txt` as the stable review contract.
 
 ---
 
@@ -163,14 +171,22 @@ The intended audience values successful completion more than flexibility.
 ### 2. One backend, multiple frontends
 The frontends should orchestrate the same core logic, not reimplement it.
 
-### 3. Offline mode is first-class
+### 3. GUI-first product strategy
+New product-facing improvements should generally land in the GUI and CLI first.
+The TUI is maintained as a backup, not as a co-equal primary surface.
+
+### 4. Offline mode is first-class
 Recorder-first workflows are part of the product, not a fallback hack.
 
-### 4. Conservative EQ is a feature
+### 5. Conservative EQ is a feature
 The goal is useful tonal correction, not maximally clever curve chasing.
 
-### 5. Output clarity matters
+### 6. Output clarity matters
 Users should be able to open a folder and understand what happened.
+
+### 7. Trust signals matter
+Users should not have to guess whether a run is believable.
+Confidence scoring and plain-language interpretation are part of the product, not optional analytics.
 
 ---
 
@@ -178,20 +194,23 @@ Users should be able to open a folder and understand what happened.
 
 The shipped product now includes:
 - beginner-first CLI workflow
-- TUI wizard and history browsing
 - GUI shell, history browsing, and measurement wizard
+- TUI backup workflow and history browsing
 - shared config persistence and preload
 - clone-target support
 - Equalizer APO export
 - CamillaDSP export
-- deterministic end-to-end synthetic integration tests
 - measured-vs-target SVG review graphs in fit output folders
+- deterministic end-to-end synthetic integration tests
+- confidence/trust summaries in fit outputs
 
 ---
 
 ## Likely future work
 
 If future work resumes, the most sensible candidates are:
-- better PipeWire device discovery/help
+- GUI/CLI confidence presentation polish
+- guided troubleshooting
+- stronger device guidance
 - additional export formats if there is real demand
 - more real-world published-curve examples

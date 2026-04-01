@@ -7,9 +7,21 @@ It helps you:
 - fit a conservative **parametric EQ** toward a target curve
 - export ready-to-use **CamillaDSP** configurations and **Equalizer APO** presets
 - build **clone targets** from your own measurements or published CSV curves
-- use the same core workflow from the **CLI**, **TUI**, or **GUI**
+- review runs with graphs, summaries, and confidence guidance
 
 The design goal is simple: make headphone measurement usable for audio enthusiasts who do **not** want to fight the tooling.
+
+---
+
+## Product strategy
+
+HeadMatch currently has three frontends, but they do not have equal product priority:
+
+- **GUI** — primary experience for most users
+- **CLI** — explicit and scriptable workflow, also the most stable troubleshooting surface
+- **TUI** — backup option, mainly for offline processing or systems without a usable desktop
+
+That means most future feature work should land in the **GUI and CLI first**. The TUI remains supported, but it is no longer a primary investment area.
 
 ---
 
@@ -30,11 +42,19 @@ Write both **Equalizer APO** preset files and **CamillaDSP** configs from the sa
 ### 5. Headphone cloning
 Create a target curve that moves one headphone toward the tonal balance of another.
 
+### 6. Result interpretation
+Each run can include a plain-language trust summary so users can tell whether the measurement looks believable.
+
 ---
 
 ## Interaction modes
 
-HeadMatch currently provides three ways to use the same shared pipeline.
+### GUI
+Best for most users.
+
+```bash
+headmatch-gui
+```
 
 ### CLI
 Best for explicit control, scripting, and repeatable workflows.
@@ -46,17 +66,10 @@ headmatch list-targets
 ```
 
 ### TUI
-Best for a guided terminal workflow.
+Supported as a backup option, mainly for offline processing and non-desktop setups.
 
 ```bash
 headmatch tui
-```
-
-### GUI
-Best for users who want a simple desktop shell.
-
-```bash
-headmatch-gui
 ```
 
 All three modes share the same saved config, run summaries, and output formats.
@@ -85,8 +98,8 @@ pip install -r requirements-test.txt
 If PipeWire playback and recording are working, start here:
 
 ```bash
-headmatch start --out-dir out/session_01
 headmatch list-targets
+headmatch start --out-dir out/session_01
 ```
 
 This will:
@@ -115,7 +128,7 @@ headmatch fit-offline \
 
 ## Shared configuration
 
-HeadMatch stores shared defaults in one config file used by the CLI, TUI, and GUI.
+HeadMatch stores shared defaults in one config file used by the GUI, CLI, and TUI.
 
 Default path:
 - `$XDG_CONFIG_HOME/headmatch/config.json`
@@ -132,6 +145,8 @@ You can override the path with:
 
 ```bash
 headmatch --config /path/to/config.json ...
+headmatch-gui --config /path/to/config.json
+headmatch-tui --config /path/to/config.json
 ```
 
 An example config is included at:
@@ -146,8 +161,8 @@ docs/examples/headmatch.config.json
 
 ### Guided online path
 ```bash
-headmatch start --out-dir out/session_01
 headmatch list-targets
+headmatch start --out-dir out/session_01
 ```
 
 ### Manual online measurement
@@ -204,7 +219,7 @@ headmatch clone-target \
 
 A typical fit output folder contains:
 - `README.txt` — plain-language explanation of the run output
-- `run_summary.json` — stable summary used by the TUI/GUI history views
+- `run_summary.json` — stable summary used by the GUI/TUI history views, including a confidence score, plain-language interpretation, and warnings
 - `fit_report.json` — detailed fit report
 - `measurement_left.csv`
 - `measurement_right.csv`
@@ -217,7 +232,7 @@ A typical fit output folder contains:
 
 The general rule is:
 - open `README.txt` if you want the human explanation
-- open `run_summary.json` if you want the stable machine-readable summary
+- open `run_summary.json` if you want the stable machine-readable summary, confidence score, and warnings
 - use `equalizer_apo.txt` for Equalizer APO, or one of the CamillaDSP YAML files for CamillaDSP
 
 ---
@@ -271,5 +286,3 @@ Current project docs live in:
 - `docs/architecture.md`
 - `docs/backlog.md`
 - `docs/examples/`
-
-These are kept as the current source of truth for architecture, status, and examples.
