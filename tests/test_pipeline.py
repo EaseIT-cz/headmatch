@@ -270,3 +270,49 @@ def test_relative_target_zero_delta_is_treated_as_noop_clone_match():
     assert right_bands == []
     assert report['predicted_left_rms_error_db'] == 0.0
     assert report['predicted_right_rms_error_db'] == 0.0
+
+
+
+def test_process_single_measurement_relative_target_exports_effective_per_channel_targets(monkeypatch, tmp_path: Path):
+    freqs = np.array([20.0, 1000.0, 20000.0])
+    result = MeasurementResult(
+        freqs_hz=freqs,
+        left_db=np.array([1.0, 0.0, -1.0]),
+        right_db=np.array([2.0, 0.0, -2.0]),
+        left_raw_db=np.array([1.0, 0.0, -1.0]),
+        right_raw_db=np.array([2.0, 0.0, -2.0]),
+        diagnostics={
+            'alignment_reference_score': 0.99,
+            'alignment_peak_ratio': 0.99,
+            'channel_mismatch_rms_db': 0.1,
+            'left_roughness_db': 0.1,
+            'right_roughness_db': 0.1,
+            'capture_rms_dbfs': -20.0,
+        },
+    )
+    spec = SweepSpec(sample_rate=48000, duration_s=1.0, pre_silence_s=0.0, post_silence_s=0.0, amplitude=0.1)
+    target_csv = tmp_path / 'clone_target.csv'
+    target_csv.write_text(
+        '# headmatch_target_semantics=relative\n'
+        'frequency_hz,target_db\n'
+        '20,2\n'
+        '1000,0\n'
+        '20000,-2\n'
+    )
+
+    monkeypatch.setattr('headmatch.pipeline.analyze_measurement', lambda *_args, **_kwargs: result)
+
+    out_dir = tmp_path / 'fit_relative_export'
+    process_single_measurement('ignored.wav', out_dir, spec, target_path=target_csv, max_filters=0)
+
+    rows = (out_dir / 'target_curve.csv').read_text().splitlines()
+    graphiceq = (out_dir / 'equalizer_apo_graphiceq.txt').read_text()
+
+    assert rows == [
+        'frequency_hz,left_target_db,right_target_db',
+        '20.0,3.0,4.0',
+        '1000.0,0.0,0.0',
+        '20000.0,-3.0,-4.0',
+    ]
+    assert 'GraphicEQ: 20.00 2.00; 1000.00 0.00; 20000.00 -2.00' in graphiceq
+    assert 'GraphicEQ: 20.00 2.00; 1000.00 0.00; 20000.00 -2.00' in graphiceq

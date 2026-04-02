@@ -9,7 +9,7 @@ from headmatch.exporters import (
     export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
-from headmatch.peq import FilterBudget, PEQBand, fit_peq
+from headmatch.peq import FilterBudget, PEQBand, fit_peq, peq_chain_response_db
 from headmatch.signals import geometric_log_grid
 
 
@@ -161,6 +161,30 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
     assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.70' in text
 
 
+def test_export_equalizer_apo_parametric_txt_keeps_channel_numbering_independent_and_trailing_newline(tmp_path):
+    out = tmp_path / 'equalizer_apo_channels.txt'
+    export_equalizer_apo_parametric_txt(
+        out,
+        [],
+        [
+            PEQBand('peaking', 3000.0, 1.5, 1.1),
+            PEQBand('lowshelf', 90.0, 2.0, 0.7),
+        ],
+    )
+
+    text = out.read_text()
+    lines = text.splitlines()
+    right_section = lines[lines.index('Channel: R'):]
+
+    assert text.endswith('\n')
+    assert right_section[:4] == [
+        'Channel: R',
+        'Preamp: -2.00 dB',
+        'Filter 1: ON LS Fc 90.00 Hz Gain 2.00 dB Q 0.70',
+        'Filter 2: ON PK Fc 3000.00 Hz Gain 1.50 dB Q 1.10',
+    ]
+
+
 def test_export_equalizer_apo_graphiceq_txt_uses_official_graphiceq_syntax(tmp_path):
     out = tmp_path / 'equalizer_apo_graphiceq.txt'
     export_equalizer_apo_graphiceq_txt(
@@ -193,6 +217,36 @@ def test_fit_peq_searches_past_rejected_nearby_candidates_to_use_more_budget():
 
     assert len(bands) >= 6
     assert sum(1 for band in bands if band.kind == 'peaking') >= 4
+
+
+def test_fit_peq_budget_of_two_is_fully_spent_by_edge_shelves_before_peaking_filters():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target[freqs <= 120] = 4.0
+    target[freqs >= 8000] = -3.0
+    target += 5.0 * np.exp(-0.5 * (np.log2(freqs / 2500.0) / 0.28) ** 2)
+
+    bands = fit_peq(freqs, target, sample_rate=48000, max_filters=2)
+
+    assert len(bands) == 2
+    assert {band.kind for band in bands} == {'lowshelf', 'highshelf'}
+
+
+def test_fit_peq_exact_n_uses_full_requested_filter_count_and_improves_obvious_multipeak_target():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 4.8 * np.exp(-0.5 * (np.log2(freqs / 140.0) / 0.30) ** 2)
+    target += -5.4 * np.exp(-0.5 * (np.log2(freqs / 1100.0) / 0.24) ** 2)
+    target += 5.1 * np.exp(-0.5 * (np.log2(freqs / 4200.0) / 0.22) ** 2)
+    target += -4.7 * np.exp(-0.5 * (np.log2(freqs / 8200.0) / 0.26) ** 2)
+
+    bands = fit_peq(freqs, target, sample_rate=48000, budget=FilterBudget(max_filters=4, fill_policy='exact_n'))
+    corrected = peq_chain_response_db(freqs, 48000, bands)
+    residual_rms = float(np.sqrt(np.mean((target - corrected) ** 2)))
+
+    assert len(bands) == 4
+    assert sum(1 for band in bands if band.kind == 'peaking') >= 3
+    assert residual_rms < 2.5
 
 
 def test_fit_peq_keeps_searching_when_top_residual_candidate_is_rejected(monkeypatch):
