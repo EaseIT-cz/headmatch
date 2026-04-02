@@ -21,7 +21,7 @@ The current shipped state includes:
 ## Active
 
 1. Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer.
-2. Keep parametric PEQ and free-form GraphicEQ export available alongside the new fixed-band mode.
+2. Expand synthetic regression coverage around fitting/export edge cases instead of relying on unavailable hardware-specific fixtures.
 
 ## Recently completed
 
