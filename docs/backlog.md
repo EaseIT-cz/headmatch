@@ -20,8 +20,7 @@ The current shipped state includes:
 
 ## Active
 
-1. Audit and correct backend math/target semantics, especially clone-target handling, normalization, and fit behavior.
-2. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
+1. No open task files at the moment. Choose the next work item from the future follow-up candidates after 0.2.0 release feedback and real-world clone-target testing.
 
 ## Recently completed
 
@@ -33,6 +32,12 @@ The current shipped state includes:
 - improved PipeWire target guidance in the CLI and GUI
 - added a first GUI run-comparison slice in history
 - added a first CLI environment diagnostics command (`headmatch doctor`)
+- added GUI setup checks, target dropdowns, and navigation/layout cleanup
+- expanded examples/docs for targets and clone-target workflows
+- corrected clone-target backend semantics so relative targets are handled correctly during fitting
+- fixed PEQ filter-budget handling
+- added package-build, release-asset, and PyPI publish GitHub Actions workflows
+- updated docs so PyPI install is the primary user path
 
 ## Future follow-up candidates
 
