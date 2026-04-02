@@ -58,10 +58,33 @@ def test_start_dispatches_guided_online_workflow(monkeypatch, capsys, tmp_path):
     assert calls["output_dir"] == str(tmp_path)
     assert calls["iterations"] == 1
     assert calls["max_filters"] == 8
+    assert calls["filter_budget"].fill_policy == "up_to_n"
     out = capsys.readouterr().out
     assert "Starting guided measurement workflow" in out
     assert "run_summary.json" in out
 
+
+
+
+def test_fit_command_accepts_exact_fill_policy(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_process_single_measurement(*args, **kwargs):
+        calls['kwargs'] = kwargs
+
+    monkeypatch.setattr('headmatch.pipeline.process_single_measurement', fake_process_single_measurement)
+    monkeypatch.setattr('headmatch.cli.save_config', lambda *_args, **_kwargs: None)
+
+    cli.main([
+        'fit',
+        '--recording', str(tmp_path / 'recording.wav'),
+        '--out-dir', str(tmp_path / 'fit'),
+        '--fill-policy', 'exact_n',
+        '--max-filters', '5',
+    ])
+
+    assert calls['kwargs']['filter_budget'].fill_policy == 'exact_n'
+    assert calls['kwargs']['filter_budget'].max_filters == 5
 
 def test_measure_still_dispatches_existing_command(monkeypatch, capsys, tmp_path):
     calls = {}

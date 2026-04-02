@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from .signals import SweepSpec
+
+if TYPE_CHECKING:
+    from .peq import FilterBudget
 
 CONFIG_SCHEMA_VERSION = 1
 RUN_SUMMARY_SCHEMA_VERSION = 1
@@ -100,6 +103,7 @@ class FrontendRunSummary:
     confidence: ConfidenceSummary
     plots: dict[str, str]
     results_guide: str
+    filter_budget: "FilterBudget | None" = None
 
     def to_dict(self) -> dict:
         return {
@@ -115,11 +119,22 @@ class FrontendRunSummary:
             "confidence": self.confidence.to_dict(),
             "plots": self.plots,
             "results_guide": self.results_guide,
+            "filter_budget": None if self.filter_budget is None else {
+                "family": self.filter_budget.family,
+                "max_filters": self.filter_budget.max_filters,
+                "fill_policy": self.filter_budget.fill_policy,
+            },
         }
 
     @classmethod
     def from_dict(cls, payload: dict) -> "FrontendRunSummary":
         confidence_payload = payload.get("confidence", {})
+        filter_budget_payload = payload.get("filter_budget")
+        filter_budget = None
+        if isinstance(filter_budget_payload, dict):
+            from .peq import FilterBudget
+            filter_budget = FilterBudget(**filter_budget_payload)
+
         return cls(
             schema_version=int(payload.get("schema_version", RUN_SUMMARY_SCHEMA_VERSION)),
             kind=payload["kind"],
@@ -141,4 +156,5 @@ class FrontendRunSummary:
             ),
             plots=dict(payload.get("plots", {})),
             results_guide=payload.get("results_guide", str(Path(payload["out_dir"]) / "README.txt")),
+            filter_budget=filter_budget,
         )

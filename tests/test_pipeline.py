@@ -8,7 +8,7 @@ from scipy import signal
 
 from headmatch.analysis import MeasurementResult, analyze_measurement
 from headmatch.io_utils import write_wav
-from headmatch.peq import peq_chain_response_db
+from headmatch.peq import FilterBudget, peq_chain_response_db
 from headmatch.pipeline import fit_from_measurement, iterative_measure_and_fit, process_single_measurement
 from headmatch.signals import SweepSpec, generate_log_sweep
 from headmatch.targets import TargetCurve
@@ -75,6 +75,43 @@ def test_measurement_and_fit(tmp_path: Path):
     assert right_after < right_before
 
 
+
+
+
+def test_fit_from_measurement_reports_explicit_filter_budget_for_default_and_exact_modes(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    result = analyze_measurement(recording, spec, out_dir=tmp_path)
+    target = TargetCurve(result.freqs_hz, np.zeros_like(result.freqs_hz), 'flat')
+
+    _left_default, _right_default, default_report = fit_from_measurement(result, target, spec.sample_rate, max_filters=3)
+    left_exact, right_exact, exact_report = fit_from_measurement(
+        result,
+        target,
+        spec.sample_rate,
+        filter_budget=FilterBudget(max_filters=3, fill_policy='exact_n'),
+    )
+
+    assert default_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'up_to_n'}
+    assert exact_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'exact_n'}
+    assert len(left_exact) == 3
+    assert len(right_exact) == 3
+
+
+def test_process_single_measurement_writes_filter_budget_into_run_summary(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    out_dir = tmp_path / 'fit_exact'
+    report = process_single_measurement(
+        recording,
+        out_dir,
+        spec,
+        target_path=None,
+        filter_budget=FilterBudget(max_filters=3, fill_policy='exact_n'),
+    )
+
+    assert report['filter_budget']['fill_policy'] == 'exact_n'
+    summary = (out_dir / 'run_summary.json').read_text()
+    assert '"filter_budget"' in summary
+    assert '"fill_policy": "exact_n"' in summary
 
 def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     recording, spec = simulate_headphone_recording(tmp_path)

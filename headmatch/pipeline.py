@@ -22,7 +22,7 @@ from .exporters import (
 )
 from .io_utils import save_fr_csv, save_json
 from .measure import MeasurementPaths, PipeWireDeviceConfig, run_pipewire_measurement
-from .peq import PEQBand, fit_peq, peq_chain_response_db
+from .peq import FilterBudget, PEQBand, fit_peq, peq_chain_response_db
 from .plots import render_fit_graphs
 from .signals import SweepSpec
 from .targets import TargetCurve, create_flat_target, load_curve, resample_curve, clone_target_from_source_target
@@ -238,7 +238,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
 
 
 
-def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> FrontendRunSummary:
+def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int, filter_budget: FilterBudget) -> FrontendRunSummary:
     identity = get_app_identity()
     trust_summary = _summarize_trustworthiness(result, report)
     return FrontendRunSummary(
@@ -263,6 +263,7 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
             'right': str(out_dir / 'fit_right.svg'),
         },
         results_guide=str(out_dir / RESULTS_GUIDE_NAME),
+        filter_budget=filter_budget,
     )
 
 
@@ -277,6 +278,7 @@ def _write_fit_artifacts(
     report: dict,
     sample_rate: int,
     write_target_curve_csv: bool,
+    filter_budget: FilterBudget,
 ) -> dict:
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
@@ -288,7 +290,7 @@ def _write_fit_artifacts(
             lines.append(f'{float(freq)},{float(left)},{float(right)}')
         (out_dir / 'target_curve.csv').write_text('\n'.join(lines) + '\n')
     render_fit_graphs(out_dir, result, target, sample_rate, left_bands, right_bands)
-    summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate)
+    summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate, filter_budget)
     save_json(out_dir / 'fit_report.json', report)
     save_json(out_dir / 'run_summary.json', summary.to_dict())
     write_results_guide(out_dir, kind=kind, trust_summary=summary.confidence)
@@ -304,12 +306,13 @@ def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, flo
 
 
 
-def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_rate: int, max_filters: int = 8) -> tuple[list[PEQBand], list[PEQBand], dict]:
+def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_rate: int, max_filters: int = 8, *, filter_budget: FilterBudget | None = None) -> tuple[list[PEQBand], list[PEQBand], dict]:
+    filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
     resolved_target = _resolve_target_curves(result, target)
     left_eq_target = resolved_target.left_values_db - result.left_db
     right_eq_target = resolved_target.right_values_db - result.right_db
-    left_bands = fit_peq(result.freqs_hz, left_eq_target, sample_rate, max_filters=max_filters)
-    right_bands = fit_peq(result.freqs_hz, right_eq_target, sample_rate, max_filters=max_filters)
+    left_bands = fit_peq(result.freqs_hz, left_eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
+    right_bands = fit_peq(result.freqs_hz, right_eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
     left_pred = result.left_db + peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)
     right_pred = result.right_db + peq_chain_response_db(result.freqs_hz, sample_rate, right_bands)
     l_rms, l_max = _metrics(left_pred, resolved_target.left_values_db)
@@ -322,6 +325,11 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
         'predicted_left_max_error_db': l_max,
         'predicted_right_max_error_db': r_max,
         'measurement_diagnostics': result.diagnostics,
+        'filter_budget': {
+            'family': filter_budget.family,
+            'max_filters': filter_budget.max_filters,
+            'fill_policy': filter_budget.fill_policy,
+        },
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
     }
@@ -330,12 +338,13 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
 
 
 
-def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, sweep_spec: SweepSpec, target_path: str | Path | None = None, max_filters: int = 8) -> dict:
+def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, sweep_spec: SweepSpec, target_path: str | Path | None = None, max_filters: int = 8, *, filter_budget: FilterBudget | None = None) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     result = analyze_measurement(recording_wav, sweep_spec, out_dir=out_dir)
     target = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
-    left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters)
+    filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
+    left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
     _write_fit_artifacts(
         out_dir,
         kind='fit',
@@ -346,6 +355,7 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
         report=report,
         sample_rate=sweep_spec.sample_rate,
         write_target_curve_csv=True,
+        filter_budget=filter_budget,
     )
     return report
 
@@ -364,9 +374,12 @@ def iterative_measure_and_fit(
     input_target: str | None,
     iterations: int = 2,
     max_filters: int = 8,
+    *,
+    filter_budget: FilterBudget | None = None,
 ) -> list[dict]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
     target_curve: Optional[TargetCurve] = None
     summaries = []
     for i in range(1, iterations + 1):
@@ -378,7 +391,7 @@ def iterative_measure_and_fit(
         result = analyze_measurement(recording, sweep_spec, iter_dir)
         if target_curve is None:
             target_curve = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
-        left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters)
+        left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
         run_summary = _write_fit_artifacts(
             iter_dir,
             kind='iteration',
@@ -389,6 +402,7 @@ def iterative_measure_and_fit(
             report=report,
             sample_rate=sweep_spec.sample_rate,
             write_target_curve_csv=False,
+            filter_budget=filter_budget,
         )
         predicted = run_summary['predicted_error_db']
         summaries.append(asdict(IterationSummary(i, predicted['left_rms'], predicted['right_rms'], predicted['left_max'], predicted['right_max'])))

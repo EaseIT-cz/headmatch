@@ -8,7 +8,7 @@ from headmatch.exporters import (
     export_camilladsp_filters_yaml,
     export_equalizer_apo_parametric_txt,
 )
-from headmatch.peq import PEQBand, fit_peq
+from headmatch.peq import FilterBudget, PEQBand, fit_peq
 from headmatch.signals import geometric_log_grid
 
 
@@ -46,6 +46,40 @@ def test_fit_peq_returns_no_bands_when_filter_budget_is_zero():
 
     assert fit_peq(freqs, target, sample_rate=48000, max_filters=0) == []
 
+
+
+
+def test_fit_peq_exact_n_fills_remaining_budget_for_small_targets():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 0.18 * np.exp(-0.5 * (np.log2(freqs / 1200.0) / 0.55) ** 2)
+
+    up_to_n = fit_peq(freqs, target, sample_rate=48000, budget=FilterBudget(max_filters=4, fill_policy='up_to_n'))
+    exact_n = fit_peq(freqs, target, sample_rate=48000, budget=FilterBudget(max_filters=4, fill_policy='exact_n'))
+
+    assert len(up_to_n) < 4
+    assert len(exact_n) == 4
+
+
+def test_fit_peq_exact_n_can_fill_budget_even_when_nearby_rejections_block_conservative_mode(monkeypatch):
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 0.2 * np.exp(-0.5 * (np.log2(freqs / 2500.0) / 0.24) ** 2)
+
+    original = fit_peq.__globals__['_nearby_same_sign_band_exists']
+
+    def always_reject_nearby(bands, candidate):
+        return candidate.kind == 'peaking'
+
+    monkeypatch.setitem(fit_peq.__globals__, '_nearby_same_sign_band_exists', always_reject_nearby)
+    try:
+        up_to_n = fit_peq(freqs, target, sample_rate=48000, budget=FilterBudget(max_filters=3, fill_policy='up_to_n'))
+        exact_n = fit_peq(freqs, target, sample_rate=48000, budget=FilterBudget(max_filters=3, fill_policy='exact_n'))
+    finally:
+        monkeypatch.setitem(fit_peq.__globals__, '_nearby_same_sign_band_exists', original)
+
+    assert up_to_n == []
+    assert len(exact_n) == 3
 
 def test_export_camilladsp_full_yaml_includes_clear_placeholders_and_metadata(tmp_path):
     out = tmp_path / 'camilla.yaml'

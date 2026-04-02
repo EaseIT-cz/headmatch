@@ -1,12 +1,52 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import List
+from dataclasses import dataclass
+from typing import List, Literal
 
 import numpy as np
 from scipy import signal
 
 from .signals import fractional_octave_smoothing
+
+FillPolicy = Literal["up_to_n", "exact_n"]
+FilterFamily = Literal["peq"]
+
+
+@dataclass(frozen=True)
+class FilterBudget:
+    family: FilterFamily = "peq"
+    max_filters: int = 8
+    fill_policy: FillPolicy = "up_to_n"
+
+    def normalized(self) -> "FilterBudget":
+        return FilterBudget(
+            family=self.family,
+            max_filters=max(int(self.max_filters), 0),
+            fill_policy=self.fill_policy,
+        )
+
+
+@dataclass(frozen=True)
+class FitObjective:
+    freqs_hz: np.ndarray
+    eq_target_db: np.ndarray
+    sample_rate: int
+    weights: np.ndarray
+
+    @classmethod
+    def from_target(cls, freqs_hz: np.ndarray, target_eq_db: np.ndarray, sample_rate: int) -> "FitObjective":
+        eq_target = fractional_octave_smoothing(freqs_hz, target_eq_db, fraction=8)
+        return cls(
+            freqs_hz=freqs_hz,
+            eq_target_db=eq_target,
+            sample_rate=sample_rate,
+            weights=_residual_priority_weights(freqs_hz),
+        )
+
+    def residual_db(self, bands: List["PEQBand"]) -> np.ndarray:
+        current = peq_chain_response_db(self.freqs_hz, self.sample_rate, bands)
+        residual = self.eq_target_db - current
+        return fractional_octave_smoothing(self.freqs_hz, residual, fraction=10)
 
 
 @dataclass
@@ -24,14 +64,14 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
     alpha = np.sin(w0) / (2 * max(band.q, 1e-6))
     cosw = np.cos(w0)
 
-    if band.kind == 'peaking':
+    if band.kind == "peaking":
         b0 = 1 + alpha * A
         b1 = -2 * cosw
         b2 = 1 - alpha * A
         a0 = 1 + alpha / A
         a1 = -2 * cosw
         a2 = 1 - alpha / A
-    elif band.kind == 'lowshelf':
+    elif band.kind == "lowshelf":
         sqrtA = np.sqrt(A)
         # RBJ shelf. Here q is used as slope-ish control via S=q.
         S = max(0.1, min(1.0, band.q))
@@ -42,7 +82,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a0 = (A + 1) + (A - 1) * cosw + 2 * sqrtA * alpha
         a1 = -2 * ((A - 1) + (A + 1) * cosw)
         a2 = (A + 1) + (A - 1) * cosw - 2 * sqrtA * alpha
-    elif band.kind == 'highshelf':
+    elif band.kind == "highshelf":
         sqrtA = np.sqrt(A)
         S = max(0.1, min(1.0, band.q))
         alpha = np.sin(w0) / 2 * np.sqrt((A + 1 / A) * (1 / S - 1) + 2)
@@ -53,7 +93,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a1 = 2 * ((A - 1) - (A + 1) * cosw)
         a2 = (A + 1) - (A - 1) * cosw - 2 * sqrtA * alpha
     else:
-        raise ValueError(f'Unsupported band type: {band.kind}')
+        raise ValueError(f"Unsupported band type: {band.kind}")
 
     b = np.array([b0, b1, b2]) / a0
     a = np.array([1.0, a1 / a0, a2 / a0])
@@ -95,7 +135,7 @@ def _same_sign_fraction(values: np.ndarray, sign: float) -> float:
 
 
 def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> PEQBand | None:
-    if kind == 'lowshelf':
+    if kind == "lowshelf":
         edge_mask = freqs_hz <= 140
         compare_mean = _band_mean(freqs_hz, eq_target, 180, 600)
         edge_mean = _band_mean(freqs_hz, eq_target, 20, 140)
@@ -140,6 +180,62 @@ def _nearby_same_sign_band_exists(bands: List[PEQBand], candidate: PEQBand) -> b
 
 
 
+def _peaking_candidate(
+    objective: FitObjective,
+    residual: np.ndarray,
+    idx: int,
+    *,
+    max_gain_db: float,
+    max_q: float,
+) -> PEQBand:
+    peak_db = float(residual[idx])
+    fc = float(np.clip(objective.freqs_hz[idx], 35.0, objective.sample_rate / 2 - 500.0))
+
+    threshold = abs(peak_db) * 0.5
+    l = int(idx)
+    while l > 0 and abs(residual[l]) >= threshold:
+        l -= 1
+    r = int(idx)
+    while r < len(objective.freqs_hz) - 1 and abs(residual[r]) >= threshold:
+        r += 1
+    f1 = max(objective.freqs_hz[l], 20.0)
+    f2 = min(objective.freqs_hz[r], objective.sample_rate / 2 - 100)
+    bw_oct = max(np.log2(f2 / f1), 0.12)
+    q_limit = _max_q_for_frequency(fc, max_q)
+    q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
+    gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
+    if q >= 2.8:
+        gain *= 0.85
+    return PEQBand("peaking", fc, gain, q)
+
+
+
+def _select_peaking_candidate(
+    objective: FitObjective,
+    residual: np.ndarray,
+    bands: List[PEQBand],
+    *,
+    max_gain_db: float,
+    max_q: float,
+    min_peak_db: float,
+    min_gain_db: float,
+    allow_nearby_same_sign: bool,
+) -> PEQBand | None:
+    weighted = residual * objective.weights
+    for idx in np.argsort(np.abs(weighted))[::-1]:
+        peak_db = float(weighted[idx] / objective.weights[idx])
+        if abs(peak_db) < min_peak_db:
+            break
+        candidate = _peaking_candidate(objective, residual, int(idx), max_gain_db=max_gain_db, max_q=max_q)
+        if abs(candidate.gain_db) < min_gain_db:
+            continue
+        if not allow_nearby_same_sign and _nearby_same_sign_band_exists(bands, candidate):
+            continue
+        return candidate
+    return None
+
+
+
 def fit_peq(
     freqs_hz: np.ndarray,
     target_eq_db: np.ndarray,
@@ -147,61 +243,69 @@ def fit_peq(
     max_filters: int = 8,
     max_gain_db: float = 8.0,
     max_q: float = 4.5,
+    *,
+    budget: FilterBudget | None = None,
 ) -> List[PEQBand]:
-    """Greedy PEQ fitter. Good enough for practical headphone work, intentionally conservative."""
-    eq_target = fractional_octave_smoothing(freqs_hz, target_eq_db, fraction=8)
+    """Greedy PEQ fitter. Good enough for practical headphone work, intentionally conservative by default."""
+    budget = (budget or FilterBudget(max_filters=max_filters)).normalized()
+    if budget.family != "peq":
+        raise ValueError(f"Unsupported filter family: {budget.family}")
+
+    objective = FitObjective.from_target(freqs_hz, target_eq_db, sample_rate)
     bands: List[PEQBand] = []
-    weights = _residual_priority_weights(freqs_hz)
-    max_filters = max(int(max_filters), 0)
 
     shelf_candidates = [
         candidate
         for candidate in (
-            _edge_shelf_candidate(freqs_hz, eq_target, kind='lowshelf', max_gain_db=max_gain_db),
-            _edge_shelf_candidate(freqs_hz, eq_target, kind='highshelf', max_gain_db=max_gain_db),
+            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="lowshelf", max_gain_db=max_gain_db),
+            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="highshelf", max_gain_db=max_gain_db),
         )
         if candidate is not None
     ]
     shelf_candidates.sort(key=lambda band: abs(band.gain_db), reverse=True)
-    bands.extend(shelf_candidates[:max_filters])
+    bands.extend(shelf_candidates[:budget.max_filters])
 
-    while len(bands) < max_filters:
-        current = peq_chain_response_db(freqs_hz, sample_rate, bands)
-        residual = eq_target - current
-        residual = fractional_octave_smoothing(freqs_hz, residual, fraction=10)
-        weighted = residual * weights
-
-        added_candidate = False
-        for idx in np.argsort(np.abs(weighted))[::-1]:
-            peak_db = float(weighted[idx] / weights[idx])
-            if abs(peak_db) < 0.75:
-                break
-            fc = float(np.clip(freqs_hz[idx], 35.0, sample_rate / 2 - 500.0))
-
-            threshold = abs(peak_db) * 0.5
-            l = int(idx)
-            while l > 0 and abs(residual[l]) >= threshold:
-                l -= 1
-            r = int(idx)
-            while r < len(freqs_hz) - 1 and abs(residual[r]) >= threshold:
-                r += 1
-            f1, f2 = max(freqs_hz[l], 20.0), min(freqs_hz[r], sample_rate / 2 - 100)
-            bw_oct = max(np.log2(f2 / f1), 0.12)
-            q_limit = _max_q_for_frequency(fc, max_q)
-            q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
-            gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
-            if q >= 2.8:
-                gain *= 0.85
-            candidate = PEQBand('peaking', fc, gain, q)
-            if abs(candidate.gain_db) < 0.6:
-                continue
-            if _nearby_same_sign_band_exists(bands, candidate):
-                continue
+    while len(bands) < budget.max_filters:
+        residual = objective.residual_db(bands)
+        candidate = _select_peaking_candidate(
+            objective,
+            residual,
+            bands,
+            max_gain_db=max_gain_db,
+            max_q=max_q,
+            min_peak_db=0.75,
+            min_gain_db=0.6,
+            allow_nearby_same_sign=False,
+        )
+        if candidate is not None:
             bands.append(candidate)
-            added_candidate = True
+            continue
+        if budget.fill_policy != "exact_n":
             break
 
-        if not added_candidate:
+        candidate = _select_peaking_candidate(
+            objective,
+            residual,
+            bands,
+            max_gain_db=max_gain_db,
+            max_q=max_q,
+            min_peak_db=0.0,
+            min_gain_db=0.0,
+            allow_nearby_same_sign=False,
+        )
+        if candidate is None:
+            candidate = _select_peaking_candidate(
+                objective,
+                residual,
+                bands,
+                max_gain_db=max_gain_db,
+                max_q=max_q,
+                min_peak_db=0.0,
+                min_gain_db=0.0,
+                allow_nearby_same_sign=True,
+            )
+        if candidate is None:
             break
+        bands.append(candidate)
 
     return bands
