@@ -80,11 +80,23 @@ All three modes share the same saved config, run summaries, and output formats.
 
 ## Installation
 
+### Recommended: install from PyPI
+
+Create a small virtualenv and install the published package:
+
 ```bash
-cd headmatch
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install headmatch
+```
+
+After that, the main entry points should be available:
+
+```bash
+headmatch --version
+headmatch doctor
+headmatch-gui
 ```
 
 If you are not sure your local setup is ready yet, run:
@@ -95,12 +107,30 @@ headmatch doctor
 
 It gives a small readiness check for the config file, PipeWire tools, and device discovery before your first measurement.
 
+### Install from source (development)
+
+If you are working from a checkout and want the editable developer install instead:
+
+```bash
+cd headmatch
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+For tests:
+
+```bash
+python -m pip install -r requirements-test.txt
+```
+
 ### Optional: add a Linux desktop launcher
 
 For GUI-first setups, you can add HeadMatch to your desktop app menu without changing packaging:
 
 1. Find the installed GUI entry point.
-   - inside a repo-local virtualenv this is usually `$(pwd)/.venv/bin/headmatch-gui`
+   - inside a normal virtualenv this is usually `$(pwd)/.venv/bin/headmatch-gui`
    - otherwise use `command -v headmatch-gui`
 2. Copy `docs/examples/headmatch.desktop` to:
    ```bash
@@ -111,12 +141,6 @@ For GUI-first setups, you can add HeadMatch to your desktop app menu without cha
 4. Optionally set a custom `Icon=` path if you want something more specific than the generic `audio-headphones` icon.
 
 After that, HeadMatch should show up in most Linux desktop launchers and app menus.
-
-For tests:
-
-```bash
-pip install -r requirements-test.txt
-```
 
 ---
 
