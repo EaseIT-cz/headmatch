@@ -164,6 +164,12 @@ def test_parse_wpctl_inspect_node_name_reads_pipewire_node_name():
     assert _parse_wpctl_inspect_node_name(inspect) == 'alsa_output.usb-dac'
 
 
+def test_get_pipewire_default_targets_returns_empty_when_wpctl_is_missing(monkeypatch):
+    monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: None if name == "wpctl" else f"/usr/bin/{name}")
+
+    assert __import__("headmatch.measure", fromlist=["get_pipewire_default_targets"]).get_pipewire_default_targets() == {}
+
+
 def test_resolve_preferred_pipewire_target_prefers_saved_then_default_then_first():
     targets = [
         PipeWireTarget('playback', 'alsa_output.hdmi', 'HDMI', '', 'Audio/Sink'),

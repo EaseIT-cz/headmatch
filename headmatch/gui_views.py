@@ -39,12 +39,11 @@ def add_readonly_row(ttk, parent, row: int, label: str, variable) -> None:
 
 def add_combobox_row(ttk, parent, row: int, label: str, variable, values: tuple[str, ...], *, empty_label: str) -> None:
     ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=FIELD_PAD_Y)
-    state = "readonly" if values else "disabled"
+    state = "readonly" if values else "normal"
     combo = ttk.Combobox(parent, textvariable=variable, values=values, state=state)
     combo.grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
-    if not values:
-        variable.set("")
-        combo.set(empty_label)
+    if not values and not variable.get().strip():
+        combo.set("")
 
 
 def add_entry_row(ttk, parent, row: int, label: str, variable) -> None:

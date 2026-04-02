@@ -332,6 +332,43 @@ def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, f
     assert app.input_target_options == ('alsa_input.usb-mic',)
 
 
+def test_create_app_keeps_manual_target_fields_usable_when_no_devices_are_detected(tmp_path, fake_tk, monkeypatch):
+    created_comboboxes = []
+    original_combobox = DummyTtk.Combobox
+
+    class TrackingCombobox(DummyWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created_comboboxes.append(self)
+
+    monkeypatch.setattr(DummyTtk, 'Combobox', TrackingCombobox)
+    monkeypatch.setattr(
+        fake_tk,
+        'collect_pipewire_target_selection',
+        lambda _config: PipeWireTargetSelection(
+            playback_targets=(),
+            capture_targets=(),
+            selected_playback='',
+            selected_capture='',
+        ),
+    )
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+    app.show_view('measure-online')
+
+    monkeypatch.setattr(DummyTtk, 'Combobox', original_combobox)
+
+    assert app.output_target_options == ()
+    assert app.input_target_options == ()
+    assert len(created_comboboxes) >= 2
+    assert created_comboboxes[-2].kwargs.get('state') == 'normal'
+    assert created_comboboxes[-1].kwargs.get('state') == 'normal'
+
+
 def test_online_workflow_uses_shared_pipeline_and_sets_completion(tmp_path, fake_tk, monkeypatch):
     calls = {}
 
