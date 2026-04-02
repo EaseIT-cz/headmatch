@@ -183,6 +183,44 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     assert "equalizer_apo_graphiceq.txt" in guide
 
 
+
+def test_fit_cli_supports_fixed_band_graphiceq_backend(monkeypatch, tmp_path: Path):
+    recording, spec = build_synthetic_recording(tmp_path)
+    out_dir = tmp_path / 'fit_graphiceq'
+    _patch_cli_config(monkeypatch, tmp_path)
+
+    cli.main(
+        [
+            'fit',
+            '--recording', str(recording),
+            '--out-dir', str(out_dir),
+            '--target-csv', str(flat_target_csv()),
+            '--sample-rate', str(spec.sample_rate),
+            '--duration', str(spec.duration_s),
+            '--pre-silence', str(spec.pre_silence_s),
+            '--post-silence', str(spec.post_silence_s),
+            '--amplitude', str(spec.amplitude),
+            '--filter-family', 'graphic_eq',
+            '--graphic-eq-profile', 'geq_10_band',
+            '--max-filters', '10',
+        ]
+    )
+
+    summary = _read_json(out_dir / 'run_summary.json')
+    report = _read_json(out_dir / 'fit_report.json')
+    fixed_text = (out_dir / 'equalizer_apo_fixed_graphiceq.txt').read_text()
+    assert summary['filter_budget'] == {
+        'family': 'graphic_eq',
+        'max_filters': 10,
+        'fill_policy': 'exact_n',
+        'profile': 'geq_10_band',
+    }
+    assert len(report['left_bands']) == 10
+    assert len(report['right_bands']) == 10
+    assert '; Generated directly from the fixed-band GraphicEQ fitting backend.' in fixed_text
+    assert (out_dir / 'equalizer_apo_graphiceq.txt').exists()
+
+
 def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_outputs(monkeypatch, tmp_path: Path):
     recording, spec = build_synthetic_recording(tmp_path)
     out_dir = tmp_path / "start"

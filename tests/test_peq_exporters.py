@@ -9,7 +9,7 @@ from headmatch.exporters import (
     export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
-from headmatch.peq import FilterBudget, PEQBand, fit_peq, peq_chain_response_db
+from headmatch.peq import FilterBudget, PEQBand, fit_peq, graphic_eq_profile, peq_chain_response_db
 from headmatch.signals import geometric_log_grid
 
 
@@ -204,6 +204,42 @@ def test_export_equalizer_apo_graphiceq_txt_uses_official_graphiceq_syntax(tmp_p
     assert 'Preamp: -1.00 dB' in text
     assert 'GraphicEQ: 20.00 0.00; 1000.00 1.00; 20000.00 -2.50' in text
 
+
+
+def test_fit_peq_supports_fixed_band_graphiceq_profiles():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 4.0 * np.exp(-0.5 * (np.log2(freqs / 1000.0) / 0.55) ** 2)
+    target += -3.0 * np.exp(-0.5 * (np.log2(freqs / 8000.0) / 0.45) ** 2)
+
+    bands = fit_peq(
+        freqs,
+        target,
+        sample_rate=48000,
+        budget=FilterBudget(family='graphic_eq', max_filters=10, profile='geq_10_band'),
+    )
+
+    profile = graphic_eq_profile('geq_10_band')
+    assert len(bands) == len(profile.freqs_hz)
+    assert [round(band.freq, 2) for band in bands] == [round(freq, 2) for freq in profile.freqs_hz]
+    assert {round(band.q, 4) for band in bands} == {round(profile.q, 4)}
+    assert any(abs(band.gain_db) > 0.25 for band in bands)
+
+
+def test_graphiceq_exporter_accepts_direct_fit_comment(tmp_path):
+    out = tmp_path / 'equalizer_apo_fixed_graphiceq.txt'
+    export_equalizer_apo_graphiceq_txt(
+        out,
+        [31.25, 62.5, 125.0],
+        [1.5, -0.5, 0.0],
+        [0.5, -1.0, 0.25],
+        comment='; Generated directly from the fixed-band GraphicEQ fitting backend.',
+    )
+
+    text = out.read_text()
+
+    assert '; Generated directly from the fixed-band GraphicEQ fitting backend.' in text
+    assert 'GraphicEQ: 31.25 1.50; 62.50 -0.50; 125.00 0.00' in text
 
 def test_fit_peq_searches_past_rejected_nearby_candidates_to_use_more_budget():
     freqs = geometric_log_grid()

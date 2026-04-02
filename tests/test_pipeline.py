@@ -91,8 +91,8 @@ def test_fit_from_measurement_reports_explicit_filter_budget_for_default_and_exa
         filter_budget=FilterBudget(max_filters=3, fill_policy='exact_n'),
     )
 
-    assert default_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'up_to_n'}
-    assert exact_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'exact_n'}
+    assert default_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'up_to_n', 'profile': None}
+    assert exact_report['filter_budget'] == {'family': 'peq', 'max_filters': 3, 'fill_policy': 'exact_n', 'profile': None}
     assert len(left_exact) == 3
     assert len(right_exact) == 3
 
@@ -112,6 +112,36 @@ def test_process_single_measurement_writes_filter_budget_into_run_summary(tmp_pa
     summary = (out_dir / 'run_summary.json').read_text()
     assert '"filter_budget"' in summary
     assert '"fill_policy": "exact_n"' in summary
+
+
+def test_process_single_measurement_writes_direct_fixed_graphiceq_artifact(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    out_dir = tmp_path / 'fit_graphiceq'
+    report = process_single_measurement(
+        recording,
+        out_dir,
+        spec,
+        target_path=None,
+        filter_budget=FilterBudget(family='graphic_eq', max_filters=10, profile='geq_10_band'),
+    )
+
+    assert report['filter_budget'] == {
+        'family': 'graphic_eq',
+        'max_filters': 10,
+        'fill_policy': 'exact_n',
+        'profile': 'geq_10_band',
+    }
+    fixed_text = (out_dir / 'equalizer_apo_fixed_graphiceq.txt').read_text()
+    dense_text = (out_dir / 'equalizer_apo_graphiceq.txt').read_text()
+    summary = (out_dir / 'run_summary.json').read_text()
+    guide = (out_dir / 'README.txt').read_text()
+    assert '; Generated directly from the fixed-band GraphicEQ fitting backend.' in fixed_text
+    assert 'GraphicEQ:' in fixed_text
+    assert 'GraphicEQ:' in dense_text
+    assert 'equalizer_apo_fixed_graphiceq.txt' in guide
+    assert '"family": "graphic_eq"' in summary
+    assert '"profile": "geq_10_band"' in summary
+
 
 def test_process_single_measurement_writes_run_summary(tmp_path: Path):
     recording, spec = simulate_headphone_recording(tmp_path)

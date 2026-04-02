@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Literal
+from typing import Callable, List, Literal
 
 import numpy as np
 from scipy import signal
@@ -9,7 +9,7 @@ from scipy import signal
 from .signals import fractional_octave_smoothing
 
 FillPolicy = Literal["up_to_n", "exact_n"]
-FilterFamily = Literal["peq"]
+FilterFamily = Literal["peq", "graphic_eq"]
 
 
 @dataclass(frozen=True)
@@ -17,12 +17,21 @@ class FilterBudget:
     family: FilterFamily = "peq"
     max_filters: int = 8
     fill_policy: FillPolicy = "up_to_n"
+    profile: str | None = None
 
     def normalized(self) -> "FilterBudget":
+        family = self.family
+        fill_policy = self.fill_policy
+        profile = self.profile
+        max_filters = max(int(self.max_filters), 0)
+        if family == "graphic_eq":
+            fill_policy = "exact_n"
+            profile = profile or _default_graphic_eq_profile_name(max_filters)
         return FilterBudget(
-            family=self.family,
-            max_filters=max(int(self.max_filters), 0),
-            fill_policy=self.fill_policy,
+            family=family,
+            max_filters=max_filters,
+            fill_policy=fill_policy,
+            profile=profile,
         )
 
 
@@ -43,10 +52,18 @@ class FitObjective:
             weights=_residual_priority_weights(freqs_hz),
         )
 
-    def residual_db(self, bands: List["PEQBand"]) -> np.ndarray:
-        current = peq_chain_response_db(self.freqs_hz, self.sample_rate, bands)
-        residual = self.eq_target_db - current
+    def residual_from_response_db(self, response_db: np.ndarray) -> np.ndarray:
+        residual = self.eq_target_db - response_db
         return fractional_octave_smoothing(self.freqs_hz, residual, fraction=10)
+
+    def residual_db(
+        self,
+        bands: List["PEQBand"],
+        response_builder: Callable[[np.ndarray, int, List["PEQBand"]], np.ndarray] | None = None,
+    ) -> np.ndarray:
+        builder = response_builder or peq_chain_response_db
+        current = builder(self.freqs_hz, self.sample_rate, bands)
+        return self.residual_from_response_db(current)
 
 
 @dataclass
@@ -56,6 +73,45 @@ class PEQBand:
     gain_db: float
     q: float
 
+
+@dataclass(frozen=True)
+class GraphicEQProfile:
+    name: str
+    freqs_hz: tuple[float, ...]
+    q: float
+
+
+GRAPHIC_EQ_PROFILES: dict[str, GraphicEQProfile] = {
+    "geq_10_band": GraphicEQProfile(
+        name="geq_10_band",
+        freqs_hz=(31.25, 62.5, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0),
+        q=1.4142,
+    ),
+    "geq_31_band": GraphicEQProfile(
+        name="geq_31_band",
+        freqs_hz=(
+            20.0, 25.0, 31.5, 40.0, 50.0, 63.0, 80.0, 100.0, 125.0, 160.0,
+            200.0, 250.0, 315.0, 400.0, 500.0, 630.0, 800.0, 1000.0, 1250.0, 1600.0,
+            2000.0, 2500.0, 3150.0, 4000.0, 5000.0, 6300.0, 8000.0, 10000.0, 12500.0, 16000.0,
+            20000.0,
+        ),
+        q=4.3185,
+    ),
+}
+
+
+def _default_graphic_eq_profile_name(max_filters: int) -> str:
+    if max_filters >= 31:
+        return "geq_31_band"
+    return "geq_10_band"
+
+
+def graphic_eq_profile(name: str | None = None) -> GraphicEQProfile:
+    resolved = name or "geq_10_band"
+    try:
+        return GRAPHIC_EQ_PROFILES[resolved]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported GraphicEQ profile: {resolved}") from exc
 
 
 def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarray:
@@ -73,7 +129,6 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a2 = 1 - alpha / A
     elif band.kind == "lowshelf":
         sqrtA = np.sqrt(A)
-        # RBJ shelf. Here q is used as slope-ish control via S=q.
         S = max(0.1, min(1.0, band.q))
         alpha = np.sin(w0) / 2 * np.sqrt((A + 1 / A) * (1 / S - 1) + 2)
         b0 = A * ((A + 1) - (A - 1) * cosw + 2 * sqrtA * alpha)
@@ -101,13 +156,37 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
     return 20 * np.log10(np.maximum(np.abs(h), 1e-12))
 
 
-
 def peq_chain_response_db(freqs_hz: np.ndarray, fs: int, bands: List[PEQBand]) -> np.ndarray:
     total = np.zeros_like(freqs_hz)
     for band in bands:
         total += biquad_response_db(freqs_hz, fs, band)
     return total
 
+
+def graphic_eq_bands(profile: GraphicEQProfile, gains_db: np.ndarray | list[float]) -> list[PEQBand]:
+    gains = list(gains_db)
+    return [PEQBand("peaking", float(freq), float(gain), profile.q) for freq, gain in zip(profile.freqs_hz, gains)]
+
+
+def fit_fixed_band_graphic_eq(
+    freqs_hz: np.ndarray,
+    target_eq_db: np.ndarray,
+    sample_rate: int,
+    *,
+    budget: FilterBudget,
+    max_gain_db: float = 12.0,
+) -> list[PEQBand]:
+    profile = graphic_eq_profile(budget.profile)
+    objective = FitObjective.from_target(freqs_hz, target_eq_db, sample_rate)
+    unit_columns = []
+    for center_hz in profile.freqs_hz:
+        unit_columns.append(biquad_response_db(freqs_hz, sample_rate, PEQBand("peaking", center_hz, 1.0, profile.q)))
+    basis = np.column_stack(unit_columns)
+    weighted_basis = basis * objective.weights[:, None]
+    weighted_target = objective.eq_target_db * objective.weights
+    gains, *_ = np.linalg.lstsq(weighted_basis, weighted_target, rcond=None)
+    gains = np.clip(gains, -max_gain_db, max_gain_db)
+    return graphic_eq_bands(profile, gains)
 
 
 def _residual_priority_weights(freqs_hz: np.ndarray) -> np.ndarray:
@@ -118,7 +197,6 @@ def _residual_priority_weights(freqs_hz: np.ndarray) -> np.ndarray:
     return weights
 
 
-
 def _band_mean(freqs_hz: np.ndarray, values_db: np.ndarray, low_hz: float, high_hz: float) -> float:
     mask = (freqs_hz >= low_hz) & (freqs_hz <= high_hz)
     if not np.any(mask):
@@ -126,12 +204,10 @@ def _band_mean(freqs_hz: np.ndarray, values_db: np.ndarray, low_hz: float, high_
     return float(np.mean(values_db[mask]))
 
 
-
 def _same_sign_fraction(values: np.ndarray, sign: float) -> float:
     if len(values) == 0:
         return 0.0
     return float(np.mean(np.sign(values) == np.sign(sign)))
-
 
 
 def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> PEQBand | None:
@@ -158,14 +234,12 @@ def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: 
     return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7)
 
 
-
 def _max_q_for_frequency(freq_hz: float, requested_max_q: float) -> float:
     if freq_hz < 120:
         return min(requested_max_q, 2.0)
     if freq_hz > 6000:
         return min(requested_max_q, 3.0)
     return requested_max_q
-
 
 
 def _nearby_same_sign_band_exists(bands: List[PEQBand], candidate: PEQBand) -> bool:
@@ -177,7 +251,6 @@ def _nearby_same_sign_band_exists(bands: List[PEQBand], candidate: PEQBand) -> b
         if abs(np.log2(max(band.freq, 1.0) / max(candidate.freq, 1.0))) < 0.2:
             return True
     return False
-
 
 
 def _peaking_candidate(
@@ -209,7 +282,6 @@ def _peaking_candidate(
     return PEQBand("peaking", fc, gain, q)
 
 
-
 def _select_peaking_candidate(
     objective: FitObjective,
     residual: np.ndarray,
@@ -235,7 +307,6 @@ def _select_peaking_candidate(
     return None
 
 
-
 def fit_peq(
     freqs_hz: np.ndarray,
     target_eq_db: np.ndarray,
@@ -246,8 +317,16 @@ def fit_peq(
     *,
     budget: FilterBudget | None = None,
 ) -> List[PEQBand]:
-    """Greedy PEQ fitter. Good enough for practical headphone work, intentionally conservative by default."""
+    """Greedy fitter for PEQ and fixed-band GraphicEQ models."""
     budget = (budget or FilterBudget(max_filters=max_filters)).normalized()
+    if budget.family == "graphic_eq":
+        return fit_fixed_band_graphic_eq(
+            freqs_hz,
+            target_eq_db,
+            sample_rate,
+            budget=budget,
+            max_gain_db=max_gain_db,
+        )
     if budget.family != "peq":
         raise ValueError(f"Unsupported filter family: {budget.family}")
 

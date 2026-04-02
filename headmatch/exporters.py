@@ -148,6 +148,8 @@ def export_equalizer_apo_graphiceq_txt(
     freqs_hz: Iterable[float],
     gains_left_db: Iterable[float],
     gains_right_db: Iterable[float],
+    *,
+    comment: str = '; Generated from the shared effective correction target on the analysis frequency grid.',
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +158,7 @@ def export_equalizer_apo_graphiceq_txt(
     gains_right_db = list(gains_right_db)
     lines = [
         '; headmatch Equalizer APO GraphicEQ preset',
-        '; Generated from the shared effective correction target on the analysis frequency grid.',
+        comment,
         '',
         'Channel: L',
         f'Preamp: {round(-max(0.0, max(gains_left_db, default=0.0)), 2):.2f} dB',

@@ -29,7 +29,19 @@ def parse_seconds(value: str) -> float:
 
 
 def add_filter_budget_args(p: argparse.ArgumentParser, config) -> None:
-    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Maximum PEQ filters per channel.")
+    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Maximum filters or bands per channel.")
+    p.add_argument(
+        "--filter-family",
+        choices=("peq", "graphic_eq"),
+        default="peq",
+        help="Filter backend family: parametric PEQ or fixed-band GraphicEQ.",
+    )
+    p.add_argument(
+        "--graphic-eq-profile",
+        choices=("geq_10_band", "geq_31_band"),
+        default=None,
+        help="Fixed-band GraphicEQ profile when --filter-family graphic_eq is selected.",
+    )
     p.add_argument(
         "--fill-policy",
         choices=("up_to_n", "exact_n"),
@@ -39,7 +51,12 @@ def add_filter_budget_args(p: argparse.ArgumentParser, config) -> None:
 
 
 def filter_budget_from_args(args) -> FilterBudget:
-    return FilterBudget(max_filters=args.max_filters, fill_policy=args.fill_policy).normalized()
+    return FilterBudget(
+        family=args.filter_family,
+        max_filters=args.max_filters,
+        fill_policy=args.fill_policy,
+        profile=args.graphic_eq_profile,
+    ).normalized()
 
 
 def add_common_sweep_args(p: argparse.ArgumentParser, config) -> None:

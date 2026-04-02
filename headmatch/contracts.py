@@ -123,6 +123,7 @@ class FrontendRunSummary:
                 "family": self.filter_budget.family,
                 "max_filters": self.filter_budget.max_filters,
                 "fill_policy": self.filter_budget.fill_policy,
+                "profile": self.filter_budget.profile,
             },
         }
 

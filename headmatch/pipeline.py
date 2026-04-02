@@ -172,6 +172,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether the fit looks trustworthy.'),
             ('equalizer_apo.txt', 'Ready-to-load Equalizer APO parametric preset file for this result.'),
             ('equalizer_apo_graphiceq.txt', 'Equalizer APO GraphicEQ-format preset built from the shared effective correction target.'),
+            ('equalizer_apo_fixed_graphiceq.txt', 'Direct fixed-band GraphicEQ fit when the GraphicEQ backend family is selected.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device placeholders before use.'),
             ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
             ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
@@ -183,7 +184,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
         ]
         next_steps = [
             'Open run_summary.json first if you want the quickest overview, including the trust/confidence summary.',
-            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for GraphicEQ, or the CamillaDSP YAML files for CamillaDSP.',
+            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for the dense shared-target GraphicEQ export, equalizer_apo_fixed_graphiceq.txt for direct fixed-band GraphicEQ fits, or the CamillaDSP YAML files for CamillaDSP.',
             'If the result still looks off, repeat the measurement with a fresh reseat before adding more filters.',
         ]
     else:
@@ -196,6 +197,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether this iteration looks trustworthy.'),
             ('equalizer_apo.txt', 'Equalizer APO parametric preset file for this iteration.'),
             ('equalizer_apo_graphiceq.txt', 'Equalizer APO GraphicEQ-format preset for this iteration.'),
+            ('equalizer_apo_fixed_graphiceq.txt', 'Direct fixed-band GraphicEQ fit for this iteration when that backend family is selected.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template for this iteration.'),
             ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
             ('measurement_left.csv', 'Estimated left-channel response for this iteration.'),
@@ -205,7 +207,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
-            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for GraphicEQ, or the CamillaDSP YAML files for CamillaDSP.',
+            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for the dense shared-target GraphicEQ export, equalizer_apo_fixed_graphiceq.txt for direct fixed-band GraphicEQ fits, or the CamillaDSP YAML files for CamillaDSP.',
             'Compare this folder with the other iter_* folders if you want to see whether the predicted residual improved.',
             'Check the top-level iterations_summary.json for the per-iteration error overview.',
         ]
@@ -270,6 +272,24 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
     )
 
 
+def _write_fixed_band_graphiceq_artifact(
+    out_dir: Path,
+    *,
+    left_bands: list[PEQBand],
+    right_bands: list[PEQBand],
+    filter_budget: FilterBudget,
+) -> None:
+    if filter_budget.family != 'graphic_eq':
+        return
+    export_equalizer_apo_graphiceq_txt(
+        out_dir / 'equalizer_apo_fixed_graphiceq.txt',
+        [band.freq for band in left_bands],
+        [band.gain_db for band in left_bands],
+        [band.gain_db for band in right_bands],
+        comment='; Generated directly from the fixed-band GraphicEQ fitting backend.',
+    )
+
+
 def _write_fit_artifacts(
     out_dir: Path,
     *,
@@ -292,6 +312,12 @@ def _write_fit_artifacts(
         result.freqs_hz,
         resolved_target.left_values_db - result.left_db,
         resolved_target.right_values_db - result.right_db,
+    )
+    _write_fixed_band_graphiceq_artifact(
+        out_dir,
+        left_bands=left_bands,
+        right_bands=right_bands,
+        filter_budget=filter_budget,
     )
     if write_target_curve_csv:
         lines = ['frequency_hz,left_target_db,right_target_db']
@@ -338,6 +364,7 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
             'family': filter_budget.family,
             'max_filters': filter_budget.max_filters,
             'fill_policy': filter_budget.fill_policy,
+            'profile': filter_budget.profile,
         },
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
