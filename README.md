@@ -56,6 +56,8 @@ Best for most users.
 headmatch-gui
 ```
 
+If you want HeadMatch to appear in your Linux desktop launcher, copy the example desktop entry from `docs/examples/headmatch.desktop` into `~/.local/share/applications/` and point `Exec=` at your installed `headmatch-gui` path.
+
 ### CLI
 Best for explicit control, scripting, and repeatable workflows.
 
@@ -92,6 +94,23 @@ headmatch doctor
 ```
 
 It gives a small readiness check for the config file, PipeWire tools, and device discovery before your first measurement.
+
+### Optional: add a Linux desktop launcher
+
+For GUI-first setups, you can add HeadMatch to your desktop app menu without changing packaging:
+
+1. Find the installed GUI entry point.
+   - inside a repo-local virtualenv this is usually `$(pwd)/.venv/bin/headmatch-gui`
+   - otherwise use `command -v headmatch-gui`
+2. Copy `docs/examples/headmatch.desktop` to:
+   ```bash
+   mkdir -p ~/.local/share/applications
+   cp docs/examples/headmatch.desktop ~/.local/share/applications/headmatch.desktop
+   ```
+3. Edit `~/.local/share/applications/headmatch.desktop` and replace `Exec=/ABSOLUTE/PATH/TO/headmatch-gui` with the real absolute path from step 1.
+4. Optionally set a custom `Icon=` path if you want something more specific than the generic `audio-headphones` icon.
+
+After that, HeadMatch should show up in most Linux desktop launchers and app menus.
 
 For tests:
 

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=HeadMatch
+Comment=Measure headphones and build conservative EQ profiles
+Exec=/ABSOLUTE/PATH/TO/headmatch-gui
+Icon=audio-headphones
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=headphones;measurement;eq;pipewire;
+StartupNotify=true
