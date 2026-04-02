@@ -20,8 +20,8 @@ The current shipped state includes:
 
 ## Active
 
-1. Add GraphicEQ export for Equalizer APO on top of the shared objective layer.
-2. Keep the design compatible with a later fixed-band / GraphicEQ fitting mode without rewriting the objective/residual logic.
+1. Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer.
+2. Keep parametric PEQ and free-form GraphicEQ export available alongside the new fixed-band mode.
 
 ## Recently completed
 
