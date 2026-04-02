@@ -22,13 +22,6 @@ OFFLINE_STEPS = (
     "Both actions reuse the shared sweep and fitting pipeline.",
 )
 
-LAUNCH_HELP_STEPS = (
-    "Start HeadMatch from a terminal with 'headmatch-gui' after installation.",
-    "If the command is not found, activate the same virtualenv where you ran 'pip install -e .'.",
-    "To add a desktop launcher on Linux, copy docs/examples/headmatch.desktop into ~/.local/share/applications/.",
-    "Replace Exec=/ABSOLUTE/PATH/TO/headmatch-gui with the real path from 'command -v headmatch-gui' or your .venv/bin/headmatch-gui.",
-    "If launch still feels uncertain, run the Setup Check before your first measurement.",
-)
 
 
 SECTION_PAD = 12
@@ -110,26 +103,6 @@ def render_setup_check(ttk, frame, *, report: str, on_refresh, on_measure) -> No
     report_card = ttk.LabelFrame(frame, text="Readiness report", padding=SECTION_PAD)
     report_card.grid(row=3, column=0, sticky="ew", pady=(12, 0))
     ttk.Label(report_card, text=report, wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, sticky="w")
-
-
-def render_launch_help(ttk, frame, *, on_measure, on_setup_check) -> None:
-    ttk.Label(frame, text="Launch and install help", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        frame,
-        text="Use this when you want a quick reminder for starting HeadMatch from a desktop or virtualenv-based install. It reuses the same lightweight guidance as the README and desktop-entry example.",
-        wraplength=BODY_WRAP,
-        justify="left",
-    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-
-    steps = ttk.LabelFrame(frame, text="Quick start", padding=SECTION_PAD)
-    steps.grid(row=2, column=0, sticky="ew")
-    for idx, step in enumerate(LAUNCH_HELP_STEPS):
-        ttk.Label(steps, text=f"{idx + 1}. {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
-
-    actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
-    actions.grid(row=3, column=0, sticky="w")
-    ttk.Button(actions, text="Go to Measure", command=on_measure).grid(row=0, column=0, sticky="w")
-    ttk.Button(actions, text="Run Setup Check", command=on_setup_check).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
 
 def render_offline_wizard(ttk, frame, *, variables, on_prepare, on_fit) -> None:

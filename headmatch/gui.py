@@ -60,7 +60,6 @@ DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("measure-online", "Measure"),
     NavigationItem("setup-check", "Setup Check"),
-    NavigationItem("launch-help", "Launch Help"),
     NavigationItem("prepare-offline", "Prepare Offline"),
     NavigationItem("history", "Results"),
 )
@@ -220,9 +219,6 @@ class HeadMatchGuiApp:
         if key == "setup-check":
             self._render_setup_check()
             return
-        if key == "launch-help":
-            self._render_launch_help()
-            return
         if key == "prepare-offline":
             self._render_offline_wizard()
             return
@@ -243,14 +239,6 @@ class HeadMatchGuiApp:
             report=self.doctor_report_var.get(),
             on_refresh=self.refresh_setup_check,
             on_measure=lambda: self.show_view("measure-online"),
-        )
-
-    def _render_launch_help(self) -> None:
-        gui_views.render_launch_help(
-            self._ttk,
-            self.content,
-            on_measure=lambda: self.show_view("measure-online"),
-            on_setup_check=lambda: self.show_view("setup-check"),
         )
 
     def _render_offline_wizard(self) -> None:

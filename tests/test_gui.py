@@ -167,11 +167,10 @@ def test_navigation_items_cover_shell_sections():
     assert [item.key for item in NAV_ITEMS] == [
         "measure-online",
         "setup-check",
-        "launch-help",
         "prepare-offline",
         "history",
     ]
-    assert [item.label for item in NAV_ITEMS] == ["Measure", "Setup Check", "Launch Help", "Prepare Offline", "Results"]
+    assert [item.label for item in NAV_ITEMS] == ["Measure", "Setup Check", "Prepare Offline", "Results"]
 
 
 
@@ -196,15 +195,12 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
     assert seen["config"].pipewire_output_target == "usb-dac"
 
 
-def test_gui_copy_mentions_setup_and_launch_helpers():
+def test_gui_copy_mentions_setup_helpers():
     from headmatch import gui_views
 
     source = Path(gui_views.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
-    assert "headmatch-gui" in source
-    assert "docs/examples/headmatch.desktop" in source
-    assert "~/.local/share/applications/" in source
 
 
 
@@ -313,21 +309,9 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
-    assert nav_labels == ['Measure', 'Setup Check', 'Launch Help', 'Prepare Offline', 'Results']
+    assert nav_labels == ['Measure', 'Setup Check', 'Prepare Offline', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
-
-
-def test_create_app_includes_launch_help_view(tmp_path, fake_tk):
-    root = DummyRoot()
-    app = fake_tk.create_app(
-        root=root,
-        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / "out" / "session_01")), tmp_path / "config.json", False),
-    )
-
-    app.show_view('launch-help')
-
-    assert app.current_view.get() == 'launch-help'
 
 
 def test_create_app_includes_setup_check_view_and_refreshes_doctor_report(tmp_path, fake_tk):
