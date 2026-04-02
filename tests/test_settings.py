@@ -3,6 +3,7 @@ from __future__ import annotations
 from argparse import Namespace
 
 from headmatch.contracts import FrontendConfig
+from tests.config_fixtures import varied_config
 from headmatch.settings import (
     default_config_path,
     load_config,
@@ -70,22 +71,7 @@ def test_update_config_from_args_keeps_explicit_cli_values():
 
 def test_save_and_load_round_trip(tmp_path):
     path = tmp_path / "config.json"
-    original = FrontendConfig(
-        default_output_dir="out/random-session-17",
-        preferred_target_csv="targets/demo-random-17.csv",
-        pipewire_output_target="speakers-random-17",
-        pipewire_input_target="mic-random-17",
-        sample_rate=44117,
-        duration_s=6.7,
-        f_start_hz=27.0,
-        f_end_hz=19817.0,
-        pre_silence_s=0.37,
-        post_silence_s=0.93,
-        amplitude=0.17,
-        max_filters=11,
-        start_iterations=3,
-        iterate_iterations=5,
-    )
+    _suffix, original = varied_config(suffix="17cafefeed42abcd99aa99aa")
 
     save_config(original, path)
     loaded = load_config(path)

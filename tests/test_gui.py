@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from headmatch.contracts import FrontendConfig
+from tests.config_fixtures import varied_config
 from headmatch.gui import NAV_ITEMS, build_arg_parser, build_doctor_report, load_gui_state, main
 from headmatch.measure import PipeWireTargetSelection
 from headmatch.settings import save_config
@@ -495,50 +496,26 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
 
 
 def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
-    suffix = uuid4().hex
+    suffix, original = varied_config()
     config_path = tmp_path / f"gui-{suffix}.json"
-    sample_rate = 43200 + (int(suffix[:2], 16) % 1800)
-    duration_s = 4.5 + ((int(suffix[2:4], 16) % 15) / 10)
-    f_start_hz = 18.0 + (int(suffix[4:6], 16) % 25)
-    f_end_hz = 17000.0 + (int(suffix[6:8], 16) % 4000)
-    pre_silence_s = 0.2 + ((int(suffix[8:10], 16) % 5) / 10)
-    post_silence_s = 0.7 + ((int(suffix[10:12], 16) % 7) / 10)
-    amplitude = 0.12 + ((int(suffix[12:14], 16) % 7) / 100)
-    start_iterations = 2 + (int(suffix[14:16], 16) % 6)
-    max_filters = 4 + (int(suffix[16:18], 16) % 8)
-    original = FrontendConfig(
-        default_output_dir=f"out/{suffix}",
-        preferred_target_csv=f"targets/{suffix}.csv",
-        pipewire_output_target=f"playback-{suffix}",
-        pipewire_input_target=f"capture-{suffix}",
-        sample_rate=sample_rate,
-        duration_s=duration_s,
-        f_start_hz=f_start_hz,
-        f_end_hz=f_end_hz,
-        pre_silence_s=pre_silence_s,
-        post_silence_s=post_silence_s,
-        amplitude=amplitude,
-        start_iterations=start_iterations,
-        max_filters=max_filters,
-    )
     save_config(original, config_path)
 
     state = load_gui_state(config_path=config_path)
 
     assert state.config_path == config_path
-    assert state.default_output_dir == f"out/{suffix}"
-    assert state.preferred_target_csv == f"targets/{suffix}.csv"
-    assert state.pipewire_output_target == f"playback-{suffix}"
-    assert state.pipewire_input_target == f"capture-{suffix}"
-    assert state.sample_rate == sample_rate
-    assert state.duration_s == duration_s
-    assert state.f_start_hz == f_start_hz
-    assert state.f_end_hz == f_end_hz
-    assert state.pre_silence_s == pre_silence_s
-    assert state.post_silence_s == post_silence_s
-    assert state.amplitude == amplitude
-    assert state.start_iterations == start_iterations
-    assert state.max_filters == max_filters
+    assert state.default_output_dir == original.default_output_dir
+    assert state.preferred_target_csv == original.preferred_target_csv
+    assert state.pipewire_output_target == original.pipewire_output_target
+    assert state.pipewire_input_target == original.pipewire_input_target
+    assert state.sample_rate == original.sample_rate
+    assert state.duration_s == original.duration_s
+    assert state.f_start_hz == original.f_start_hz
+    assert state.f_end_hz == original.f_end_hz
+    assert state.pre_silence_s == original.pre_silence_s
+    assert state.post_silence_s == original.post_silence_s
+    assert state.amplitude == original.amplitude
+    assert state.start_iterations == original.start_iterations
+    assert state.max_filters == original.max_filters
 
 def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
     first = tmp_path / "session_01"

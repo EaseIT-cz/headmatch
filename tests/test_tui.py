@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from headmatch.contracts import FrontendConfig
+from tests.config_fixtures import varied_config
 from headmatch.settings import save_config
 from headmatch import tui
 
@@ -145,37 +146,9 @@ def test_run_tui_persists_selected_targets(monkeypatch, tmp_path):
 
 
 def test_run_tui_reads_explicit_config_file_with_randomized_values(monkeypatch, tmp_path):
-    suffix = uuid4().hex
+    suffix, config = varied_config()
     config_path = tmp_path / f"tui-{suffix}.json"
-    sample_rate = 43100 + (int(suffix[:2], 16) % 2000)
-    duration_s = 5.0 + ((int(suffix[2:4], 16) % 20) / 10)
-    f_start_hz = 15.0 + (int(suffix[4:6], 16) % 30)
-    f_end_hz = 18000.0 + (int(suffix[6:8], 16) % 3000)
-    pre_silence_s = 0.1 + ((int(suffix[8:10], 16) % 5) / 10)
-    post_silence_s = 0.6 + ((int(suffix[10:12], 16) % 7) / 10)
-    amplitude = 0.1 + ((int(suffix[12:14], 16) % 5) / 100)
-    max_filters = 6 + (int(suffix[14:16], 16) % 6)
-    start_iterations = 2 + (int(suffix[16:18], 16) % 4)
-    iterate_iterations = 3 + (int(suffix[18:20], 16) % 4)
-    save_config(
-        FrontendConfig(
-            default_output_dir=f"out/{suffix}",
-            pipewire_output_target=f"playback-{suffix}",
-            pipewire_input_target=f"capture-{suffix}",
-            preferred_target_csv=f"targets/{suffix}.csv",
-            sample_rate=sample_rate,
-            duration_s=duration_s,
-            f_start_hz=f_start_hz,
-            f_end_hz=f_end_hz,
-            pre_silence_s=pre_silence_s,
-            post_silence_s=post_silence_s,
-            amplitude=amplitude,
-            max_filters=max_filters,
-            start_iterations=start_iterations,
-            iterate_iterations=iterate_iterations,
-        ),
-        config_path,
-    )
+    save_config(config, config_path)
 
     calls = {}
 
@@ -191,18 +164,18 @@ def test_run_tui_reads_explicit_config_file_with_randomized_values(monkeypatch, 
     result = tui.run_tui(stdin=stdin, stdout=stdout, config_path=config_path)
 
     assert result.workflow == "start"
-    assert calls["output_dir"] == f"out/{suffix}"
-    assert calls["output_target"] == f"playback-{suffix}"
-    assert calls["input_target"] == f"capture-{suffix}"
-    assert calls["target_path"] == f"targets/{suffix}.csv"
-    assert calls["sweep_spec"].sample_rate == sample_rate
-    assert calls["sweep_spec"].duration_s == duration_s
-    assert calls["sweep_spec"].f_start == f_start_hz
-    assert calls["sweep_spec"].f_end == f_end_hz
-    assert calls["sweep_spec"].pre_silence_s == pre_silence_s
-    assert calls["sweep_spec"].post_silence_s == post_silence_s
-    assert calls["sweep_spec"].amplitude == amplitude
-    assert calls["max_filters"] == max_filters
-    assert calls["iterations"] == start_iterations
+    assert calls["output_dir"] == config.default_output_dir
+    assert calls["output_target"] == config.pipewire_output_target
+    assert calls["input_target"] == config.pipewire_input_target
+    assert calls["target_path"] == config.preferred_target_csv
+    assert calls["sweep_spec"].sample_rate == config.sample_rate
+    assert calls["sweep_spec"].duration_s == config.duration_s
+    assert calls["sweep_spec"].f_start == config.f_start_hz
+    assert calls["sweep_spec"].f_end == config.f_end_hz
+    assert calls["sweep_spec"].pre_silence_s == config.pre_silence_s
+    assert calls["sweep_spec"].post_silence_s == config.post_silence_s
+    assert calls["sweep_spec"].amplitude == config.amplitude
+    assert calls["max_filters"] == config.max_filters
+    assert calls["iterations"] == config.start_iterations
     assert f"Config path: {config_path}" in stdout.getvalue()
 
