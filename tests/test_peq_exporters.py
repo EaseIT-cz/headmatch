@@ -118,6 +118,28 @@ def test_export_camilladsp_snippet_uses_same_filter_payloads(tmp_path):
     assert payload['pipeline'][1]['names'] == ['R_1_highshelf']
 
 
+def test_export_equalizer_apo_orders_filters_by_frequency(tmp_path):
+    out = tmp_path / 'equalizer_apo_sorted.txt'
+    export_equalizer_apo_parametric_txt(
+        out,
+        [
+            PEQBand('peaking', 3055.84, 1.91, 0.66),
+            PEQBand('lowshelf', 105.0, 4.73, 0.7),
+            PEQBand('peaking', 155.68, 1.44, 0.45),
+        ],
+        [],
+    )
+
+    lines = out.read_text().splitlines()
+    filter_lines = [line for line in lines if line.startswith('Filter ')]
+
+    assert filter_lines == [
+        'Filter 1: ON LS Fc 105.00 Hz Gain 4.73 dB Q 0.70',
+        'Filter 2: ON PK Fc 155.68 Hz Gain 1.44 dB Q 0.45',
+        'Filter 3: ON PK Fc 3055.84 Hz Gain 1.91 dB Q 0.66',
+    ]
+
+
 def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_path):
     out = tmp_path / 'equalizer_apo.txt'
     export_equalizer_apo_parametric_txt(

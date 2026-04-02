@@ -24,11 +24,15 @@ def _band_payload(band: PEQBand) -> dict:
 
 
 
+def _bands_sorted_by_frequency(bands: Iterable[PEQBand]) -> list[PEQBand]:
+    return sorted(bands, key=lambda band: (band.freq, band.kind, band.q, band.gain_db))
+
+
 def _build_filter_bank(bands_left: List[PEQBand], bands_right: List[PEQBand]) -> tuple[dict, list[str], list[str]]:
     filters = {}
     left_names, right_names = [], []
     for channel_prefix, names, bands in (('L', left_names, bands_left), ('R', right_names, bands_right)):
-        for i, band in enumerate(bands, 1):
+        for i, band in enumerate(_bands_sorted_by_frequency(bands), 1):
             name = f'{channel_prefix}_{i}_{band.kind}'
             names.append(name)
             filters[name] = {'type': 'Biquad', 'parameters': _band_payload(band)}
@@ -110,9 +114,9 @@ def _apo_preamp_db(bands: Iterable[PEQBand]) -> float:
 
 def _format_apo_channel(channel: str, bands: List[PEQBand]) -> list[str]:
     lines = [f'Channel: {channel}', f'Preamp: {_apo_preamp_db(bands):.2f} dB']
-    for index, band in enumerate(bands, 1):
+    for index, band in enumerate(_bands_sorted_by_frequency(bands), 1):
         lines.append(
-            f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} ' 
+            f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} '
             f'Fc {band.freq:.2f} Hz Gain {band.gain_db:.2f} dB Q {band.q:.2f}'
         )
     return lines
