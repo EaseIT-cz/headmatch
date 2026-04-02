@@ -81,18 +81,28 @@ def _predicted_errors(out_dir: Path, sample_rate: int) -> dict[str, float]:
     _, right = load_fr_csv(out_dir / "measurement_right.csv")
     target_path = out_dir / "target_curve.csv"
     if target_path.exists():
-        _, target = load_fr_csv(target_path)
+        with target_path.open() as handle:
+            rows = [line.strip().split(',') for line in handle if line.strip()]
+        header = rows[0]
+        values = np.array([[float(cell) for cell in row[1:]] for row in rows[1:]], dtype=np.float64)
+        if header[1:] == ['left_target_db', 'right_target_db']:
+            left_target = values[:, 0]
+            right_target = values[:, 1]
+        else:
+            left_target = values[:, 0]
+            right_target = values[:, 0]
     else:
-        target = np.zeros_like(freqs)
+        left_target = np.zeros_like(freqs)
+        right_target = np.zeros_like(freqs)
     report = _read_json(out_dir / "fit_report.json")
 
     left_bands = [PEQBand(**band) for band in report["left_bands"]]
     right_bands = [PEQBand(**band) for band in report["right_bands"]]
 
-    left_before = _rms_error(left, target)
-    right_before = _rms_error(right, target)
-    left_after = _rms_error(left + peq_chain_response_db(freqs, sample_rate, left_bands), target)
-    right_after = _rms_error(right + peq_chain_response_db(freqs, sample_rate, right_bands), target)
+    left_before = _rms_error(left, left_target)
+    right_before = _rms_error(right, right_target)
+    left_after = _rms_error(left + peq_chain_response_db(freqs, sample_rate, left_bands), left_target)
+    right_after = _rms_error(right + peq_chain_response_db(freqs, sample_rate, right_bands), right_target)
 
     return {
         "left_before": left_before,
@@ -231,3 +241,33 @@ def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_out
     guide = (iter_dir / "README.txt").read_text()
     assert "headmatch iteration results" in guide
     assert "equalizer_apo.txt" in guide
+
+
+def test_fit_cli_relative_clone_target_uses_effective_channel_targets(monkeypatch, tmp_path: Path):
+    recording, spec = build_synthetic_recording(tmp_path)
+    out_dir = tmp_path / 'fit_relative'
+    _patch_cli_config(monkeypatch, tmp_path)
+
+    clone_target = tmp_path / 'clone_target.csv'
+    clone_target.write_text(
+        '# headmatch_target_semantics=relative\n'
+        'frequency_hz,target_db\n'
+        '20,2.5\n'
+        '1000,0\n'
+        '20000,-2.5\n'
+    )
+
+    cli.main([
+        'fit', '--recording', str(recording), '--out-dir', str(out_dir), '--target-csv', str(clone_target),
+        '--sample-rate', str(spec.sample_rate), '--duration', str(spec.duration_s), '--pre-silence', str(spec.pre_silence_s),
+        '--post-silence', str(spec.post_silence_s), '--amplitude', str(spec.amplitude), '--max-filters', '5',
+    ])
+
+    errors = _predicted_errors(out_dir, spec.sample_rate)
+    summary = _read_json(out_dir / 'run_summary.json')
+    target_curve_text = (out_dir / 'target_curve.csv').read_text().splitlines()[0]
+
+    assert errors['left_after'] < 0.8
+    assert errors['right_after'] < 0.8
+    assert summary['target'] == 'clone_target'
+    assert target_curve_text == 'frequency_hz,left_target_db,right_target_db'

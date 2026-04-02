@@ -106,7 +106,12 @@ def render_fit_graphs(
 
     freqs = result.freqs_hz
     target_resampled = resample_curve(target, freqs)
-    target_db = target_resampled.values_db
+    if target_resampled.semantics == 'relative':
+        left_target_db = result.left_db + target_resampled.values_db
+        right_target_db = result.right_db + target_resampled.values_db
+    else:
+        left_target_db = target_resampled.values_db
+        right_target_db = target_resampled.values_db
     left_fitted = result.left_db + peq_chain_response_db(freqs, sample_rate, left_bands)
     right_fitted = result.right_db + peq_chain_response_db(freqs, sample_rate, right_bands)
 
@@ -128,7 +133,7 @@ def render_fit_graphs(
                 ('Left raw', result.left_raw_db, '#9ca3af', ''),
                 ('Left measured', result.left_db, '#2563eb', ''),
                 ('Left fitted', left_fitted, '#16a34a', ''),
-                ('Target', target_db, '#dc2626', '8 6'),
+                ('Target', left_target_db, '#dc2626', '8 6'),
             ],
             70,
             80,
@@ -144,7 +149,7 @@ def render_fit_graphs(
                 ('Right raw', result.right_raw_db, '#9ca3af', ''),
                 ('Right measured', result.right_db, '#7c3aed', ''),
                 ('Right fitted', right_fitted, '#16a34a', ''),
-                ('Target', target_db, '#dc2626', '8 6'),
+                ('Target', right_target_db, '#dc2626', '8 6'),
             ],
             70,
             390,
@@ -154,9 +159,9 @@ def render_fit_graphs(
     )
     _write_svg(Path(paths['overview']), 1180, 690, 'HeadMatch fit overview', overview_body)
 
-    for side, measured, raw, fitted, color in (
-        ('left', result.left_db, result.left_raw_db, left_fitted, '#2563eb'),
-        ('right', result.right_db, result.right_raw_db, right_fitted, '#7c3aed'),
+    for side, measured, raw, fitted, side_target, color in (
+        ('left', result.left_db, result.left_raw_db, left_fitted, left_target_db, '#2563eb'),
+        ('right', result.right_db, result.right_raw_db, right_fitted, right_target_db, '#7c3aed'),
     ):
         body = [
             f'<text x="40" y="34" font-size="20" font-weight="bold">{side.capitalize()} channel fit</text>',
@@ -170,7 +175,7 @@ def render_fit_graphs(
                     ('Raw', raw, '#9ca3af', ''),
                     ('Measured', measured, color, ''),
                     ('Fitted', fitted, '#16a34a', ''),
-                    ('Target', target_db, '#dc2626', '8 6'),
+                    ('Target', side_target, '#dc2626', '8 6'),
                 ],
                 70,
                 80,

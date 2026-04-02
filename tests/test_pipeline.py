@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 from scipy import signal
 
-from headmatch.analysis import analyze_measurement
+from headmatch.analysis import MeasurementResult, analyze_measurement
 from headmatch.io_utils import write_wav
 from headmatch.peq import peq_chain_response_db
 from headmatch.pipeline import fit_from_measurement, iterative_measure_and_fit, process_single_measurement
@@ -202,3 +202,30 @@ def test_alignment_handles_long_delay_noise_and_channel_imbalance(tmp_path: Path
     assert np.isfinite(result.left_db).all()
     assert np.isfinite(result.right_db).all()
     assert np.max(np.abs(result.left_db - result.right_db)) > 0.25
+
+
+def test_relative_target_zero_delta_is_treated_as_noop_clone_match():
+    freqs = np.array([20.0, 1000.0, 20000.0])
+    result = MeasurementResult(
+        freqs_hz=freqs,
+        left_db=np.array([1.0, 0.0, -1.0]),
+        right_db=np.array([2.0, 0.0, -2.0]),
+        left_raw_db=np.array([1.0, 0.0, -1.0]),
+        right_raw_db=np.array([2.0, 0.0, -2.0]),
+        diagnostics={
+            'alignment_reference_score': 0.99,
+            'alignment_peak_ratio': 0.99,
+            'channel_mismatch_rms_db': 0.1,
+            'left_roughness_db': 0.1,
+            'right_roughness_db': 0.1,
+            'capture_rms_dbfs': -20.0,
+        },
+    )
+    target = TargetCurve(freqs, np.zeros_like(freqs), 'clone_delta', semantics='relative')
+
+    left_bands, right_bands, report = fit_from_measurement(result, target, 48000, max_filters=1)
+
+    assert left_bands == []
+    assert right_bands == []
+    assert report['predicted_left_rms_error_db'] == 0.0
+    assert report['predicted_right_rms_error_db'] == 0.0

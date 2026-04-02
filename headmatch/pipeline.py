@@ -41,6 +41,37 @@ class IterationSummary:
     right_max_error_db: float
 
 
+@dataclass
+class ResolvedTargetCurves:
+    base: TargetCurve
+    freqs_hz: np.ndarray
+    left_values_db: np.ndarray
+    right_values_db: np.ndarray
+
+    @property
+    def name(self) -> str:
+        return self.base.name
+
+    @property
+    def semantics(self) -> str:
+        return self.base.semantics
+
+
+def _resolve_target_curves(result: MeasurementResult, target: TargetCurve) -> ResolvedTargetCurves:
+    target_resampled = resample_curve(target, result.freqs_hz)
+    if target_resampled.semantics == 'relative':
+        left_values = result.left_db + target_resampled.values_db
+        right_values = result.right_db + target_resampled.values_db
+    else:
+        left_values = target_resampled.values_db
+        right_values = target_resampled.values_db
+    return ResolvedTargetCurves(
+        base=target_resampled,
+        freqs_hz=result.freqs_hz,
+        left_values_db=left_values,
+        right_values_db=right_values,
+    )
+
 
 def _confidence_penalty(value: float, good: float, bad: float) -> float:
     if value <= good:
@@ -209,7 +240,6 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
 
 def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: TargetCurve, left_bands: list[PEQBand], right_bands: list[PEQBand], report: dict, sample_rate: int) -> FrontendRunSummary:
     identity = get_app_identity()
-    target_resampled = resample_curve(target, result.freqs_hz)
     trust_summary = _summarize_trustworthiness(result, report)
     return FrontendRunSummary(
         schema_version=RUN_SUMMARY_SCHEMA_VERSION,
@@ -218,7 +248,7 @@ def _run_summary(kind: str, out_dir: Path, result: MeasurementResult, target: Ta
         out_dir=str(out_dir),
         sample_rate=sample_rate,
         frequency_points=int(len(result.freqs_hz)),
-        target=target_resampled.name,
+        target=target.name,
         filters=RunFilterCounts(left=len(left_bands), right=len(right_bands)),
         predicted_error_db=RunErrorSummary(
             left_rms=report['predicted_left_rms_error_db'],
@@ -251,8 +281,12 @@ def _write_fit_artifacts(
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
     export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
+    resolved_target = _resolve_target_curves(result, target)
     if write_target_curve_csv:
-        save_fr_csv(out_dir / 'target_curve.csv', result.freqs_hz, resample_curve(target, result.freqs_hz).values_db, 'target_db')
+        lines = ['frequency_hz,left_target_db,right_target_db']
+        for freq, left, right in zip(result.freqs_hz, resolved_target.left_values_db, resolved_target.right_values_db):
+            lines.append(f'{float(freq)},{float(left)},{float(right)}')
+        (out_dir / 'target_curve.csv').write_text('\n'.join(lines) + '\n')
     render_fit_graphs(out_dir, result, target, sample_rate, left_bands, right_bands)
     summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate)
     save_json(out_dir / 'fit_report.json', report)
@@ -271,15 +305,15 @@ def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, flo
 
 
 def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_rate: int, max_filters: int = 8) -> tuple[list[PEQBand], list[PEQBand], dict]:
-    target_resampled = resample_curve(target, result.freqs_hz)
-    left_eq_target = target_resampled.values_db - result.left_db
-    right_eq_target = target_resampled.values_db - result.right_db
+    resolved_target = _resolve_target_curves(result, target)
+    left_eq_target = resolved_target.left_values_db - result.left_db
+    right_eq_target = resolved_target.right_values_db - result.right_db
     left_bands = fit_peq(result.freqs_hz, left_eq_target, sample_rate, max_filters=max_filters)
     right_bands = fit_peq(result.freqs_hz, right_eq_target, sample_rate, max_filters=max_filters)
     left_pred = result.left_db + peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)
     right_pred = result.right_db + peq_chain_response_db(result.freqs_hz, sample_rate, right_bands)
-    l_rms, l_max = _metrics(left_pred, target_resampled.values_db)
-    r_rms, r_max = _metrics(right_pred, target_resampled.values_db)
+    l_rms, l_max = _metrics(left_pred, resolved_target.left_values_db)
+    r_rms, r_max = _metrics(right_pred, resolved_target.right_values_db)
     identity = get_app_identity()
     report = {
         'generated_by': identity.as_metadata(),

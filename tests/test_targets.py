@@ -88,3 +88,18 @@ def test_clone_target_matches_across_mixed_curve_source_shapes(tmp_path):
     assert curve.values_db[idx_100] == pytest.approx(-4.0, abs=0.25)
     assert curve.values_db[idx_10k] == pytest.approx(1.0, abs=0.25)
     assert curve.values_db[idx_20k] == pytest.approx(1.0, abs=0.25)
+
+
+def test_clone_target_round_trips_as_explicit_relative_target(tmp_path):
+    src = tmp_path / 'source.csv'
+    tgt = tmp_path / 'target.csv'
+    out = tmp_path / 'clone.csv'
+    src.write_text('frequency_hz,response_db\n20,1\n1000,0\n20000,-1\n')
+    tgt.write_text('frequency_hz,response_db\n20,3\n1000,0\n20000,1\n')
+
+    generated = clone_target_from_source_target(src, tgt, out)
+    loaded = load_curve(out)
+
+    assert generated.semantics == 'relative'
+    assert loaded.semantics == 'relative'
+    assert loaded.name == 'clone'
