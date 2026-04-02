@@ -26,6 +26,27 @@ def test_fit_peq_prefers_broad_shelves_for_edge_tilt():
     assert all(band.q <= 3.0 for band in bands if band.freq > 6000 and band.kind == 'peaking')
 
 
+def test_fit_peq_respects_filter_budget_when_edge_shelves_trigger():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target[freqs <= 120] = 4.0
+    target[freqs >= 8000] = -3.0
+
+    bands = fit_peq(freqs, target, sample_rate=48000, max_filters=1)
+
+    assert len(bands) == 1
+    assert bands[0].kind in {'lowshelf', 'highshelf'}
+
+
+def test_fit_peq_returns_no_bands_when_filter_budget_is_zero():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target[freqs <= 120] = 4.0
+    target[freqs >= 8000] = -3.0
+
+    assert fit_peq(freqs, target, sample_rate=48000, max_filters=0) == []
+
+
 def test_export_camilladsp_full_yaml_includes_clear_placeholders_and_metadata(tmp_path):
     out = tmp_path / 'camilla.yaml'
     export_camilladsp_filters_yaml(

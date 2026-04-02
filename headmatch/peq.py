@@ -94,7 +94,7 @@ def _same_sign_fraction(values: np.ndarray, sign: float) -> float:
 
 
 
-def _maybe_add_edge_shelf(bands: List[PEQBand], freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> None:
+def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> PEQBand | None:
     if kind == 'lowshelf':
         edge_mask = freqs_hz <= 140
         compare_mean = _band_mean(freqs_hz, eq_target, 180, 600)
@@ -107,15 +107,15 @@ def _maybe_add_edge_shelf(bands: List[PEQBand], freqs_hz: np.ndarray, eq_target:
         freq = 8500.0
 
     if not np.any(edge_mask):
-        return
+        return None
     edge_values = eq_target[edge_mask]
     if abs(edge_mean) < 1.25:
-        return
+        return None
     if abs(edge_mean - compare_mean) < 0.75:
-        return
+        return None
     if _same_sign_fraction(edge_values, edge_mean) < 0.7:
-        return
-    bands.append(PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7))
+        return None
+    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7)
 
 
 
@@ -152,9 +152,18 @@ def fit_peq(
     eq_target = fractional_octave_smoothing(freqs_hz, target_eq_db, fraction=8)
     bands: List[PEQBand] = []
     weights = _residual_priority_weights(freqs_hz)
+    max_filters = max(int(max_filters), 0)
 
-    _maybe_add_edge_shelf(bands, freqs_hz, eq_target, kind='lowshelf', max_gain_db=max_gain_db)
-    _maybe_add_edge_shelf(bands, freqs_hz, eq_target, kind='highshelf', max_gain_db=max_gain_db)
+    shelf_candidates = [
+        candidate
+        for candidate in (
+            _edge_shelf_candidate(freqs_hz, eq_target, kind='lowshelf', max_gain_db=max_gain_db),
+            _edge_shelf_candidate(freqs_hz, eq_target, kind='highshelf', max_gain_db=max_gain_db),
+        )
+        if candidate is not None
+    ]
+    shelf_candidates.sort(key=lambda band: abs(band.gain_db), reverse=True)
+    bands.extend(shelf_candidates[:max_filters])
 
     for _ in range(max_filters - len(bands)):
         current = peq_chain_response_db(freqs_hz, sample_rate, bands)
