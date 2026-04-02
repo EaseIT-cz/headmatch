@@ -37,10 +37,16 @@ def test_version_flag_reports_canonical_version(capsys):
 def test_start_dispatches_guided_online_workflow(monkeypatch, capsys, tmp_path):
     calls = {}
 
+    monkeypatch.setattr(
+        "headmatch.cli.load_or_create_config",
+        lambda _path=None: (FrontendConfig(), tmp_path / "config.json", False),
+    )
+
     def fake_iterative_measure_and_fit(**kwargs):
         calls.update(kwargs)
 
     monkeypatch.setattr("headmatch.pipeline.iterative_measure_and_fit", fake_iterative_measure_and_fit)
+    monkeypatch.setattr("headmatch.cli.save_config", lambda *_args, **_kwargs: None)
 
     cli.main(["start", "--out-dir", str(tmp_path)])
 
