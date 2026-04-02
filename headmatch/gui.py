@@ -128,12 +128,27 @@ class HeadMatchGuiApp:
         self.content = None
 
         self.root.title(f"HeadMatch {state.version_display}")
-        self.root.minsize(920, 580)
+        self.root.minsize(880, 560)
+        self._configure_theme_defaults()
         self._build_shell()
         self.show_view(state.current_view)
 
     def build_history_selection(self):
         return build_history_selection(self.history_root_var.get(), self.state.config_path.parent)
+
+    def _configure_theme_defaults(self) -> None:
+        style_factory = getattr(self._ttk, "Style", None)
+        if style_factory is None:
+            return
+        styles = style_factory(self.root)
+        try:
+            current_theme = styles.theme_use()
+        except Exception:
+            current_theme = None
+        if current_theme:
+            styles.theme_use(current_theme)
+        styles.configure("Title.TLabel", font=("TkDefaultFont", 14, "bold"))
+        styles.configure("Heading.TLabel", font=("TkDefaultFont", 10, "bold"))
 
     def _build_shell(self) -> None:
         ttk = self._ttk
@@ -141,24 +156,24 @@ class HeadMatchGuiApp:
         root.columnconfigure(1, weight=1)
         root.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(root, padding=(20, 18, 20, 12))
+        header = ttk.Frame(root, padding=(16, 14, 16, 10))
         header.grid(row=0, column=0, columnspan=2, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="HeadMatch", font=("TkDefaultFont", 18, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text=f"Version {self.state.version_display}", font=("TkDefaultFont", 12, "bold")).grid(row=0, column=1, sticky="e")
-        ttk.Label(header, text="A guided desktop shell for headphone measurement, fitting, and beginner-friendly review.").grid(
+        ttk.Label(header, text="HeadMatch", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text=f"Version {self.state.version_display}", style="Heading.TLabel").grid(row=0, column=1, sticky="e")
+        ttk.Label(header, text="Guided headphone measurement, fitting, and results review.", wraplength=560, justify="left").grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
-        nav = ttk.Frame(root, padding=(20, 8, 12, 20))
+        nav = ttk.Frame(root, padding=(16, 8, 10, 16))
         nav.grid(row=1, column=0, sticky="nsw")
-        ttk.Label(nav, text="Workflows", font=("TkDefaultFont", 11, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(nav, text="Workflows", style="Heading.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
         for idx, item in enumerate(NAV_ITEMS, start=1):
-            ttk.Button(nav, text=f"{item.label}\n{item.description}", command=lambda key=item.key: self.show_view(key), width=28).grid(
+            ttk.Button(nav, text=f"{item.label}\n{item.description}", command=lambda key=item.key: self.show_view(key)).grid(
                 row=idx, column=0, sticky="ew", pady=4
             )
 
-        self.content = ttk.Frame(root, padding=(12, 8, 20, 20))
+        self.content = ttk.Frame(root, padding=(10, 8, 16, 16))
         self.content.grid(row=1, column=1, sticky="nsew")
         self.content.columnconfigure(0, weight=1)
 
@@ -209,15 +224,15 @@ class HeadMatchGuiApp:
         ttk = self._ttk
         frame = self.content
         frame.rowconfigure(3, weight=1)
-        ttk.Label(frame, text="Results", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Results", style="Title.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
             frame,
-            text="Browse recent runs by scanning for run_summary.json files. This uses the same shared history loader as the terminal UI.",
-            wraplength=620,
+            text="Browse recent runs by scanning for run_summary.json files.",
+            wraplength=560,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(8, 12))
 
-        controls = ttk.LabelFrame(frame, text="Search", padding=16)
+        controls = ttk.LabelFrame(frame, text="Search", padding=12)
         controls.grid(row=2, column=0, sticky="ew")
         controls.columnconfigure(1, weight=1)
         ttk.Label(controls, text="Search folder").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=(0, 8))

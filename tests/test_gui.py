@@ -97,6 +97,22 @@ class DummyTtk:
     Scrollbar = DummyWidget
 
 
+class DummyStyle:
+    def __init__(self, *_args, **_kwargs):
+        self.current_theme = "default"
+
+    def theme_use(self, theme=None):
+        if theme is not None:
+            self.current_theme = theme
+        return self.current_theme
+
+    def configure(self, *_args, **_kwargs):
+        return None
+
+
+DummyTtk.Style = DummyStyle
+
+
 @pytest.fixture
 def fake_tk(monkeypatch):
     import headmatch.gui as gui
@@ -258,7 +274,7 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk):
     )
 
     assert root.title_value == 'HeadMatch 0.2.0'
-    assert root.minsize_value == (920, 580)
+    assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
 
