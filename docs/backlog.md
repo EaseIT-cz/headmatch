@@ -20,8 +20,8 @@ The current shipped state includes:
 
 ## Active
 
-1. Add an exact-count PEQ mode so device-constrained workflows can request exactly N parametric bands instead of only up-to-N conservative fits.
-2. Keep the design compatible with a later GraphicEQ / fixed-band mode without rewriting the fit objective layer.
+1. Add GraphicEQ export for Equalizer APO on top of the shared objective layer.
+2. Keep the design compatible with a later fixed-band / GraphicEQ fitting mode without rewriting the objective/residual logic.
 
 ## Recently completed
 
