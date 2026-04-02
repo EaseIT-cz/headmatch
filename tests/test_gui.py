@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from headmatch.contracts import FrontendConfig
-from headmatch.gui import NAV_ITEMS, build_arg_parser, load_gui_state, main
+from headmatch.gui import NAV_ITEMS, build_arg_parser, build_doctor_report, load_gui_state, main
 from headmatch.measure import PipeWireTargetSelection
 from headmatch.settings import save_config
 
@@ -166,10 +166,11 @@ def test_load_gui_state_uses_safe_defaults_when_config_is_empty(tmp_path):
 def test_navigation_items_cover_shell_sections():
     assert [item.key for item in NAV_ITEMS] == [
         "measure-online",
+        "setup-check",
         "prepare-offline",
         "history",
     ]
-    assert [item.label for item in NAV_ITEMS] == ["Measure", "Prepare Offline", "Results"]
+    assert [item.label for item in NAV_ITEMS] == ["Measure", "Setup Check", "Prepare Offline", "Results"]
 
 
 
@@ -179,6 +180,19 @@ def test_online_steps_explain_playback_vs_capture_targets():
     assert any("Playback target = the DAC, headphones, speakers, or interface output" in step for step in gui_views.ONLINE_STEPS)
     assert any("Capture target = the mic, recorder, or interface input" in step for step in gui_views.ONLINE_STEPS)
     assert any("headmatch list-targets" in step for step in gui_views.ONLINE_STEPS)
+
+
+def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypatch):
+    seen = {}
+
+    monkeypatch.setattr("headmatch.gui.collect_doctor_checks", lambda config_path, config: seen.update({"path": config_path, "config": config}) or ["check"])
+    monkeypatch.setattr("headmatch.gui.format_doctor_report", lambda checks, *, config_path: f"report for {config_path.name}: {checks[0]}")
+
+    report = build_doctor_report(tmp_path / "config.json", FrontendConfig(pipewire_output_target="usb-dac"))
+
+    assert report == "report for config.json: check"
+    assert seen["path"] == tmp_path / "config.json"
+    assert seen["config"].pipewire_output_target == "usb-dac"
 
 
 def test_home_and_online_copy_mentions_setup_helpers():
@@ -295,9 +309,27 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
-    assert nav_labels == ['Measure', 'Prepare Offline', 'Results']
+    assert nav_labels == ['Measure', 'Setup Check', 'Prepare Offline', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
+
+
+def test_create_app_includes_setup_check_view_and_refreshes_doctor_report(tmp_path, fake_tk):
+    calls = {}
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / "out" / "session_01")), tmp_path / "config.json", False),
+        doctor_report_runner=lambda config_path, config: calls.update({"config_path": config_path, "config": config}) or f"HeadMatch doctor\nConfig path: {config_path}",
+    )
+
+    app.show_view('setup-check')
+
+    assert app.doctor_report_var.get().startswith('HeadMatch doctor')
+    assert calls['config_path'] == tmp_path / 'config.json'
+    assert calls['config'].default_output_dir == str(tmp_path / 'out' / 'session_01')
+    assert calls['config'].start_iterations == 1
+    assert calls['config'].max_filters == 8
 
 
 def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, fake_tk, monkeypatch):

@@ -9,7 +9,13 @@ from typing import Callable
 
 from .app_identity import get_app_identity
 from .contracts import FrontendConfig
-from .measure import OfflineMeasurementPlan, collect_pipewire_target_selection, prepare_offline_measurement
+from .measure import (
+    OfflineMeasurementPlan,
+    collect_doctor_checks,
+    collect_pipewire_target_selection,
+    format_doctor_report,
+    prepare_offline_measurement,
+)
 from .pipeline import iterative_measure_and_fit, process_single_measurement
 from .history import build_history_selection
 from . import gui_views
@@ -48,13 +54,19 @@ ConfigLoader = Callable[[str | Path | None], tuple[FrontendConfig, Path, bool]]
 OnlineRunner = Callable[..., list[dict]]
 OfflinePrepareRunner = Callable[[SweepSpec, OfflineMeasurementPlan], dict]
 OfflineFitRunner = Callable[..., dict]
+DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 
 
 NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("measure-online", "Measure"),
+    NavigationItem("setup-check", "Setup Check"),
     NavigationItem("prepare-offline", "Prepare Offline"),
     NavigationItem("history", "Results"),
 )
+
+
+def build_doctor_report(config_path: Path, config: FrontendConfig) -> str:
+    return format_doctor_report(collect_doctor_checks(config_path, config), config_path=config_path)
 
 
 
@@ -95,6 +107,7 @@ class HeadMatchGuiApp:
         online_runner: OnlineRunner = iterative_measure_and_fit,
         offline_prepare_runner: OfflinePrepareRunner = prepare_offline_measurement,
         offline_fit_runner: OfflineFitRunner = process_single_measurement,
+        doctor_report_runner: DoctorReportRunner = build_doctor_report,
     ):
         import tkinter as tk
         from tkinter import ttk
@@ -105,6 +118,7 @@ class HeadMatchGuiApp:
         self._online_runner = online_runner
         self._offline_prepare_runner = offline_prepare_runner
         self._offline_fit_runner = offline_fit_runner
+        self._doctor_report_runner = doctor_report_runner
         self._task_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self._active_task_name: str | None = None
         self._last_completion_steps: tuple[str, ...] = ()
@@ -126,6 +140,7 @@ class HeadMatchGuiApp:
         self.progress_body_var = tk.StringVar(master=root, value="")
         self.completion_title_var = tk.StringVar(master=root, value="")
         self.completion_body_var = tk.StringVar(master=root, value="")
+        self.doctor_report_var = tk.StringVar(master=root, value="")
         self.content = None
 
         self.root.title(f"HeadMatch {state.version_display}")
@@ -201,6 +216,9 @@ class HeadMatchGuiApp:
         if key == "measure-online":
             self._render_online_wizard()
             return
+        if key == "setup-check":
+            self._render_setup_check()
+            return
         if key == "prepare-offline":
             self._render_offline_wizard()
             return
@@ -211,6 +229,17 @@ class HeadMatchGuiApp:
 
     def _render_online_wizard(self) -> None:
         gui_views.render_online_wizard(self._ttk, self.content, variables=self, on_start=self.start_online_measurement)
+
+    def _render_setup_check(self) -> None:
+        if not self.doctor_report_var.get().strip():
+            self.refresh_setup_check()
+        gui_views.render_setup_check(
+            self._ttk,
+            self.content,
+            report=self.doctor_report_var.get(),
+            on_refresh=self.refresh_setup_check,
+            on_measure=lambda: self.show_view("measure-online"),
+        )
 
     def _render_offline_wizard(self) -> None:
         gui_views.render_offline_wizard(
@@ -234,6 +263,37 @@ class HeadMatchGuiApp:
             on_home=lambda: self.show_view("measure-online"),
             on_history=lambda: self.show_view("history"),
         )
+
+    def refresh_setup_check(self) -> None:
+        report = self._doctor_report_runner(
+            self.state.config_path,
+            FrontendConfig(
+                default_output_dir=self.output_dir_var.get().strip() or None,
+                preferred_target_csv=self.target_csv_var.get().strip() or None,
+                pipewire_output_target=self.output_target_var.get().strip() or None,
+                pipewire_input_target=self.input_target_var.get().strip() or None,
+                sample_rate=self.state.sample_rate,
+                duration_s=self.state.duration_s,
+                f_start_hz=self.state.f_start_hz,
+                f_end_hz=self.state.f_end_hz,
+                pre_silence_s=self.state.pre_silence_s,
+                post_silence_s=self.state.post_silence_s,
+                amplitude=self.state.amplitude,
+                start_iterations=self._parse_positive_int(self.iterations_var.get().strip(), "Iterations"),
+                max_filters=self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters"),
+            ),
+        )
+        self.doctor_report_var.set(report)
+        if self.current_view.get() == "setup-check":
+            for child in self.content.winfo_children():
+                child.destroy()
+            gui_views.render_setup_check(
+                self._ttk,
+                self.content,
+                report=report,
+                on_refresh=self.refresh_setup_check,
+                on_measure=lambda: self.show_view("measure-online"),
+            )
 
     def _render_history(self) -> None:
         import tkinter as tk
@@ -458,6 +518,7 @@ def create_app(
     online_runner: OnlineRunner = iterative_measure_and_fit,
     offline_prepare_runner: OfflinePrepareRunner = prepare_offline_measurement,
     offline_fit_runner: OfflineFitRunner = process_single_measurement,
+    doctor_report_runner: DoctorReportRunner = build_doctor_report,
 ):
     if root is None:
         import tkinter as tk
@@ -470,6 +531,7 @@ def create_app(
         online_runner=online_runner,
         offline_prepare_runner=offline_prepare_runner,
         offline_fit_runner=offline_fit_runner,
+        doctor_report_runner=doctor_report_runner,
     )
 
 
