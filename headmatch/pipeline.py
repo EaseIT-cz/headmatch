@@ -18,6 +18,7 @@ from .contracts import (
 from .exporters import (
     export_camilladsp_filter_snippet_yaml,
     export_camilladsp_filters_yaml,
+    export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
 from .io_utils import save_fr_csv, save_json
@@ -169,7 +170,8 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
         files = [
             ('run_summary.json', 'Plain-language machine-readable summary of the run, trust score, warnings, and predicted error after EQ.'),
             ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether the fit looks trustworthy.'),
-            ('equalizer_apo.txt', 'Ready-to-load Equalizer APO preset file for this result.'),
+            ('equalizer_apo.txt', 'Ready-to-load Equalizer APO parametric preset file for this result.'),
+            ('equalizer_apo_graphiceq.txt', 'Equalizer APO GraphicEQ-format preset built from the shared effective correction target.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template. Replace the capture/playback device placeholders before use.'),
             ('camilladsp_filters_only.yaml', 'Filters and pipeline only, for merging into an existing CamillaDSP config.'),
             ('target_curve.csv', 'The target curve actually used for fitting on the analysis frequency grid.'),
@@ -181,7 +183,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
         ]
         next_steps = [
             'Open run_summary.json first if you want the quickest overview, including the trust/confidence summary.',
-            'Use equalizer_apo.txt for Equalizer APO, or use the CamillaDSP YAML files for CamillaDSP.',
+            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for GraphicEQ, or the CamillaDSP YAML files for CamillaDSP.',
             'If the result still looks off, repeat the measurement with a fresh reseat before adding more filters.',
         ]
     else:
@@ -192,7 +194,8 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             ('recording.wav', 'The recorded response captured for this iteration.'),
             ('run_summary.json', 'Summary of this iteration, including trust/confidence cues and predicted error after EQ.'),
             ('fit_report.json', 'Detailed PEQ band list plus diagnostics used to judge whether this iteration looks trustworthy.'),
-            ('equalizer_apo.txt', 'Equalizer APO preset file for this iteration.'),
+            ('equalizer_apo.txt', 'Equalizer APO parametric preset file for this iteration.'),
+            ('equalizer_apo_graphiceq.txt', 'Equalizer APO GraphicEQ-format preset for this iteration.'),
             ('camilladsp_full.yaml', 'Full CamillaDSP config template for this iteration.'),
             ('camilladsp_filters_only.yaml', 'Filters-only CamillaDSP snippet for this iteration.'),
             ('measurement_left.csv', 'Estimated left-channel response for this iteration.'),
@@ -202,7 +205,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
             ('fit_right.svg', 'Right-channel SVG graph for closer inspection of raw, measured, target, and fitted curves.'),
         ]
         next_steps = [
-            'Use equalizer_apo.txt for Equalizer APO, or use the CamillaDSP YAML files for CamillaDSP.',
+            'Use equalizer_apo.txt for Equalizer APO parametric filters, equalizer_apo_graphiceq.txt for GraphicEQ, or the CamillaDSP YAML files for CamillaDSP.',
             'Compare this folder with the other iter_* folders if you want to see whether the predicted residual improved.',
             'Check the top-level iterations_summary.json for the per-iteration error overview.',
         ]
@@ -284,6 +287,12 @@ def _write_fit_artifacts(
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
     export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
     resolved_target = _resolve_target_curves(result, target)
+    export_equalizer_apo_graphiceq_txt(
+        out_dir / 'equalizer_apo_graphiceq.txt',
+        result.freqs_hz,
+        resolved_target.left_values_db - result.left_db,
+        resolved_target.right_values_db - result.right_db,
+    )
     if write_target_curve_csv:
         lines = ['frequency_hz,left_target_db,right_target_db']
         for freq, left, right in zip(result.freqs_hz, resolved_target.left_values_db, resolved_target.right_values_db):

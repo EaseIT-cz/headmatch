@@ -342,6 +342,7 @@ A typical fit output folder contains:
 - `measurement_left.csv`
 - `measurement_right.csv`
 - `equalizer_apo.txt`
+- `equalizer_apo_graphiceq.txt`
 - `camilladsp_full.yaml`
 - `camilladsp_filters_only.yaml`
 - `fit_overview.svg`
@@ -351,7 +352,7 @@ A typical fit output folder contains:
 The general rule is:
 - open `README.txt` if you want the human explanation
 - open `run_summary.json` if you want the stable machine-readable summary, confidence score, and warnings
-- use `equalizer_apo.txt` for Equalizer APO, or one of the CamillaDSP YAML files for CamillaDSP
+- use `equalizer_apo.txt` for Equalizer APO parametric filters, `equalizer_apo_graphiceq.txt` for Equalizer APO GraphicEQ, or one of the CamillaDSP YAML files for CamillaDSP
 
 ---
 

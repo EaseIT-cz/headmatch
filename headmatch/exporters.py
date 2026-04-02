@@ -136,3 +136,36 @@ def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBa
     ]
     path.write_text('\n'.join(lines))
     return path
+
+
+def _format_graphiceq_series(freqs_hz: Iterable[float], gains_db: Iterable[float]) -> str:
+    entries = [f'{float(freq):.2f} {float(gain):.2f}' for freq, gain in zip(freqs_hz, gains_db)]
+    return 'GraphicEQ: ' + '; '.join(entries)
+
+
+def export_equalizer_apo_graphiceq_txt(
+    path: str | Path,
+    freqs_hz: Iterable[float],
+    gains_left_db: Iterable[float],
+    gains_right_db: Iterable[float],
+) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    freqs_hz = list(freqs_hz)
+    gains_left_db = list(gains_left_db)
+    gains_right_db = list(gains_right_db)
+    lines = [
+        '; headmatch Equalizer APO GraphicEQ preset',
+        '; Generated from the shared effective correction target on the analysis frequency grid.',
+        '',
+        'Channel: L',
+        f'Preamp: {round(-max(0.0, max(gains_left_db, default=0.0)), 2):.2f} dB',
+        _format_graphiceq_series(freqs_hz, gains_left_db),
+        '',
+        'Channel: R',
+        f'Preamp: {round(-max(0.0, max(gains_right_db, default=0.0)), 2):.2f} dB',
+        _format_graphiceq_series(freqs_hz, gains_right_db),
+        '',
+    ]
+    path.write_text('\n'.join(lines))
+    return path

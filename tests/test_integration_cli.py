@@ -169,6 +169,7 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     assert (out_dir / "camilladsp_full.yaml").exists()
     assert (out_dir / "camilladsp_filters_only.yaml").exists()
     assert (out_dir / "equalizer_apo.txt").exists()
+    assert (out_dir / "equalizer_apo_graphiceq.txt").exists()
     assert (out_dir / "measurement_left.csv").exists()
     assert (out_dir / "measurement_right.csv").exists()
     assert (out_dir / "target_curve.csv").exists()
@@ -179,6 +180,7 @@ def test_fit_cli_end_to_end_on_synthetic_recording(monkeypatch, tmp_path: Path):
     assert "headmatch fit results" in guide
     assert "camilladsp_full.yaml" in guide
     assert "equalizer_apo.txt" in guide
+    assert "equalizer_apo_graphiceq.txt" in guide
 
 
 def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_outputs(monkeypatch, tmp_path: Path):
@@ -235,6 +237,7 @@ def test_start_cli_online_workflow_uses_shared_pipeline_and_writes_iteration_out
     assert (iter_dir / "camilladsp_full.yaml").exists()
     assert (iter_dir / "camilladsp_filters_only.yaml").exists()
     assert (iter_dir / "equalizer_apo.txt").exists()
+    assert (iter_dir / "equalizer_apo_graphiceq.txt").exists()
     assert (iter_dir / "recording.wav").exists()
     assert (iter_dir / "sweep.wav").exists()
     assert (iter_dir / "fit_overview.svg").exists()

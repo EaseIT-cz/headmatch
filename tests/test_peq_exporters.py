@@ -6,6 +6,7 @@ import yaml
 from headmatch.exporters import (
     export_camilladsp_filter_snippet_yaml,
     export_camilladsp_filters_yaml,
+    export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
 from headmatch.peq import FilterBudget, PEQBand, fit_peq
@@ -158,6 +159,26 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
     assert 'Channel: R' in text
     assert 'Preamp: 0.00 dB' in text
     assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.70' in text
+
+
+def test_export_equalizer_apo_graphiceq_txt_uses_official_graphiceq_syntax(tmp_path):
+    out = tmp_path / 'equalizer_apo_graphiceq.txt'
+    export_equalizer_apo_graphiceq_txt(
+        out,
+        [20.0, 1000.0, 20000.0],
+        [3.5, -1.25, 0.0],
+        [0.0, 1.0, -2.5],
+    )
+
+    text = out.read_text()
+
+    assert '; headmatch Equalizer APO GraphicEQ preset' in text
+    assert 'Channel: L' in text
+    assert 'Preamp: -3.50 dB' in text
+    assert 'GraphicEQ: 20.00 3.50; 1000.00 -1.25; 20000.00 0.00' in text
+    assert 'Channel: R' in text
+    assert 'Preamp: -1.00 dB' in text
+    assert 'GraphicEQ: 20.00 0.00; 1000.00 1.00; 20000.00 -2.50' in text
 
 
 def test_fit_peq_searches_past_rejected_nearby_candidates_to_use_more_budget():
