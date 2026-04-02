@@ -52,6 +52,15 @@ def add_entry_row(ttk, parent, row: int, label: str, variable) -> None:
     ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
 
 
+def add_picker_row(ttk, parent, row: int, label: str, variable, *, button_text: str, command) -> None:
+    ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=FIELD_PAD_Y)
+    entry_frame = ttk.Frame(parent)
+    entry_frame.grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
+    entry_frame.columnconfigure(0, weight=1)
+    ttk.Entry(entry_frame, textvariable=variable).grid(row=0, column=0, sticky="ew")
+    ttk.Button(entry_frame, text=button_text, command=command).grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+
 def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     ttk.Label(frame, text="Online measurement wizard", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
@@ -68,10 +77,10 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     form = ttk.LabelFrame(frame, text="Run details", padding=SECTION_PAD)
     form.grid(row=3, column=0, sticky="ew", pady=(12, 0))
     form.columnconfigure(1, weight=1)
-    add_entry_row(ttk, form, 0, "Output folder", variables.output_dir_var)
+    add_picker_row(ttk, form, 0, "Output folder", variables.output_dir_var, button_text="Browse…", command=variables.choose_output_dir)
     add_combobox_row(ttk, form, 1, "Playback target", variables.output_target_var, variables.output_target_options, empty_label="No playback targets found")
     add_combobox_row(ttk, form, 2, "Capture target", variables.input_target_var, variables.input_target_options, empty_label="No capture targets found")
-    add_entry_row(ttk, form, 3, "Target CSV (optional)", variables.target_csv_var)
+    add_picker_row(ttk, form, 3, "Target CSV (optional)", variables.target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
     add_entry_row(ttk, form, 4, "Iterations", variables.iterations_var)
     add_entry_row(ttk, form, 5, "Max PEQ filters", variables.max_filters_var)
 
@@ -121,16 +130,16 @@ def render_offline_wizard(ttk, frame, *, variables, on_prepare, on_fit) -> None:
     prep = ttk.LabelFrame(frame, text="Step A — prepare the recorder package", padding=SECTION_PAD)
     prep.grid(row=3, column=0, sticky="ew", pady=(12, 0))
     prep.columnconfigure(1, weight=1)
-    add_entry_row(ttk, prep, 0, "Package folder", variables.output_dir_var)
+    add_picker_row(ttk, prep, 0, "Package folder", variables.output_dir_var, button_text="Browse…", command=variables.choose_output_dir)
     add_entry_row(ttk, prep, 1, "Notes (optional)", variables.offline_notes_var)
     ttk.Button(prep, text="Write sweep package", command=on_prepare).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
     fit = ttk.LabelFrame(frame, text="Step B — fit an imported recording", padding=SECTION_PAD)
     fit.grid(row=4, column=0, sticky="ew", pady=(12, 0))
     fit.columnconfigure(1, weight=1)
-    add_entry_row(ttk, fit, 0, "Recorded WAV", variables.offline_recording_var)
-    add_entry_row(ttk, fit, 1, "Fit output folder", variables.offline_fit_output_var)
-    add_entry_row(ttk, fit, 2, "Target CSV (optional)", variables.target_csv_var)
+    add_picker_row(ttk, fit, 0, "Recorded WAV", variables.offline_recording_var, button_text="Browse…", command=variables.choose_offline_recording)
+    add_picker_row(ttk, fit, 1, "Fit output folder", variables.offline_fit_output_var, button_text="Browse…", command=variables.choose_offline_fit_output_dir)
+    add_picker_row(ttk, fit, 2, "Target CSV (optional)", variables.target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
     add_entry_row(ttk, fit, 3, "Max PEQ filters", variables.max_filters_var)
     ttk.Button(fit, text="Fit imported recording", command=on_fit).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
 

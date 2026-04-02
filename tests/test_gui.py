@@ -117,6 +117,14 @@ class DummyStyle:
         return None
 
 
+class DummyFileDialog:
+    def askdirectory(self, **_kwargs):
+        return ""
+
+    def askopenfilename(self, **_kwargs):
+        return ""
+
+
 DummyTtk.Style = DummyStyle
 
 
@@ -126,6 +134,7 @@ def fake_tk(monkeypatch):
 
     monkeypatch.setitem(sys.modules, 'tkinter', SimpleNamespace(StringVar=DummyVar, ttk=DummyTtk, Canvas=DummyWidget))
     monkeypatch.setitem(sys.modules, 'tkinter.ttk', DummyTtk)
+    monkeypatch.setattr(gui, 'filedialog', DummyFileDialog())
     return gui
 
 
@@ -595,3 +604,90 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
     fields = {field.label: (field.left, field.right) for field in selection.comparison.fields}
     assert fields["Target"] == ("custom", "flat")
     assert fields["Filters (L/R)"] == ("5/6", "4/4")
+
+
+def test_gui_views_include_browse_buttons_for_major_path_fields():
+    from headmatch import gui_views
+
+    source = Path(gui_views.__file__).read_text()
+    assert source.count('button_text="Browse…"') >= 5
+
+
+def test_choose_output_dir_updates_entry_but_keeps_manual_editing_available(tmp_path, fake_tk, monkeypatch):
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    monkeypatch.setattr(fake_tk.filedialog, 'askdirectory', lambda **kwargs: str(tmp_path / 'chosen-output'))
+
+    app.output_dir_var.set('manual/output')
+    app.choose_output_dir()
+
+    assert app.output_dir_var.get() == str(tmp_path / 'chosen-output')
+    app.output_dir_var.set('manual/override')
+    assert app.output_dir_var.get() == 'manual/override'
+
+
+def test_choose_target_csv_uses_native_picker_for_csv_fields(tmp_path, fake_tk, monkeypatch):
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    seen = {}
+
+    def fake_open(**kwargs):
+        seen.update(kwargs)
+        return str(tmp_path / 'targets' / 'custom.csv')
+
+    monkeypatch.setattr(fake_tk.filedialog, 'askopenfilename', fake_open)
+
+    app.choose_target_csv()
+
+    assert app.target_csv_var.get() == str(tmp_path / 'targets' / 'custom.csv')
+    assert seen['title'] == 'Choose target CSV'
+    assert ('CSV files', '*.csv') in seen['filetypes']
+
+
+def test_choose_offline_recording_and_fit_output_use_native_pickers(tmp_path, fake_tk, monkeypatch):
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'offline')), tmp_path / 'config.json', False),
+    )
+
+    open_calls = {}
+    dir_calls = {}
+
+    monkeypatch.setattr(fake_tk.filedialog, 'askopenfilename', lambda **kwargs: open_calls.update(kwargs) or str(tmp_path / 'captures' / 'recording.wav'))
+    monkeypatch.setattr(fake_tk.filedialog, 'askdirectory', lambda **kwargs: dir_calls.update(kwargs) or str(tmp_path / 'offline-fit'))
+
+    app.choose_offline_recording()
+    app.choose_offline_fit_output_dir()
+
+    assert app.offline_recording_var.get() == str(tmp_path / 'captures' / 'recording.wav')
+    assert app.offline_fit_output_var.get() == str(tmp_path / 'offline-fit')
+    assert open_calls['title'] == 'Choose recorded WAV'
+    assert ('WAV files', '*.wav') in open_calls['filetypes']
+    assert dir_calls['title'] == 'Choose fit output folder'
+
+
+def test_picker_cancel_leaves_existing_values_unchanged(tmp_path, fake_tk, monkeypatch):
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'offline')), tmp_path / 'config.json', False),
+    )
+
+    app.target_csv_var.set('manual-target.csv')
+    app.offline_recording_var.set('manual-recording.wav')
+    monkeypatch.setattr(fake_tk.filedialog, 'askopenfilename', lambda **kwargs: '')
+
+    app.choose_target_csv()
+    app.choose_offline_recording()
+
+    assert app.target_csv_var.get() == 'manual-target.csv'
+    assert app.offline_recording_var.get() == 'manual-recording.wav'

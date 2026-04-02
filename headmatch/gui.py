@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+try:
+    from tkinter import filedialog
+except Exception:  # pragma: no cover
+    filedialog = None
+
 from .app_identity import get_app_identity
 from .contracts import FrontendConfig
 from .measure import (
@@ -363,6 +368,70 @@ class HeadMatchGuiApp:
         if value <= 0:
             raise ValueError(f"{label} must be greater than 0.")
         return value
+
+    @staticmethod
+    def _expanded_parent(value: str, fallback: str | Path) -> str:
+        raw = value.strip()
+        if raw:
+            return str(Path(raw).expanduser().parent)
+        return str(Path(fallback).expanduser())
+
+    @staticmethod
+    def _expanded_dir(value: str, fallback: str | Path) -> str:
+        raw = value.strip()
+        if raw:
+            return str(Path(raw).expanduser())
+        return str(Path(fallback).expanduser())
+
+    def _choose_directory(self, variable, *, title: str, fallback: str | Path) -> None:
+        if filedialog is None:
+            return
+        selected = filedialog.askdirectory(
+            title=title,
+            initialdir=self._expanded_dir(variable.get(), fallback),
+            parent=getattr(self, 'root', None),
+            mustexist=False,
+        )
+        if selected:
+            variable.set(selected)
+
+    def _choose_file(self, variable, *, title: str, filetypes, fallback: str | Path) -> None:
+        if filedialog is None:
+            return
+        selected = filedialog.askopenfilename(
+            title=title,
+            initialdir=self._expanded_parent(variable.get(), fallback),
+            parent=getattr(self, 'root', None),
+            filetypes=filetypes,
+        )
+        if selected:
+            variable.set(selected)
+
+    def choose_output_dir(self) -> None:
+        self._choose_directory(self.output_dir_var, title="Choose output folder", fallback=self.state.default_output_dir)
+
+    def choose_target_csv(self) -> None:
+        self._choose_file(
+            self.target_csv_var,
+            title="Choose target CSV",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            fallback=self.state.config_path.parent,
+        )
+
+    def choose_offline_recording(self) -> None:
+        self._choose_file(
+            self.offline_recording_var,
+            title="Choose recorded WAV",
+            filetypes=(("WAV files", "*.wav"), ("All files", "*.*")),
+            fallback=self.output_dir_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_offline_fit_output_dir(self) -> None:
+        self._choose_directory(
+            self.offline_fit_output_var,
+            title="Choose fit output folder",
+            fallback=self.output_dir_var.get().strip() or self.state.default_output_dir,
+        )
 
     def start_online_measurement(self) -> None:
         output_dir = self.output_dir_var.get().strip()
