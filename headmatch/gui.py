@@ -21,7 +21,6 @@ from .signals import SweepSpec
 class NavigationItem:
     key: str
     label: str
-    description: str
 
 
 @dataclass(frozen=True)
@@ -52,9 +51,9 @@ OfflineFitRunner = Callable[..., dict]
 
 
 NAV_ITEMS: tuple[NavigationItem, ...] = (
-    NavigationItem("measure-online", "Measure", "Guided online measurement with PipeWire playback and capture."),
-    NavigationItem("prepare-offline", "Prepare Offline", "Recorder-first package export plus offline fit import."),
-    NavigationItem("history", "Results", "Browse recent runs and open the generated guides."),
+    NavigationItem("measure-online", "Measure"),
+    NavigationItem("prepare-offline", "Prepare Offline"),
+    NavigationItem("history", "Results"),
 )
 
 
@@ -165,12 +164,14 @@ class HeadMatchGuiApp:
             row=1, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
-        nav = ttk.Frame(root, padding=(16, 8, 10, 16))
+        nav = ttk.Frame(root, padding=(12, 8, 8, 16), width=164)
         nav.grid(row=1, column=0, sticky="nsw")
-        ttk.Label(nav, text="Workflows", style="Heading.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        nav.grid_propagate(False)
+        nav.columnconfigure(0, weight=1)
+        ttk.Label(nav, text="Workflows", style="Heading.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
         for idx, item in enumerate(NAV_ITEMS, start=1):
-            ttk.Button(nav, text=f"{item.label}\n{item.description}", command=lambda key=item.key: self.show_view(key)).grid(
-                row=idx, column=0, sticky="ew", pady=4
+            ttk.Button(nav, text=item.label, command=lambda key=item.key: self.show_view(key)).grid(
+                row=idx, column=0, sticky="ew", pady=2
             )
 
         self.content = ttk.Frame(root, padding=(10, 8, 16, 16))

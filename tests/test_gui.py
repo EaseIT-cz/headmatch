@@ -26,9 +26,13 @@ class DummyVar:
 class DummyWidget:
     def __init__(self, *args, **kwargs):
         self.command = kwargs.get("command")
+        self.kwargs = kwargs
 
     def grid(self, *args, **kwargs):
         return self
+
+    def grid_propagate(self, *args, **kwargs):
+        return None
 
     def columnconfigure(self, *args, **kwargs):
         return None
@@ -164,8 +168,6 @@ def test_navigation_items_cover_shell_sections():
         "history",
     ]
     assert [item.label for item in NAV_ITEMS] == ["Measure", "Prepare Offline", "Results"]
-    history_item = next(item for item in NAV_ITEMS if item.key == "history")
-    assert "Browse recent runs" in history_item.description
 
 
 
@@ -266,17 +268,33 @@ def test_gui_history_selection_reads_recent_runs(tmp_path):
 
 
 
-def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk):
+def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
+    created_buttons = []
+    original_button = DummyTtk.Button
+
+    class TrackingButton(DummyWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created_buttons.append(self)
+
+    monkeypatch.setattr(DummyTtk, 'Button', TrackingButton)
+
     root = DummyRoot()
     app = fake_tk.create_app(
         root=root,
         config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
     )
 
+    monkeypatch.setattr(DummyTtk, 'Button', original_button)
+
+    nav_labels = [button.kwargs.get('text') for button in created_buttons[:len(NAV_ITEMS)]]
+
     assert root.title_value == 'HeadMatch 0.2.0'
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
+    assert nav_labels == ['Measure', 'Prepare Offline', 'Results']
+    assert all('\n' not in label for label in nav_labels)
 
 
 
