@@ -497,13 +497,29 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
 def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     suffix = uuid4().hex
     config_path = tmp_path / f"gui-{suffix}.json"
+    sample_rate = 43200 + (int(suffix[:2], 16) % 1800)
+    duration_s = 4.5 + ((int(suffix[2:4], 16) % 15) / 10)
+    f_start_hz = 18.0 + (int(suffix[4:6], 16) % 25)
+    f_end_hz = 17000.0 + (int(suffix[6:8], 16) % 4000)
+    pre_silence_s = 0.2 + ((int(suffix[8:10], 16) % 5) / 10)
+    post_silence_s = 0.7 + ((int(suffix[10:12], 16) % 7) / 10)
+    amplitude = 0.12 + ((int(suffix[12:14], 16) % 7) / 100)
+    start_iterations = 2 + (int(suffix[14:16], 16) % 6)
+    max_filters = 4 + (int(suffix[16:18], 16) % 8)
     original = FrontendConfig(
         default_output_dir=f"out/{suffix}",
         preferred_target_csv=f"targets/{suffix}.csv",
         pipewire_output_target=f"playback-{suffix}",
         pipewire_input_target=f"capture-{suffix}",
-        start_iterations=7,
-        max_filters=5,
+        sample_rate=sample_rate,
+        duration_s=duration_s,
+        f_start_hz=f_start_hz,
+        f_end_hz=f_end_hz,
+        pre_silence_s=pre_silence_s,
+        post_silence_s=post_silence_s,
+        amplitude=amplitude,
+        start_iterations=start_iterations,
+        max_filters=max_filters,
     )
     save_config(original, config_path)
 
@@ -514,9 +530,15 @@ def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     assert state.preferred_target_csv == f"targets/{suffix}.csv"
     assert state.pipewire_output_target == f"playback-{suffix}"
     assert state.pipewire_input_target == f"capture-{suffix}"
-    assert state.start_iterations == 7
-    assert state.max_filters == 5
-
+    assert state.sample_rate == sample_rate
+    assert state.duration_s == duration_s
+    assert state.f_start_hz == f_start_hz
+    assert state.f_end_hz == f_end_hz
+    assert state.pre_silence_s == pre_silence_s
+    assert state.post_silence_s == post_silence_s
+    assert state.amplitude == amplitude
+    assert state.start_iterations == start_iterations
+    assert state.max_filters == max_filters
 
 def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
     first = tmp_path / "session_01"
