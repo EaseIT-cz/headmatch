@@ -4,6 +4,11 @@ from headmatch.contracts import FrontendConfig
 from headmatch.measure import (
     DoctorCheck,
     PipeWireTarget,
+    PipeWireTargetSelection,
+    _parse_wpctl_default_ids,
+    _parse_wpctl_inspect_node_name,
+    _resolve_preferred_pipewire_target,
+    collect_pipewire_target_selection,
     _parse_pipewire_targets,
     _saved_target_matches_discovery,
     collect_doctor_checks,
@@ -135,3 +140,57 @@ def test_format_doctor_report_includes_actions(tmp_path):
     assert "[WARN] PipeWire discovery: No playback targets found." in text
     assert "Suggested next steps:" in text
     assert "- PipeWire discovery: Connect your DAC and try again." in text
+
+
+def test_parse_wpctl_default_ids_reads_starred_sink_and_source_ids():
+    status = """Audio
+ ├─ Devices:
+ │      40. USB Audio Device
+ ├─ Sinks:
+ │  *   51. USB DAC
+ ├─ Sources:
+ │  *   61. USB Mic
+ └─ Streams:
+"""
+
+    defaults = _parse_wpctl_default_ids(status)
+
+    assert defaults == {'playback': 51, 'capture': 61}
+
+
+def test_parse_wpctl_inspect_node_name_reads_pipewire_node_name():
+    inspect = 'id 51, type PipeWire:Interface:Node\n    node.name = "alsa_output.usb-dac"\n'
+
+    assert _parse_wpctl_inspect_node_name(inspect) == 'alsa_output.usb-dac'
+
+
+def test_resolve_preferred_pipewire_target_prefers_saved_then_default_then_first():
+    targets = [
+        PipeWireTarget('playback', 'alsa_output.hdmi', 'HDMI', '', 'Audio/Sink'),
+        PipeWireTarget('playback', 'alsa_output.usb-dac', 'USB DAC', '', 'Audio/Sink'),
+    ]
+
+    assert _resolve_preferred_pipewire_target('playback', 'usb-dac', targets, 'alsa_output.hdmi') == 'alsa_output.usb-dac'
+    assert _resolve_preferred_pipewire_target('playback', None, targets, 'alsa_output.hdmi') == 'alsa_output.hdmi'
+    assert _resolve_preferred_pipewire_target('playback', None, targets, 'missing') == 'alsa_output.hdmi'
+    assert _resolve_preferred_pipewire_target('capture', None, targets, None) == ''
+
+
+def test_collect_pipewire_target_selection_uses_discovery_and_defaults(monkeypatch):
+    monkeypatch.setattr(
+        'headmatch.measure.list_pipewire_targets',
+        lambda: [
+            PipeWireTarget('playback', 'alsa_output.hdmi', 'HDMI', '', 'Audio/Sink'),
+            PipeWireTarget('playback', 'alsa_output.usb-dac', 'USB DAC', '', 'Audio/Sink'),
+            PipeWireTarget('capture', 'alsa_input.usb-mic', 'USB Mic', '', 'Audio/Source'),
+        ],
+    )
+    monkeypatch.setattr('headmatch.measure.get_pipewire_default_targets', lambda: {'playback': 'alsa_output.hdmi', 'capture': 'alsa_input.usb-mic'})
+
+    selection = collect_pipewire_target_selection(FrontendConfig(pipewire_output_target='usb-dac'))
+
+    assert isinstance(selection, PipeWireTargetSelection)
+    assert [target.node_name for target in selection.playback_targets] == ['alsa_output.hdmi', 'alsa_output.usb-dac']
+    assert [target.node_name for target in selection.capture_targets] == ['alsa_input.usb-mic']
+    assert selection.selected_playback == 'alsa_output.usb-dac'
+    assert selection.selected_capture == 'alsa_input.usb-mic'

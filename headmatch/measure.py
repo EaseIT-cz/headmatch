@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -30,6 +31,13 @@ class PipeWireTarget:
             if value:
                 return value
         return self.node_name
+
+@dataclass(frozen=True)
+class PipeWireTargetSelection:
+    playback_targets: tuple[PipeWireTarget, ...]
+    capture_targets: tuple[PipeWireTarget, ...]
+    selected_playback: str
+    selected_capture: str
 
 
 def _run_pipewire_discovery(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -78,6 +86,86 @@ def _parse_pipewire_targets(payload: list[dict]) -> list[PipeWireTarget]:
         )
     targets.sort(key=lambda target: (target.kind, target.label.lower(), target.node_name.lower()))
     return targets
+
+
+def _parse_wpctl_default_ids(status_text: str) -> dict[str, int]:
+    default_ids: dict[str, int] = {}
+    current_kind: str | None = None
+    for raw_line in status_text.splitlines():
+        stripped = raw_line.strip()
+        if 'Sinks:' in stripped:
+            current_kind = 'playback'
+            continue
+        if 'Sources:' in stripped:
+            current_kind = 'capture'
+            continue
+        if stripped.endswith(':') and stripped not in {'Sinks:', 'Sources:'}:
+            current_kind = None
+            continue
+        if current_kind is None or '*' not in stripped:
+            continue
+        match = re.search(r'\*\s*(\d+)\.', stripped)
+        if match is None:
+            continue
+        default_ids[current_kind] = int(match.group(1))
+    return default_ids
+
+
+def _parse_wpctl_inspect_node_name(inspect_text: str) -> str | None:
+    match = re.search(r'node\.name\s*=\s*"([^"]+)"', inspect_text)
+    if match is None:
+        return None
+    node_name = match.group(1).strip()
+    return node_name or None
+
+
+def get_pipewire_default_targets() -> dict[str, str]:
+    if shutil.which('wpctl') is None:
+        return {}
+    status_result = _run_pipewire_discovery(['wpctl', 'status'])
+    if status_result.returncode != 0:
+        return {}
+    default_ids = _parse_wpctl_default_ids(status_result.stdout)
+    defaults: dict[str, str] = {}
+    for kind, object_id in default_ids.items():
+        inspect_result = _run_pipewire_discovery(['wpctl', 'inspect', str(object_id)])
+        if inspect_result.returncode != 0:
+            continue
+        node_name = _parse_wpctl_inspect_node_name(inspect_result.stdout)
+        if node_name:
+            defaults[kind] = node_name
+    return defaults
+
+
+def _resolve_preferred_pipewire_target(kind: str, saved_target: str | None, targets: list[PipeWireTarget], default_node_name: str | None) -> str:
+    matching_targets = [target for target in targets if target.kind == kind]
+    saved = (saved_target or '').strip()
+    if saved:
+        for target in matching_targets:
+            if saved in target.node_name:
+                return target.node_name
+    default_name = (default_node_name or '').strip()
+    if default_name:
+        for target in matching_targets:
+            if target.node_name == default_name:
+                return target.node_name
+    if matching_targets:
+        return matching_targets[0].node_name
+    return ''
+
+
+def collect_pipewire_target_selection(config: FrontendConfig) -> PipeWireTargetSelection:
+    try:
+        targets = list_pipewire_targets()
+    except RuntimeError:
+        targets = []
+    defaults = get_pipewire_default_targets()
+    return PipeWireTargetSelection(
+        playback_targets=tuple(target for target in targets if target.kind == 'playback'),
+        capture_targets=tuple(target for target in targets if target.kind == 'capture'),
+        selected_playback=_resolve_preferred_pipewire_target('playback', config.pipewire_output_target, targets, defaults.get('playback')),
+        selected_capture=_resolve_preferred_pipewire_target('capture', config.pipewire_input_target, targets, defaults.get('capture')),
+    )
 
 
 def list_pipewire_targets() -> list[PipeWireTarget]:

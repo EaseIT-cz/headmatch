@@ -9,7 +9,7 @@ from typing import Callable
 
 from .app_identity import get_app_identity
 from .contracts import FrontendConfig
-from .measure import OfflineMeasurementPlan, prepare_offline_measurement
+from .measure import OfflineMeasurementPlan, collect_pipewire_target_selection, prepare_offline_measurement
 from .pipeline import iterative_measure_and_fit, process_single_measurement
 from .history import build_history_selection
 from . import gui_views
@@ -114,6 +114,8 @@ class HeadMatchGuiApp:
         self.target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
         self.output_target_var = tk.StringVar(master=root, value=state.pipewire_output_target)
         self.input_target_var = tk.StringVar(master=root, value=state.pipewire_input_target)
+        self.output_target_options: tuple[str, ...] = ()
+        self.input_target_options: tuple[str, ...] = ()
         self.iterations_var = tk.StringVar(master=root, value=str(state.start_iterations))
         self.max_filters_var = tk.StringVar(master=root, value=str(state.max_filters))
         self.history_root_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser().parent))
@@ -129,11 +131,25 @@ class HeadMatchGuiApp:
         self.root.title(f"HeadMatch {state.version_display}")
         self.root.minsize(880, 560)
         self._configure_theme_defaults()
+        self._load_pipewire_target_options()
         self._build_shell()
         self.show_view(state.current_view)
 
     def build_history_selection(self):
         return build_history_selection(self.history_root_var.get(), self.state.config_path.parent)
+
+
+    def _load_pipewire_target_options(self) -> None:
+        selection = collect_pipewire_target_selection(
+            FrontendConfig(
+                pipewire_output_target=self.state.pipewire_output_target or None,
+                pipewire_input_target=self.state.pipewire_input_target or None,
+            )
+        )
+        self.output_target_options = tuple(target.node_name for target in selection.playback_targets)
+        self.input_target_options = tuple(target.node_name for target in selection.capture_targets)
+        self.output_target_var.set(selection.selected_playback)
+        self.input_target_var.set(selection.selected_capture)
 
     def _configure_theme_defaults(self) -> None:
         style_factory = getattr(self._ttk, "Style", None)

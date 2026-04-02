@@ -37,6 +37,16 @@ def add_readonly_row(ttk, parent, row: int, label: str, variable) -> None:
     entry.grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
 
 
+def add_combobox_row(ttk, parent, row: int, label: str, variable, values: tuple[str, ...], *, empty_label: str) -> None:
+    ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=FIELD_PAD_Y)
+    state = "readonly" if values else "disabled"
+    combo = ttk.Combobox(parent, textvariable=variable, values=values, state=state)
+    combo.grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
+    if not values:
+        variable.set("")
+        combo.set(empty_label)
+
+
 def add_entry_row(ttk, parent, row: int, label: str, variable) -> None:
     ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=FIELD_PAD_Y)
     ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
@@ -46,7 +56,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     ttk.Label(frame, text="Online measurement wizard", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text="Use this when PipeWire playback and capture are available now. Enter the output that should play the sweep and the input that should hear it.",
+        text="Use this when PipeWire playback and capture are available now. Choose the output that should play the sweep and the input that should hear it.",
         wraplength=BODY_WRAP,
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(8, 12))
@@ -59,8 +69,8 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     form.grid(row=3, column=0, sticky="ew", pady=(12, 0))
     form.columnconfigure(1, weight=1)
     add_entry_row(ttk, form, 0, "Output folder", variables.output_dir_var)
-    add_entry_row(ttk, form, 1, "Playback target", variables.output_target_var)
-    add_entry_row(ttk, form, 2, "Capture target", variables.input_target_var)
+    add_combobox_row(ttk, form, 1, "Playback target", variables.output_target_var, variables.output_target_options, empty_label="No playback targets found")
+    add_combobox_row(ttk, form, 2, "Capture target", variables.input_target_var, variables.input_target_options, empty_label="No capture targets found")
     add_entry_row(ttk, form, 3, "Target CSV (optional)", variables.target_csv_var)
     add_entry_row(ttk, form, 4, "Iterations", variables.iterations_var)
     add_entry_row(ttk, form, 5, "Max PEQ filters", variables.max_filters_var)

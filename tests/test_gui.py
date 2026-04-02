@@ -9,6 +9,7 @@ import pytest
 
 from headmatch.contracts import FrontendConfig
 from headmatch.gui import NAV_ITEMS, build_arg_parser, load_gui_state, main
+from headmatch.measure import PipeWireTargetSelection
 from headmatch.settings import save_config
 
 
@@ -99,6 +100,7 @@ class DummyTtk:
     LabelFrame = DummyWidget
     Entry = DummyWidget
     Scrollbar = DummyWidget
+    Combobox = DummyWidget
 
 
 class DummyStyle:
@@ -296,6 +298,38 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert nav_labels == ['Measure', 'Prepare Offline', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
+
+
+def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, fake_tk, monkeypatch):
+    monkeypatch.setattr(
+        fake_tk,
+        'collect_pipewire_target_selection',
+        lambda _config: PipeWireTargetSelection(
+            playback_targets=(SimpleNamespace(node_name='alsa_output.usb-dac'),),
+            capture_targets=(SimpleNamespace(node_name='alsa_input.usb-mic'),),
+            selected_playback='alsa_output.usb-dac',
+            selected_capture='alsa_input.usb-mic',
+        ),
+    )
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (
+            FrontendConfig(
+                default_output_dir=str(tmp_path / 'out' / 'session_01'),
+                pipewire_output_target='usb-dac',
+                pipewire_input_target='usb-mic',
+            ),
+            tmp_path / 'config.json',
+            False,
+        ),
+    )
+
+    assert app.output_target_var.get() == 'alsa_output.usb-dac'
+    assert app.input_target_var.get() == 'alsa_input.usb-mic'
+    assert app.output_target_options == ('alsa_output.usb-dac',)
+    assert app.input_target_options == ('alsa_input.usb-mic',)
 
 
 def test_online_workflow_uses_shared_pipeline_and_sets_completion(tmp_path, fake_tk, monkeypatch):
