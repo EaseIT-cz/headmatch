@@ -12,8 +12,13 @@ class DummySweepSpec:
 
 
 @pytest.fixture(autouse=True)
-def patch_sweep_spec(monkeypatch):
+def patch_sweep_spec(monkeypatch, tmp_path):
     monkeypatch.setattr("headmatch.signals.SweepSpec", DummySweepSpec)
+    monkeypatch.setattr(
+        "headmatch.cli.load_or_create_config",
+        lambda _path=None: (FrontendConfig(), tmp_path / "config.json", False),
+    )
+    monkeypatch.setattr("headmatch.cli.save_config", lambda *_args, **_kwargs: None)
 
 
 def test_main_without_subcommand_shows_beginner_guide(capsys):
