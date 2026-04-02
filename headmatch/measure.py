@@ -140,6 +140,13 @@ class DoctorCheck:
     action: str | None = None
 
 
+def _saved_target_matches_discovery(saved_target: str, kind: str, targets: list[PipeWireTarget]) -> bool:
+    saved = saved_target.strip()
+    if not saved:
+        return False
+    return any(target.kind == kind and saved in target.node_name for target in targets)
+
+
 def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[DoctorCheck]:
     checks = [
         DoctorCheck(
@@ -161,6 +168,7 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
             )
         )
 
+    discovered_targets: list[PipeWireTarget] | None = None
     if shutil.which('pw-dump') is None:
         checks.append(
             DoctorCheck(
@@ -172,9 +180,9 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
         )
     else:
         try:
-            targets = list_pipewire_targets()
-            playback = sum(target.kind == 'playback' for target in targets)
-            capture = sum(target.kind == 'capture' for target in targets)
+            discovered_targets = list_pipewire_targets()
+            playback = sum(target.kind == 'playback' for target in discovered_targets)
+            capture = sum(target.kind == 'capture' for target in discovered_targets)
             ok = playback > 0 and capture > 0
             detail = f'Found {playback} playback and {capture} capture target(s).'
             action = None if ok else "Make sure PipeWire is running and your audio devices are connected, then try 'headmatch list-targets'."
@@ -190,7 +198,17 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
             )
 
     if config.pipewire_output_target:
-        checks.append(DoctorCheck(name='saved output target', ok=True, detail=f"Configured: {config.pipewire_output_target}"))
+        if discovered_targets is None:
+            checks.append(DoctorCheck(name='saved output target', ok=True, detail=f"Configured: {config.pipewire_output_target}"))
+        else:
+            output_found = _saved_target_matches_discovery(config.pipewire_output_target, 'playback', discovered_targets)
+            output_detail = (
+                f"Configured and found: {config.pipewire_output_target}"
+                if output_found
+                else f"Configured but not found now: {config.pipewire_output_target}"
+            )
+            output_action = None if output_found else "Run 'headmatch list-targets' and save an updated --output-target if the device name changed."
+            checks.append(DoctorCheck(name='saved output target', ok=output_found, detail=output_detail, action=output_action))
     else:
         checks.append(
             DoctorCheck(
@@ -202,7 +220,17 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
         )
 
     if config.pipewire_input_target:
-        checks.append(DoctorCheck(name='saved input target', ok=True, detail=f"Configured: {config.pipewire_input_target}"))
+        if discovered_targets is None:
+            checks.append(DoctorCheck(name='saved input target', ok=True, detail=f"Configured: {config.pipewire_input_target}"))
+        else:
+            input_found = _saved_target_matches_discovery(config.pipewire_input_target, 'capture', discovered_targets)
+            input_detail = (
+                f"Configured and found: {config.pipewire_input_target}"
+                if input_found
+                else f"Configured but not found now: {config.pipewire_input_target}"
+            )
+            input_action = None if input_found else "Run 'headmatch list-targets' and save an updated --input-target if the device name changed."
+            checks.append(DoctorCheck(name='saved input target', ok=input_found, detail=input_detail, action=input_action))
     else:
         checks.append(
             DoctorCheck(

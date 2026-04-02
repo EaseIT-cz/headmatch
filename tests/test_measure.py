@@ -5,6 +5,7 @@ from headmatch.measure import (
     DoctorCheck,
     PipeWireTarget,
     _parse_pipewire_targets,
+    _saved_target_matches_discovery,
     collect_doctor_checks,
     format_doctor_report,
     format_pipewire_targets,
@@ -67,6 +68,18 @@ def test_format_pipewire_targets_groups_entries_for_cli_output():
     assert "copy the exact node.name values first" in text
 
 
+def test_saved_target_matches_discovery_uses_simple_node_name_matching():
+    targets = [
+        PipeWireTarget("playback", "alsa_output.usb-dac", "USB DAC", "", "Audio/Sink"),
+        PipeWireTarget("capture", "alsa_input.usb-mic", "USB Mic", "", "Audio/Source"),
+    ]
+
+    assert _saved_target_matches_discovery("alsa_output.usb-dac", "playback", targets) is True
+    assert _saved_target_matches_discovery("usb-mic", "capture", targets) is True
+    assert _saved_target_matches_discovery("usb-mic", "playback", targets) is False
+    assert _saved_target_matches_discovery("missing", "capture", targets) is False
+
+
 def test_collect_doctor_checks_reports_missing_tools_and_targets(tmp_path, monkeypatch):
     monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: None)
 
@@ -81,6 +94,30 @@ def test_collect_doctor_checks_reports_missing_tools_and_targets(tmp_path, monke
     assert by_name["saved output target"].ok is False
     assert by_name["saved input target"].ok is False
     assert by_name["starter sweep settings"].ok is True
+
+
+def test_collect_doctor_checks_validates_saved_targets_against_discovery(tmp_path, monkeypatch):
+    monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        "headmatch.measure.list_pipewire_targets",
+        lambda: [
+            PipeWireTarget("playback", "alsa_output.usb-dac", "USB DAC", "", "Audio/Sink"),
+            PipeWireTarget("capture", "alsa_input.usb-mic", "USB Mic", "", "Audio/Source"),
+        ],
+    )
+
+    checks = collect_doctor_checks(
+        tmp_path / "config.json",
+        FrontendConfig(pipewire_output_target="usb-dac", pipewire_input_target="missing-input"),
+    )
+
+    by_name = {check.name: check for check in checks}
+    assert by_name["PipeWire discovery"].ok is True
+    assert by_name["saved output target"].ok is True
+    assert by_name["saved output target"].detail == "Configured and found: usb-dac"
+    assert by_name["saved input target"].ok is False
+    assert by_name["saved input target"].detail == "Configured but not found now: missing-input"
+    assert by_name["saved input target"].action == "Run 'headmatch list-targets' and save an updated --input-target if the device name changed."
 
 
 def test_format_doctor_report_includes_actions(tmp_path):
