@@ -173,10 +173,11 @@ def test_tui_history_result_updates_cli_message(monkeypatch, capsys, tmp_path):
     assert str(guide) in out
 
 
-def test_main_without_subcommand_mentions_list_targets(capsys):
+def test_main_without_subcommand_mentions_doctor_and_list_targets(capsys):
     with pytest.raises(SystemExit):
         cli.main([])
     out = capsys.readouterr().out
+    assert "headmatch doctor" in out
     assert "headmatch list-targets" in out
 
 

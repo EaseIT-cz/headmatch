@@ -137,6 +137,14 @@ def test_online_steps_explain_playback_vs_capture_targets():
     assert any("headmatch list-targets" in step for step in gui_views.ONLINE_STEPS)
 
 
+def test_home_and_online_copy_mentions_setup_helpers():
+    from headmatch import gui_views
+
+    source = Path(gui_views.__file__).read_text()
+    assert "headmatch doctor" in source
+    assert "headmatch list-targets" in source
+
+
 
 def test_gui_main_reports_tcl_startup_errors(monkeypatch):
     monkeypatch.setattr("headmatch.gui.create_app", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))

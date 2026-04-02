@@ -43,6 +43,19 @@ def test_run_tui_online_reuses_pipeline_and_preloads_saved_device_values(monkeyp
     assert "Step 2/3: running measure -> analyze -> fit" in out
 
 
+def test_run_tui_without_saved_targets_mentions_doctor_and_list_targets(monkeypatch):
+    monkeypatch.setattr("headmatch.tui.iterative_measure_and_fit", lambda **_kwargs: [])
+
+    stdin = StringIO("1\n\n\n\n\n\n\n")
+    stdout = StringIO()
+
+    tui.run_tui(stdin=stdin, stdout=stdout, config_loader=lambda _path=None: (FrontendConfig(), Path("/tmp/config.json"), False))
+
+    out = stdout.getvalue()
+    assert "headmatch doctor" in out
+    assert "headmatch list-targets" in out
+
+
 def test_run_tui_offline_writes_measurement_plan(monkeypatch, tmp_path):
     calls = {}
 

@@ -41,7 +41,8 @@ def render_home(ttk, frame, *, state, variables) -> None:
         frame,
         text=(
             "Choose the online path if PipeWire playback/capture is working today, or the offline path if you want to "
-            "record first and import the WAV later. The saved defaults below preload both workflows."
+            "record first and import the WAV later. If you are not sure your setup is ready, run 'headmatch doctor' "
+            "in the terminal first. The saved defaults below preload both workflows."
         ),
         wraplength=620,
         justify="left",
@@ -87,7 +88,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
     actions.grid(row=4, column=0, sticky="w")
     ttk.Button(actions, text="Start guided measurement", command=on_start).grid(row=0, column=0, sticky="w")
-    ttk.Label(actions, text="Make sure your headphone rig is connected and quiet before you start. If device names are unclear, check 'headmatch list-targets' first.").grid(
+    ttk.Label(actions, text="Make sure your headphone rig is connected and quiet before you start. If setup still feels uncertain, run 'headmatch doctor'. If device names are unclear, check 'headmatch list-targets' first.").grid(
         row=0, column=1, sticky="w", padx=(12, 0)
     )
 

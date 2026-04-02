@@ -175,6 +175,7 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     print("   ...record the sweep, then run:")
     print("   headmatch fit-offline --recording out/session_01/recording.wav --out-dir out/session_01/fit")
     print()
+    print("Not sure your setup is ready? Run: headmatch doctor")
     print("Need device names? Run: headmatch list-targets")
     print("Developer commands are still available below.")
     print()

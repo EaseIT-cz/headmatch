@@ -107,6 +107,7 @@ class HeadMatchWizard:
             self.io.write("Saved device targets were found and preloaded below.")
         else:
             self.io.write("No saved device targets were found. Press Enter to accept safe defaults.")
+            self.io.write("If setup feels uncertain, run 'headmatch doctor'. If names are unclear, run 'headmatch list-targets'.")
         self.io.write(f"Config path: {resolved_path}")
         if created:
             self.io.write("Created a default config file with safe starter values.")
