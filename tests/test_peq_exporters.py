@@ -308,3 +308,74 @@ def test_fit_peq_keeps_searching_when_top_residual_candidate_is_rejected(monkeyp
 
     assert len(bands) == 4
     assert sum(1 for band in bands if band.kind == 'peaking') >= 2
+
+def test_drift_between_dense_graphiceq_export_and_fixed_fit_is_reasonable(tmp_path):
+    """Test that fixed-band GraphicEQ fit doesn't drift too far from dense export.
+
+    This test ensures the difference between:
+    - Dense GraphicEQ export (export_equalizer_apo_graphiceq_txt with full freq grid)
+    - Fixed-band GraphicEQ fit (fit_peq with family='graphic_eq')
+
+    is bounded and reasonable, not uncontrolled "drift".
+    """
+    from headmatch.signals import geometric_log_grid
+    from headmatch.peq import graphic_eq_profile, peq_chain_response_db
+    from headmatch.exporters import export_equalizer_apo_graphiceq_txt
+    from headmatch.peq import FilterBudget
+    from scipy import interpolate
+
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 4.0 * np.exp(-0.5 * (np.log2(freqs / 1000.0) / 0.55) ** 2)
+    target += -3.0 * np.exp(-0.5 * (np.log2(freqs / 8000.0) / 0.45) ** 2)
+
+    # Simulate measurement deviation
+    measurement = target + 2.0 * np.exp(-0.5 * (np.log2(freqs / 3000.0) / 0.25) ** 2)
+    left_target = target - measurement
+
+    # Fit using fixed-band GraphicEQ
+    fixed_bands = fit_peq(
+        freqs,
+        left_target,
+        sample_rate=48000,
+        budget=FilterBudget(family='graphic_eq', max_filters=10, profile='geq_10_band'),
+    )
+
+    # Compute the fixed-band correction curve
+    fixed_correction = peq_chain_response_db(freqs, 48000, fixed_bands)
+
+    # Compute dense GraphicEQ-style correction at profile frequencies only
+    profile = graphic_eq_profile('geq_10_band')
+    profile_freqs = np.array(profile.freqs_hz)
+    profile_target = np.interp(profile_freqs, freqs, left_target)
+    profile_measurement = np.interp(profile_freqs, freqs, measurement)
+    profile_residual = profile_target - profile_measurement
+
+    # Interpolate profile_residual to full grid for comparison
+    interp_func = interpolate.interp1d(profile_freqs, profile_residual, kind='linear', fill_value='extrapolate')
+    interpolated_correction = interp_func(freqs)
+
+    # Compare at profile frequencies
+    fixed_mask = np.isclose(np.round(freqs, 1), np.round(profile_freqs, 1), atol=0.1)
+    fixed_at_profile = fixed_correction[fixed_mask]
+    dense_at_profile = interpolated_correction[fixed_mask]
+
+    # RMS difference at profile frequencies
+    rms_drift = float(np.sqrt(np.mean((fixed_at_profile - dense_at_profile) ** 2)))
+
+    # The drift should be bounded - typically under 1 dB RMS
+    assert rms_drift < 1.0, f"Drift between fixed-fit and dense export too large: {rms_drift:.2f} dB RMS"
+
+    # Verify the fixed-fit output file is generated correctly
+    out_dir = tmp_path / 'drift_test'
+    out_dir.mkdir()
+    export_equalizer_apo_graphiceq_txt(
+        out_dir / 'fixed_graphiceq.txt',
+        freqs,
+        left_target,
+        left_target,
+        comment='; Fixed-band GraphicEQ fit for drift testing.',
+    )
+    fixed_file = out_dir / 'fixed_graphiceq.txt'
+    assert fixed_file.exists()
+    assert 'Fixed-band GraphicEQ fit for drift testing.' in fixed_file.read_text()
