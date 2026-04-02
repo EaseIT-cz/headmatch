@@ -256,6 +256,57 @@ headmatch clone-target \
   --out clone_target.csv
 ```
 
+Use this when you want to create a **difference target** that moves one headphone toward another.
+
+Preferred personal workflow:
+1. measure headphone **A** on your rig
+2. measure headphone **B** on the **same rig**
+3. choose matching response CSVs from those two runs
+4. build a clone target from A -> B
+5. fit a fresh measurement of headphone A against that clone target
+
+For personal measurements, the CSVs to feed into `headmatch clone-target` are the run output response files:
+- `measurement_left.csv`
+- `measurement_right.csv`
+
+Use the **same side from both runs**.
+Examples:
+- `A/measurement_left.csv` with `B/measurement_left.csv`
+- `A/measurement_right.csv` with `B/measurement_right.csv`
+
+Do **not** mix left from one headphone with right from the other unless that is deliberately what you measured.
+The raw files (`measurement_left_raw.csv` / `measurement_right_raw.csv`) are not the preferred inputs for this workflow.
+
+Concrete personal example:
+
+```bash
+# 1) Measure headphone A (the one you want to change)
+headmatch measure \
+  --out-dir out/hd650_measure \
+  --output-target "your-playback-node" \
+  --input-target "your-capture-node"
+
+# 2) Measure headphone B (the tonal balance you want to imitate)
+headmatch measure \
+  --out-dir out/hd800s_measure \
+  --output-target "your-playback-node" \
+  --input-target "your-capture-node"
+
+# 3) Build a difference target from A -> B using matching artifacts
+headmatch clone-target \
+  --source-csv out/hd650_measure/measurement_left.csv \
+  --target-csv out/hd800s_measure/measurement_left.csv \
+  --out out/clone_targets/hd650_to_hd800s_left.csv
+
+# 4) Fit headphone A using the clone target
+headmatch fit \
+  --recording out/hd650_measure/recording.wav \
+  --target-csv out/clone_targets/hd650_to_hd800s_left.csv \
+  --out-dir out/hd650_to_hd800s_fit
+```
+
+This is different from the lightweight example workflow in `docs/examples/clone-targets/`: those shipped CSVs are small published-style examples for learning the command shape. They are useful for demos and experimentation, but the preferred path for serious personal cloning is to measure both headphones on your own rig and generate the difference target from those matching measurements.
+
 ---
 
 ## Output files
@@ -305,6 +356,29 @@ Documented examples live in:
 ```text
 docs/examples/clone-targets/
 ```
+
+There are two distinct clone-target workflows:
+
+### 1. Preferred personal workflow
+Use this when you own or can measure both headphones on the same rig.
+
+- measure the **source** headphone you want to change
+- measure the **target** headphone whose tonal balance you want
+- feed matching run artifacts into `headmatch clone-target`
+- use the resulting difference target when fitting the source headphone
+
+The important input files are the analyzed response CSVs written by HeadMatch:
+- `measurement_left.csv`
+- `measurement_right.csv`
+
+Use matching sides from both runs. In practice that means either:
+- left vs left, or
+- right vs right
+
+This personal-measurement path is the most trustworthy because the source and target curves come from the same coupler, mic chain, positioning style, and analysis pipeline.
+
+### 2. Lightweight published-example workflow
+Use this when you want to learn the command flow or try a rough tonal experiment from small example CSVs.
 
 These examples are useful if you want to:
 - understand the expected CSV shape
