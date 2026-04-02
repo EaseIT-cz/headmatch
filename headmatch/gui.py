@@ -52,10 +52,9 @@ OfflineFitRunner = Callable[..., dict]
 
 
 NAV_ITEMS: tuple[NavigationItem, ...] = (
-    NavigationItem("home", "Home", "See the saved defaults and choose a workflow."),
-    NavigationItem("measure-online", "Measure now", "Guided online measurement with PipeWire playback and capture."),
-    NavigationItem("prepare-offline", "Prepare offline", "Recorder-first package export plus offline fit import."),
-    NavigationItem("history", "History", "Browse recent runs and open the generated guides."),
+    NavigationItem("measure-online", "Measure", "Guided online measurement with PipeWire playback and capture."),
+    NavigationItem("prepare-offline", "Prepare Offline", "Recorder-first package export plus offline fit import."),
+    NavigationItem("history", "Results", "Browse recent runs and open the generated guides."),
 )
 
 
@@ -71,7 +70,7 @@ def load_gui_state(
         version_display=identity.version_display,
         config_path=Path(resolved_path),
         config_created=created,
-        current_view="home",
+        current_view="measure-online",
         default_output_dir=config.default_output_dir or "out/session_01",
         preferred_target_csv=config.preferred_target_csv or "",
         pipewire_output_target=config.pipewire_output_target or "",
@@ -167,9 +166,6 @@ class HeadMatchGuiApp:
         self.current_view.set(key)
         for child in self.content.winfo_children():
             child.destroy()
-        if key == "home":
-            self._render_home()
-            return
         if key == "measure-online":
             self._render_online_wizard()
             return
@@ -180,9 +176,6 @@ class HeadMatchGuiApp:
             self._render_history()
             return
         raise KeyError(key)
-
-    def _render_home(self) -> None:
-        gui_views.render_home(self._ttk, self.content, state=self.state, variables=self)
 
     def _render_online_wizard(self) -> None:
         gui_views.render_online_wizard(self._ttk, self.content, variables=self, on_start=self.start_online_measurement)
@@ -206,14 +199,17 @@ class HeadMatchGuiApp:
             title=self.completion_title_var.get(),
             body=self.completion_body_var.get(),
             steps=self._last_completion_steps,
-            on_home=lambda: self.show_view("home"),
+            on_home=lambda: self.show_view("measure-online"),
             on_history=lambda: self.show_view("history"),
         )
 
     def _render_history(self) -> None:
+        import tkinter as tk
+
         ttk = self._ttk
         frame = self.content
-        ttk.Label(frame, text="History", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
+        frame.rowconfigure(3, weight=1)
+        ttk.Label(frame, text="Results", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Label(
             frame,
             text="Browse recent runs by scanning for run_summary.json files. This uses the same shared history loader as the terminal UI.",
@@ -228,8 +224,32 @@ class HeadMatchGuiApp:
         ttk.Entry(controls, textvariable=self.history_root_var).grid(row=0, column=1, sticky="ew", pady=(0, 8))
         ttk.Button(controls, text="Refresh", command=lambda: self.show_view("history")).grid(row=0, column=2, sticky="e", padx=(12, 0), pady=(0, 8))
 
-        selection = gui_views.render_history(self._ttk, self.content, history_root_var=self.history_root_var, config_path=self.state.config_path)
-        gui_views.render_history_results(self._ttk, self.content, selection=selection)
+        scroll_frame = ttk.Frame(frame)
+        scroll_frame.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
+        scroll_frame.columnconfigure(0, weight=1)
+        scroll_frame.rowconfigure(0, weight=1)
+
+        canvas = tk.Canvas(scroll_frame, highlightthickness=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        results = ttk.Frame(canvas, padding=(0, 0, 4, 0))
+        canvas_window = canvas.create_window((0, 0), window=results, anchor="nw")
+
+        def _sync_scroll_region(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _fit_width(event) -> None:
+            canvas.itemconfigure(canvas_window, width=event.width)
+
+        results.bind("<Configure>", _sync_scroll_region)
+        canvas.bind("<Configure>", _fit_width)
+
+        selection = gui_views.render_history(self._ttk, results, history_root_var=self.history_root_var, config_path=self.state.config_path)
+        gui_views.render_history_results(self._ttk, results, selection=selection)
+        _sync_scroll_region()
 
 
     def _build_sweep(self) -> SweepSpec:

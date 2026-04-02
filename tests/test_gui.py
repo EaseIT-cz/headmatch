@@ -39,6 +39,29 @@ class DummyWidget:
     def state(self, *_args, **_kwargs):
         return None
 
+    def configure(self, *args, **kwargs):
+        return None
+
+    config = configure
+
+    def bind(self, *args, **kwargs):
+        return None
+
+    def set(self, *args, **kwargs):
+        return None
+
+    def yview(self, *args, **kwargs):
+        return None
+
+    def create_window(self, *args, **kwargs):
+        return 1
+
+    def itemconfigure(self, *args, **kwargs):
+        return None
+
+    def bbox(self, *args, **kwargs):
+        return (0, 0, 640, 480)
+
     def winfo_children(self):
         return []
 
@@ -71,13 +94,14 @@ class DummyTtk:
     Button = DummyWidget
     LabelFrame = DummyWidget
     Entry = DummyWidget
+    Scrollbar = DummyWidget
 
 
 @pytest.fixture
 def fake_tk(monkeypatch):
     import headmatch.gui as gui
 
-    monkeypatch.setitem(sys.modules, 'tkinter', SimpleNamespace(StringVar=DummyVar, ttk=DummyTtk))
+    monkeypatch.setitem(sys.modules, 'tkinter', SimpleNamespace(StringVar=DummyVar, ttk=DummyTtk, Canvas=DummyWidget))
     monkeypatch.setitem(sys.modules, 'tkinter.ttk', DummyTtk)
     return gui
 
@@ -95,7 +119,7 @@ def test_load_gui_state_preloads_saved_config_values(tmp_path):
     state = load_gui_state(config_loader=lambda _path=None: (config, tmp_path / "config.json", False))
 
     assert state.version_display == "0.2.0"
-    assert state.current_view == "home"
+    assert state.current_view == "measure-online"
     assert state.default_output_dir == "saved/session"
     assert state.preferred_target_csv == "targets/custom.csv"
     assert state.pipewire_output_target == "speakers"
@@ -119,11 +143,11 @@ def test_load_gui_state_uses_safe_defaults_when_config_is_empty(tmp_path):
 
 def test_navigation_items_cover_shell_sections():
     assert [item.key for item in NAV_ITEMS] == [
-        "home",
         "measure-online",
         "prepare-offline",
         "history",
     ]
+    assert [item.label for item in NAV_ITEMS] == ["Measure", "Prepare Offline", "Results"]
     history_item = next(item for item in NAV_ITEMS if item.key == "history")
     assert "Browse recent runs" in history_item.description
 

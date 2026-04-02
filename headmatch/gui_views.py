@@ -35,33 +35,6 @@ def add_entry_row(ttk, parent, row: int, label: str, variable) -> None:
     ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=4)
 
 
-def render_home(ttk, frame, *, state, variables) -> None:
-    ttk.Label(frame, text="Main screen", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        frame,
-        text=(
-            "Choose the online path if PipeWire playback/capture is working today, or the offline path if you want to "
-            "record first and import the WAV later. If you are not sure your setup is ready, run 'headmatch doctor' "
-            "in the terminal first. The saved defaults below preload both workflows."
-        ),
-        wraplength=620,
-        justify="left",
-    ).grid(row=1, column=0, sticky="w", pady=(8, 16))
-    card = ttk.LabelFrame(frame, text="Saved defaults", padding=16)
-    card.grid(row=2, column=0, sticky="ew")
-    card.columnconfigure(1, weight=1)
-    add_readonly_row(ttk, card, 0, "Output folder", variables.output_dir_var)
-    add_readonly_row(ttk, card, 1, "Playback target", variables.output_target_var)
-    add_readonly_row(ttk, card, 2, "Capture target", variables.input_target_var)
-    add_readonly_row(ttk, card, 3, "Target CSV", variables.target_csv_var)
-    add_readonly_row(ttk, card, 4, "Iterations", variables.iterations_var)
-    add_readonly_row(ttk, card, 5, "Max PEQ filters", variables.max_filters_var)
-    note = f"Config file: {state.config_path}"
-    if state.config_created:
-        note += " (created with starter defaults on this launch)"
-    ttk.Label(frame, text=note, wraplength=620, justify="left").grid(row=3, column=0, sticky="w", pady=(12, 0))
-
-
 def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     ttk.Label(frame, text="Online measurement wizard", font=("TkDefaultFont", 15, "bold")).grid(row=0, column=0, sticky="w")
     ttk.Label(
@@ -145,8 +118,8 @@ def render_completion(ttk, frame, *, title: str, body: str, steps: tuple[str, ..
         ttk.Label(card, text=f"- {step}", wraplength=620, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
     actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
     actions.grid(row=3, column=0, sticky="w")
-    ttk.Button(actions, text="Back to Home", command=on_home).grid(row=0, column=0, sticky="w")
-    ttk.Button(actions, text="Open History", command=on_history).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Button(actions, text="Back to Measure", command=on_home).grid(row=0, column=0, sticky="w")
+    ttk.Button(actions, text="Open Results", command=on_history).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
 
 def render_history(ttk, frame, *, history_root_var, config_path: Path):
