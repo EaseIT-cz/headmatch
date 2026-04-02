@@ -20,7 +20,8 @@ The current shipped state includes:
 
 ## Active
 
-1. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
+1. Audit and correct backend math/target semantics, especially clone-target handling, normalization, and fit behavior.
+2. Improve installation and release ergonomics, including launcher polish and environment diagnostics.
 
 ## Recently completed
 

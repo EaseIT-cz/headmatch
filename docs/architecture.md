@@ -178,6 +178,14 @@ The TUI is maintained as a backup, not as a co-equal primary surface.
 ### 4. Offline mode is first-class
 Recorder-first workflows are part of the product, not a fallback hack.
 
+### 4a. Target semantics must stay explicit
+HeadMatch has two distinct target concepts:
+- **absolute targets**: the desired normalized response shape after EQ
+- **relative transform / clone targets**: a tonal delta that should be applied to the measured source response
+
+The backend must not treat those as interchangeable.
+If a relative clone target is used, the pipeline must resolve it into an effective absolute per-run target before fitting, plotting, and reporting.
+
 ### 5. Conservative EQ is a feature
 The goal is useful tonal correction, not maximally clever curve chasing.
 
