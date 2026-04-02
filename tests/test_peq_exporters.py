@@ -102,3 +102,42 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
     assert 'Channel: R' in text
     assert 'Preamp: 0.00 dB' in text
     assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.70' in text
+
+
+def test_fit_peq_searches_past_rejected_nearby_candidates_to_use_more_budget():
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target[freqs <= 120] = 4.0
+    target += 6.0 * np.exp(-0.5 * (np.log2(freqs / 2500.0) / 0.32) ** 2)
+    target += 5.5 * np.exp(-0.5 * (np.log2(freqs / 4200.0) / 0.32) ** 2)
+    target += -5.0 * np.exp(-0.5 * (np.log2(freqs / 8200.0) / 0.28) ** 2)
+
+    bands = fit_peq(freqs, target, sample_rate=48000, max_filters=8)
+
+    assert len(bands) >= 6
+    assert sum(1 for band in bands if band.kind == 'peaking') >= 4
+
+
+def test_fit_peq_keeps_searching_when_top_residual_candidate_is_rejected(monkeypatch):
+    freqs = geometric_log_grid()
+    target = np.zeros_like(freqs)
+    target += 7.0 * np.exp(-0.5 * (np.log2(freqs / 2500.0) / 0.28) ** 2)
+    target += -6.0 * np.exp(-0.5 * (np.log2(freqs / 7000.0) / 0.3) ** 2)
+
+    original = fit_peq.__globals__['_nearby_same_sign_band_exists']
+    state = {'calls': 0}
+
+    def fake_nearby(bands, candidate):
+        if candidate.kind == 'peaking' and state['calls'] < 2:
+            state['calls'] += 1
+            return True
+        return original(bands, candidate)
+
+    monkeypatch.setitem(fit_peq.__globals__, '_nearby_same_sign_band_exists', fake_nearby)
+    try:
+        bands = fit_peq(freqs, target, sample_rate=48000, max_filters=4)
+    finally:
+        monkeypatch.setitem(fit_peq.__globals__, '_nearby_same_sign_band_exists', original)
+
+    assert len(bands) == 4
+    assert sum(1 for band in bands if band.kind == 'peaking') >= 2

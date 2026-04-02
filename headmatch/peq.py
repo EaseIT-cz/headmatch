@@ -165,36 +165,43 @@ def fit_peq(
     shelf_candidates.sort(key=lambda band: abs(band.gain_db), reverse=True)
     bands.extend(shelf_candidates[:max_filters])
 
-    for _ in range(max_filters - len(bands)):
+    while len(bands) < max_filters:
         current = peq_chain_response_db(freqs_hz, sample_rate, bands)
         residual = eq_target - current
         residual = fractional_octave_smoothing(freqs_hz, residual, fraction=10)
         weighted = residual * weights
-        idx = int(np.argmax(np.abs(weighted)))
-        peak_db = float(weighted[idx] / weights[idx])
-        if abs(peak_db) < 0.75:
-            break
-        fc = float(np.clip(freqs_hz[idx], 35.0, sample_rate / 2 - 500.0))
 
-        threshold = abs(peak_db) * 0.5
-        l = idx
-        while l > 0 and abs(residual[l]) >= threshold:
-            l -= 1
-        r = idx
-        while r < len(freqs_hz) - 1 and abs(residual[r]) >= threshold:
-            r += 1
-        f1, f2 = max(freqs_hz[l], 20.0), min(freqs_hz[r], sample_rate / 2 - 100)
-        bw_oct = max(np.log2(f2 / f1), 0.12)
-        q_limit = _max_q_for_frequency(fc, max_q)
-        q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
-        gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
-        if q >= 2.8:
-            gain *= 0.85
-        candidate = PEQBand('peaking', fc, gain, q)
-        if abs(candidate.gain_db) < 0.6:
+        added_candidate = False
+        for idx in np.argsort(np.abs(weighted))[::-1]:
+            peak_db = float(weighted[idx] / weights[idx])
+            if abs(peak_db) < 0.75:
+                break
+            fc = float(np.clip(freqs_hz[idx], 35.0, sample_rate / 2 - 500.0))
+
+            threshold = abs(peak_db) * 0.5
+            l = int(idx)
+            while l > 0 and abs(residual[l]) >= threshold:
+                l -= 1
+            r = int(idx)
+            while r < len(freqs_hz) - 1 and abs(residual[r]) >= threshold:
+                r += 1
+            f1, f2 = max(freqs_hz[l], 20.0), min(freqs_hz[r], sample_rate / 2 - 100)
+            bw_oct = max(np.log2(f2 / f1), 0.12)
+            q_limit = _max_q_for_frequency(fc, max_q)
+            q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
+            gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
+            if q >= 2.8:
+                gain *= 0.85
+            candidate = PEQBand('peaking', fc, gain, q)
+            if abs(candidate.gain_db) < 0.6:
+                continue
+            if _nearby_same_sign_band_exists(bands, candidate):
+                continue
+            bands.append(candidate)
+            added_candidate = True
             break
-        if _nearby_same_sign_band_exists(bands, candidate):
-            continue
-        bands.append(candidate)
+
+        if not added_candidate:
+            break
 
     return bands
