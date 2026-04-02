@@ -189,6 +189,17 @@ If a relative clone target is used, the pipeline must resolve it into an effecti
 ### 5. Conservative EQ is a feature
 The goal is useful tonal correction, not maximally clever curve chasing.
 
+### 5a. Filter family and fill policy must stay separate
+HeadMatch should treat these as orthogonal choices:
+- **filter family / actuator model**
+  - free-form PEQ
+  - fixed-band GraphicEQ (future)
+- **fill policy**
+  - conservative `up_to_n`
+  - exact-count `exact_n`
+
+That separation keeps the current conservative PEQ mode intact while allowing an exact-count PEQ mode now and a GraphicEQ mode later without rewriting the objective/residual logic.
+
 ### 6. Output clarity matters
 Users should be able to open a folder and understand what happened.
 

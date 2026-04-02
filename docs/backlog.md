@@ -20,7 +20,8 @@ The current shipped state includes:
 
 ## Active
 
-1. No open task files at the moment. Choose the next work item from the future follow-up candidates after 0.2.0 release feedback and real-world clone-target testing.
+1. Add an exact-count PEQ mode so device-constrained workflows can request exactly N parametric bands instead of only up-to-N conservative fits.
+2. Keep the design compatible with a later GraphicEQ / fixed-band mode without rewriting the fit objective layer.
 
 ## Recently completed
 
@@ -41,7 +42,7 @@ The current shipped state includes:
 
 ## Future follow-up candidates
 
-1. Add GraphicEQ export if there is a clear user need beyond parametric APO presets.
+1. Add GraphicEQ export / fixed-band fitting on top of the shared objective layer.
 2. Add export formats beyond CamillaDSP and APO if users actually need them.
 3. Add more published curve examples if clone-target workflows generate repeated support questions.
 4. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
