@@ -280,6 +280,24 @@ The general rule is:
 
 ---
 
+## Example target curves
+
+General-purpose example target curves live in:
+
+```text
+docs/examples/targets/
+```
+
+Included example tonal targets:
+- Harman-style
+- diffuse-field
+- free-field
+- IEF neutral / Crinacle-style
+- V-shape
+- flat / studio
+
+These are small, editable example targets for quick experimentation. They are intentionally lightweight starting points rather than claims of exact published reference datasets.
+
 ## Clone-target examples
 
 Documented examples live in:
@@ -292,6 +310,12 @@ These examples are useful if you want to:
 - understand the expected CSV shape
 - see a simple published-curve clone workflow
 - inspect a prebuilt example clone target
+- try ready-to-use pairings such as:
+  - FiiO JT7 → Ananda Nano
+  - HD650 → HD800S
+
+Important: the shipped clone-target CSVs are **difference targets**, not magic “make this headphone become that headphone” files.
+Use them when measuring the matching **source** headphone, then review the graphs and confidence summary to see how close the result actually got.
 
 ---
 
