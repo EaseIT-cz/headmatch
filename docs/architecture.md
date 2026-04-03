@@ -61,12 +61,15 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - clone-target generation
 
 ### `peq.py`
-- PEQ band modeling
-- conservative fitting heuristics
+- PEQ band modeling (peaking, lowshelf, highshelf filters)
+- conservative fitting heuristics (edge-shelf detection, broad-band preference)
+- filter-budget enforcement (up_to_n vs exact_n fill policies)
+- fixed-band GraphicEQ profile fitting (geq_10_band, geq_31_band)
 
 ### `exporters.py`
-- Equalizer APO preset export generation
-- CamillaDSP export generation
+- Equalizer APO preset export generation (parametric and GraphicEQ formats)
+- CamillaDSP export generation (snippet and full YAML)
+- shared export for both L/R channels from the same fit result
 
 ### `plots.py`
 - dependency-free SVG review graph generation
@@ -190,15 +193,15 @@ If a relative clone target is used, the pipeline must resolve it into an effecti
 The goal is useful tonal correction, not maximally clever curve chasing.
 
 ### 5a. Filter family and fill policy must stay separate
-HeadMatch should treat these as orthogonal choices:
+HeadMatch treats these as orthogonal choices:
 - **filter family / actuator model**
-  - free-form PEQ
-  - fixed-band GraphicEQ (future)
+  - free-form PEQ (peaking, shelf filters)
+  - fixed-band GraphicEQ (geq_10_band, geq_31_band profiles)
 - **fill policy**
   - conservative `up_to_n`
   - exact-count `exact_n`
 
-That separation keeps the current conservative PEQ mode intact while allowing an exact-count PEQ mode now and a GraphicEQ mode later without rewriting the objective/residual logic.
+That separation keeps the current conservative PEQ mode intact while allowing an exact-count PEQ mode and fixed-band GraphicEQ mode without rewriting the objective/residual logic.
 
 ### 6. Output clarity matters
 Users should be able to open a folder and understand what happened.
@@ -217,11 +220,12 @@ The shipped product now includes:
 - TUI backup workflow and history browsing
 - shared config persistence and preload
 - clone-target support
-- Equalizer APO export
+- Equalizer APO parametric preset export by default
 - CamillaDSP export
 - measured-vs-target SVG review graphs in fit output folders
 - deterministic end-to-end synthetic integration tests
 - confidence/trust summaries in fit outputs
+- fixed-band GraphicEQ export and fitting support
 
 ---
 

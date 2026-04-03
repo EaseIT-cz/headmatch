@@ -20,8 +20,29 @@ The current shipped state includes:
 
 ## Active
 
-1. Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer.
-2. Expand synthetic regression coverage around fitting/export edge cases instead of relying on unavailable hardware-specific fixtures.
+1. TASK-054: Reject mono or duplicated-channel captures during analysis
+
+   Mono recordings are currently accepted by duplicating the channel to stereo.
+   Task-054 requires rejecting mono captures with a clear error message, and
+   detecting duplicated stereo channel captures that indicate a broken capture chain.
+
+   Acceptance criteria:
+   - Mono captures are rejected with a clear actionable message.
+   - Obviously duplicated stereo captures are rejected with a clear actionable message.
+   - Existing real stereo workflows remain valid.
+   - Full test suite passes.
+
+   Suggested files: `headmatch/analysis.py`, `tests/test_pipeline.py`, 
+   `tests/test_integration_cli.py`
+
+## Recently completed (0.2.2)
+- TASK-057: Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer
+- TASK-058: Expand synthetic regression coverage around fitting/export edge cases
+
+## Recently completed (earlier)
+- TASK-056: Add Equalizer APO GraphicEQ export
+- TASK-055: Add exact-count PEQ fitting mode
+- TASK-053: Add GUI file and folder pickers for path fields
 
 ## Recently completed
 
@@ -48,3 +69,10 @@ The current shipped state includes:
 4. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
 5. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
 6. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
+
+## Future feature candidates (deferred)
+
+1. Asynchronous Device Support and Clock Drift Compensation
+2. Automated HRTF Target Integration and Scaling
+3. Integration of CamillaDSP Live-Updates via WebSocket API
+
