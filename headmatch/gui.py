@@ -484,7 +484,14 @@ class HeadMatchGuiApp:
         controls.columnconfigure(1, weight=1)
         ttk.Label(controls, text="Search folder").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
         ttk.Entry(controls, textvariable=self.history_root_var).grid(row=0, column=1, sticky="ew", pady=(0, 8))
-        ttk.Button(controls, text="Refresh", command=lambda: self.show_view("history")).grid(row=0, column=2, sticky="e", padx=(12, 0), pady=(0, 8))
+        def _browse_history():
+            if filedialog:
+                path = filedialog.askdirectory(title="Select results folder")
+                if path:
+                    self.history_root_var.set(path)
+                    self.show_view("history")
+        ttk.Button(controls, text="Browse…", command=_browse_history).grid(row=0, column=2, sticky="e", padx=(8, 0), pady=(0, 8))
+        ttk.Button(controls, text="Refresh", command=lambda: self.show_view("history")).grid(row=0, column=3, sticky="e", padx=(4, 0), pady=(0, 8))
 
         scroll_frame = ttk.Frame(frame)
         scroll_frame.grid(row=3, column=0, sticky="nsew", pady=(12, 0))

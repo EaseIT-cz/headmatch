@@ -371,24 +371,27 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_update=Non
         gain_entry = ttk.Entry(points_frame, textvariable=gv, width=8)
         gain_entry.grid(row=row, column=2, sticky="w", padx=(0, 8), pady=2)
 
+        def _add_after(i=idx):
+            # Insert a new point between this point and the next one
+            pts = editor.points
+            if i < len(pts) - 1:
+                new_freq = (pts[i].freq_hz + pts[i + 1].freq_hz) / 2
+                new_gain = (pts[i].gain_db + pts[i + 1].gain_db) / 2
+            else:
+                # Last point: extrapolate slightly above
+                new_freq = min(pts[i].freq_hz * 1.5, 20000.0)
+                new_gain = pts[i].gain_db
+            editor.add_point(new_freq, new_gain)
+            if on_update:
+                on_update()
+
+        ttk.Button(points_frame, text="+",
+                   command=_add_after, width=3).grid(
+            row=row, column=3, sticky="w", pady=2)
         if len(editor.points) > 2:
             ttk.Button(points_frame, text="✕",
                        command=lambda i=idx: _remove_point(i), width=3).grid(
-                row=row, column=3, sticky="w", pady=2)
-
-    # Add point button
-    add_row = len(editor.points) + 1
-
-    def _add_point():
-        # Insert at midpoint of the frequency range
-        freqs = [p.freq_hz for p in editor.points]
-        new_freq = (freqs[len(freqs) // 2] + freqs[min(len(freqs) // 2 + 1, len(freqs) - 1)]) / 2
-        editor.add_point(new_freq, 0.0)
-        if on_update:
-            on_update()
-
-    ttk.Button(points_frame, text="+ Add point", command=_add_point).grid(
-        row=add_row, column=0, columnspan=2, sticky="w", pady=(8, 0))
+                row=row, column=4, sticky="w", pady=2)
 
     # Actions
     actions = ttk.Frame(frame, padding=(0, 8, 0, 0))
