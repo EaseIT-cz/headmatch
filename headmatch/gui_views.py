@@ -296,9 +296,10 @@ def render_history_results(ttk, frame, *, selection) -> None:
                     if sys.platform == 'linux':
                         subprocess.Popen(['xdg-open', path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     elif sys.platform == 'darwin':
-                        subprocess.Popen(['open', path])
-                    else:
-                        subprocess.Popen(['start', path], shell=True)
+                        subprocess.Popen(['open', path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    elif sys.platform == 'win32':
+                        import os as _os
+                        _os.startfile(path)
                 except OSError:
                     pass
             ttk.Button(guide, text="Open fit graph", command=_open_graph).grid(row=row, column=0, sticky="w", pady=(8, 0))

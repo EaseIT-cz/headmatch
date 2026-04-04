@@ -28,8 +28,18 @@ def parse_seconds(value: str) -> float:
     return seconds
 
 
+def positive_int(value: str) -> int:
+    try:
+        n = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid integer value: {value!r}") from exc
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {n}")
+    return n
+
+
 def add_filter_budget_args(p: argparse.ArgumentParser, config) -> None:
-    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Number of EQ filters per channel. With --fill-policy up_to_n (default), this is the maximum. With --fill-policy exact_n, exactly this many filters are placed.")
+    p.add_argument("--max-filters", type=positive_int, default=config.max_filters, help="Number of EQ filters per channel. With --fill-policy up_to_n (default), this is the maximum. With --fill-policy exact_n, exactly this many filters are placed.")
     p.add_argument(
         "--filter-family",
         choices=("peq", "graphic_eq"),
@@ -114,7 +124,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_filter_budget_args(p, config)
     p.add_argument(
         "--iterations",
-        type=int,
+        type=positive_int,
         default=config.start_iterations,
         help="Number of online measure-and-fit passes. Default: 1 for a simple first run.",
     )
@@ -168,11 +178,7 @@ def build_parser(config) -> argparse.ArgumentParser:
 
     p = sub.add_parser("import-apo", help="Import an Equalizer APO parametric preset and re-optimise against a measurement.")
     p.add_argument("--preset", required=True, help="Path to an Equalizer APO .txt parametric preset.")
-    p.add_argument("--recording", required=True, help="Recording WAV to fit against.")
-    p.add_argument("--out-dir", required=True, help="Output directory for the re-optimised result.")
-    p.add_argument("--target-csv", default=None, help="Optional target curve. If omitted, the imported preset defines the starting point.")
-    add_common_sweep_args(p, config)
-    add_filter_budget_args(p, config)
+    p.add_argument("--out-dir", required=True, help="Output directory for converted preset files.")
 
     p = sub.add_parser("clone-target", help="Create a clone target curve from source and target FR CSVs.")
     p.add_argument("--source-csv", required=True)
@@ -199,7 +205,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
     p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
-    p.add_argument("--iterations", type=int, default=config.iterate_iterations)
+    p.add_argument("--iterations", type=positive_int, default=config.iterate_iterations)
     p.add_argument(
         "--iteration-mode",
         choices=("independent", "average"),
@@ -412,6 +418,7 @@ def main(argv: list[str] | None = None) -> None:
                 iterations=args.iterations,
                 max_filters=args.max_filters,
                 filter_budget=filter_budget_from_args(args),
+                iteration_mode=getattr(args, 'iteration_mode', 'independent'),
             )
         elif args.cmd == "render-sweep":
             render_sweep_file(spec_from_args(args), args.out)
@@ -436,9 +443,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         elif args.cmd == "analyze":
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
-        elif args.cmd == "fit":
-            process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
-        elif args.cmd == "fit-offline":
+        elif args.cmd in ("fit", "fit-offline"):
             process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
         elif args.cmd == "search-headphone":
             from .headphone_db import search_headphone
@@ -451,15 +456,19 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Saved to {out}")
         elif args.cmd == "import-apo":
             from .apo_import import load_apo_preset
+            from .exporters import (
+                export_camilladsp_filters_yaml,
+                export_camilladsp_filter_snippet_yaml,
+                export_equalizer_apo_parametric_txt,
+            )
             left_bands, right_bands = load_apo_preset(args.preset)
             print(f"Imported {len(left_bands)} left + {len(right_bands)} right filters from {args.preset}")
-            # Re-fit: use imported bands as starting context, then run normal pipeline
-            process_single_measurement(
-                args.recording, args.out_dir, spec_from_args(args),
-                target_path=args.target_csv,
-                max_filters=args.max_filters,
-                filter_budget=filter_budget_from_args(args),
-            )
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
+            export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands)
+            export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+            print(f"Exported to {out_dir}: equalizer_apo.txt, camilladsp_full.yaml, camilladsp_filters_only.yaml")
         elif args.cmd == "clone-target":
             build_clone_curve(args.source_csv, args.target_csv, args.out)
         elif args.cmd == "iterate":
@@ -472,6 +481,7 @@ def main(argv: list[str] | None = None) -> None:
                 iterations=args.iterations,
                 max_filters=args.max_filters,
                 filter_budget=filter_budget_from_args(args),
+                iteration_mode=getattr(args, 'iteration_mode', 'independent'),
             )
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")

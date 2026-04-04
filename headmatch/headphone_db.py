@@ -38,26 +38,39 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def search_headphone(query: str, database: str = "autoeq") -> List[str]:
-    """Search for headphone names matching a query.
+    """Search guidance for headphone FR curves.
 
-    This is a best-effort search — it cannot enumerate the full database
-    without a local index. Returns a list of possible match paths.
+    Note: this does not perform a live database search. AutoEQ does not
+    expose a search API. Instead, it returns instructions for the user
+    to find and download the curve manually.
     """
-    # For now, return a formatted suggestion since AutoEQ doesn't have a search API
-    normalized = query.strip().replace(" ", "%20")
     return [
-        f"Try: https://github.com/jaakkopasanen/AutoEq — search for '{query}'",
-        f"Once found, use the raw CSV URL with: headmatch fetch-curve --url <raw-csv-url> --out curve.csv",
+        f"Headphone database search is not yet automated.",
+        f"To find '{query}', visit: https://github.com/jaakkopasanen/AutoEq",
+        f"Browse the results/ folder for your headphone model.",
+        f"Copy the raw CSV URL, then run:",
+        f"  headmatch fetch-curve --url <raw-csv-url> --out curve.csv",
     ]
 
 
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap
+
+
 def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
-    """Download a frequency response CSV from a URL and save it locally."""
+    """Download a frequency response CSV from a URL and save it locally.
+
+    Only HTTPS URLs are accepted. Response size is capped at 5 MB.
+    """
+    if not url.startswith("https://"):
+        raise ValueError(f"Only HTTPS URLs are accepted. Got: {url}")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with urlopen(url, timeout=15) as resp:
-            text = resp.read().decode("utf-8")
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
+            text = raw.decode("utf-8")
     except (URLError, OSError) as e:
         raise ConnectionError(f"Failed to fetch {url}: {e}") from e
 

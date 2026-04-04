@@ -33,10 +33,27 @@ def test_parse_autoeq_csv_skips_headers():
 def test_search_headphone_returns_suggestions():
     results = search_headphone("HD650")
     assert len(results) >= 1
-    assert "HD650" in results[0]
+    assert any("HD650" in r for r in results)
 
 
 def test_parse_empty_csv_raises():
     import pytest
     with pytest.raises(ValueError, match="No valid"):
         _parse_autoeq_csv("just,headers\n")
+
+
+def test_fetch_curve_rejects_http_url():
+    import pytest
+    with pytest.raises(ValueError, match="Only HTTPS"):
+        fetch_curve_from_url("http://example.com/curve.csv", "/tmp/out.csv")
+
+
+def test_fetch_curve_rejects_file_url():
+    import pytest
+    with pytest.raises(ValueError, match="Only HTTPS"):
+        fetch_curve_from_url("file:///etc/passwd", "/tmp/out.csv")
+
+
+def test_search_headphone_is_honest():
+    results = search_headphone("HD650")
+    assert any("not yet automated" in r for r in results)

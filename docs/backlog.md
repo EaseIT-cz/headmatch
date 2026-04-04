@@ -27,6 +27,17 @@ The current shipped state includes:
 
 No active tasks.
 
+## Recently completed (0.4.0 patch)
+- Fixed iteration_mode not passed through CLI to pipeline
+- Fixed import-apo: now re-exports imported bands instead of ignoring them
+- Fixed Windows shell=True security issue in graph opener (now uses os.startfile)
+- Tightened fetch-curve: HTTPS-only, 5 MB response cap
+- Added tests/__init__.py for sdist test suite compatibility
+- Merged duplicate fit/fit-offline CLI branches
+- Made search_headphone honest about being a placeholder
+- Added user-friendly JSON config error messages
+- Added positive-int validators for --iterations and --max-filters
+
 ## Recently completed (0.4.0)
 - Vectorised fractional-octave smoothing (~50x faster)
 - Direct biquad evaluation replacing scipy.signal.freqz (3-5x faster)

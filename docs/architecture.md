@@ -77,10 +77,12 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 ### `apo_import.py`
 - Equalizer APO parametric preset parser
 - per-channel and mono preset support
+- re-export imported presets to CamillaDSP and HeadMatch formats
 
 ### `headphone_db.py`
-- community headphone database search and curve fetching
+- community headphone database search guidance and curve fetching
 - AutoEQ CSV parser and format conversion
+- HTTPS-only URL validation with 5 MB response cap
 
 ### `target_editor.py`
 - drag-point target curve editor model
