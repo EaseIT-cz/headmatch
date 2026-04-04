@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -22,5 +25,5 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-test.txt
 
-      - name: Run unit and functional pytest suite
-        run: python -m pytest -q tests/test_cli.py tests/test_cli_errors.py tests/test_gui.py tests/test_history.py tests/test_pipeline.py tests/test_settings.py tests/test_targets.py tests/test_tui.py tests/test_peq_exporters.py
+      - name: Run test suite
+        run: python -m pytest -q --ignore=tests/test_integration_cli.py
