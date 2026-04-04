@@ -71,6 +71,16 @@ class FitObjective:
         current = builder(self.freqs_hz, self.sample_rate, bands)
         return self.residual_from_response_db(current)
 
+    def raw_residual_db(
+        self,
+        bands: List["PEQBand"],
+        response_builder: Callable[[np.ndarray, int, List["PEQBand"]], np.ndarray] | None = None,
+    ) -> np.ndarray:
+        """Unsmoothed residual for bandwidth estimation."""
+        builder = response_builder or peq_chain_response_db
+        current = builder(self.freqs_hz, self.sample_rate, bands)
+        return self.eq_target_db - current
+
 
 @dataclass
 class PEQBand:
@@ -266,16 +276,20 @@ def _peaking_candidate(
     *,
     max_gain_db: float,
     max_q: float,
+    raw_residual: np.ndarray | None = None,
 ) -> PEQBand:
     peak_db = float(residual[idx])
     fc = float(np.clip(objective.freqs_hz[idx], 35.0, objective.sample_rate / 2 - 500.0))
 
-    threshold = abs(peak_db) * 0.5
+    # Use raw (unsmoothed) residual for bandwidth estimation when available,
+    # so narrow features are not broadened by the 10th-octave smoother.
+    bw_source = raw_residual if raw_residual is not None else residual
+    threshold = abs(float(bw_source[idx])) * 0.5
     l = int(idx)
-    while l > 0 and abs(residual[l]) >= threshold:
+    while l > 0 and abs(bw_source[l]) >= threshold:
         l -= 1
     r = int(idx)
-    while r < len(objective.freqs_hz) - 1 and abs(residual[r]) >= threshold:
+    while r < len(objective.freqs_hz) - 1 and abs(bw_source[r]) >= threshold:
         r += 1
     f1 = max(objective.freqs_hz[l], 20.0)
     f2 = min(objective.freqs_hz[r], objective.sample_rate / 2 - 100)
@@ -299,18 +313,62 @@ def _select_peaking_candidate(
     min_gain_db: float,
     allow_nearby_same_sign: bool,
 ) -> PEQBand | None:
+    raw_residual = objective.raw_residual_db(bands)
     weighted = residual * objective.weights
     for idx in np.argsort(np.abs(weighted))[::-1]:
         peak_db = float(weighted[idx] / objective.weights[idx])
         if abs(peak_db) < min_peak_db:
             break
-        candidate = _peaking_candidate(objective, residual, int(idx), max_gain_db=max_gain_db, max_q=max_q)
+        candidate = _peaking_candidate(objective, residual, int(idx), max_gain_db=max_gain_db, max_q=max_q, raw_residual=raw_residual)
         if abs(candidate.gain_db) < min_gain_db:
             continue
         if not allow_nearby_same_sign and _nearby_same_sign_band_exists(bands, candidate):
             continue
         return candidate
     return None
+
+
+def _refine_bands_jointly(
+    objective: FitObjective,
+    bands: List[PEQBand],
+    *,
+    max_gain_db: float,
+    max_q: float,
+) -> List[PEQBand]:
+    """Joint Nelder-Mead refinement of peaking bands only. Shelves stay fixed."""
+    from scipy.optimize import minimize
+
+    peaking_indices = [i for i, b in enumerate(bands) if b.kind == 'peaking']
+    if len(peaking_indices) < 2:
+        return bands  # not enough peaking bands to justify refinement
+
+    def _bands_from_params(params: np.ndarray) -> List[PEQBand]:
+        result = list(bands)
+        for pi, i in enumerate(peaking_indices):
+            freq = float(np.clip(params[pi * 3], 25.0, objective.sample_rate / 2 - 200))
+            gain = float(np.clip(params[pi * 3 + 1], -max_gain_db, max_gain_db))
+            q = float(np.clip(params[pi * 3 + 2], 0.3, max_q))
+            result[i] = PEQBand('peaking', freq, gain, q)
+        return result
+
+    def _cost(params: np.ndarray) -> float:
+        trial = _bands_from_params(params)
+        residual = objective.residual_db(trial)
+        return float(np.sum((residual * objective.weights) ** 2))
+
+    x0 = []
+    for i in peaking_indices:
+        x0.extend([bands[i].freq, bands[i].gain_db, bands[i].q])
+    x0 = np.array(x0, dtype=np.float64)
+
+    initial_cost = _cost(x0)
+    max_iter = min(80 * len(peaking_indices), 400)
+    result = minimize(_cost, x0, method='Nelder-Mead',
+                      options={'maxiter': max_iter, 'xatol': 0.5, 'fatol': 0.05})
+
+    if result.fun < initial_cost * 0.97:  # accept if >=3% improvement
+        return _bands_from_params(result.x)
+    return bands
 
 
 def fit_peq(
@@ -393,4 +451,11 @@ def fit_peq(
             break
         bands.append(candidate)
 
+
+    # ── Joint refinement pass ─────────────────────────────────────────
+    # After greedy placement, jointly refine all band parameters using
+    # Nelder-Mead to reduce total weighted residual. This catches cases
+    # where greedy placement left suboptimal parameter combinations.
+    if len(bands) >= 2:
+        bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q)
     return bands

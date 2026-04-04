@@ -55,13 +55,29 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
     energy = np.abs(ref)
     gate = energy >= (0.12 * np.max(energy))
     corr = signal.fftconvolve(mono_rec, ref[::-1], mode='full')
-    candidate_offsets = np.argsort(np.abs(corr))[-8:]
-    candidate_offsets = np.unique(candidate_offsets - len(reference) + 1)
+    # Find local maxima above a relative threshold instead of taking the
+    # global top-8. This is more robust when a strong room echo produces
+    # a secondary peak that outranks the true alignment in global sorting.
+    corr_abs = np.abs(corr)
+    corr_threshold = 0.3 * np.max(corr_abs) if len(corr_abs) else 0.0
+    # Local maxima: points higher than both neighbours and above threshold
+    local_max_mask = np.zeros(len(corr_abs), dtype=bool)
+    for i in range(1, len(corr_abs) - 1):
+        if corr_abs[i] > corr_abs[i - 1] and corr_abs[i] > corr_abs[i + 1] and corr_abs[i] >= corr_threshold:
+            local_max_mask[i] = True
+    # Always include the global maximum
+    if len(corr_abs):
+        local_max_mask[np.argmax(corr_abs)] = True
+    candidate_indices = np.where(local_max_mask)[0]
+    # Limit to top 16 by magnitude to bound computation
+    if len(candidate_indices) > 16:
+        top_order = np.argsort(corr_abs[candidate_indices])[-16:]
+        candidate_indices = candidate_indices[top_order]
+    candidate_offsets = np.unique(candidate_indices.astype(np.int64) - len(reference) + 1)
 
     best_offset = 0
     best_score = float('-inf')
     best_peak = 0.0
-    corr_abs = np.abs(corr)
     corr_max = float(np.max(corr_abs)) if len(corr_abs) else 0.0
     for raw_offset in candidate_offsets:
         offset = int(raw_offset)
@@ -111,11 +127,15 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
 
 
 
-def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: int, f_min=20.0, f_max=20000.0) -> tuple[np.ndarray, np.ndarray]:
+def _fr_from_signals(reference: np.ndarray, response: np.ndarray, sample_rate: int, f_min=20.0, f_max=20000.0, wiener_lambda=1e-3) -> tuple[np.ndarray, np.ndarray]:
     nfft = int(2 ** np.ceil(np.log2(max(len(reference), len(response)))))
     ref_fft = np.fft.rfft(reference, n=nfft)
     resp_fft = np.fft.rfft(response, n=nfft)
-    h = resp_fft / np.where(np.abs(ref_fft) > 1e-12, ref_fft, 1e-12)
+    # Wiener deconvolution: H = conj(R) * Y / (|R|^2 + lambda * mean(|R|^2))
+    # Gracefully suppresses noise where the sweep has low energy (frequency extremes).
+    ref_power = np.abs(ref_fft) ** 2
+    regulariser = wiener_lambda * np.mean(ref_power)
+    h = np.conj(ref_fft) * resp_fft / (ref_power + regulariser)
     freqs = np.fft.rfftfreq(nfft, d=1.0 / sample_rate)
     mask = (freqs >= f_min) & (freqs <= f_max)
     return freqs[mask], 20 * np.log10(np.maximum(np.abs(h[mask]), 1e-12))

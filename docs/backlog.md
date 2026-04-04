@@ -25,9 +25,13 @@ The current shipped state includes:
 
 ## Active
 
-No active tasks.
+No active tasks. All planned work complete.
 
 ## Recently completed (0.3.0+)
+- Wiener regularisation in _fr_from_signals (noise suppression at frequency extremes)
+- Raw residual bandwidth estimation in _peaking_candidate (more accurate Q for narrow features)
+- Local-maxima alignment search replacing top-8 global sort (robust to echoes)
+- Joint Nelder-Mead PEQ refinement after greedy placement (reduces total residual)
 - TASK-073: Type-narrow PEQBand.kind to Literal
 - TASK-074: Extract confidence thresholds into named constants
 - TASK-075: _band_mask already parameterised (verified, no changes needed)
@@ -60,11 +64,6 @@ No active tasks.
 
 ## Future follow-up candidates
 
-1. Wiener regularisation in transfer function estimation (improves FR at frequency extremes)
-2. Residual bandwidth estimation from raw (unsmoothed) residual in _peaking_candidate
-3. Parameterise _band_mask frequency limits (currently hardcoded 80-8000 Hz)
-4. Replace top-8 candidate alignment search with local-maxima search above threshold
-5. Multi-pass joint PEQ refinement after greedy placement (Nelder-Mead or L-M)
 6. Vectorise fractional_octave_smoothing and replace freqz with direct biquad eval
 7. Add export formats beyond CamillaDSP and APO if users actually need them
 8. Extract confidence thresholds into named constants

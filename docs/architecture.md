@@ -50,8 +50,8 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - offline measurement package generation
 
 ### `analysis.py`
-- recording alignment
-- frequency-response estimation
+- recording alignment via local-maxima cross-correlation search
+- Wiener-regularised frequency-response estimation
 - measurement CSV export
 - reliability diagnostics used by confidence scoring
 
@@ -61,8 +61,11 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - clone-target generation
 
 ### `peq.py`
-- PEQ band modeling (peaking, lowshelf, highshelf filters)
-- conservative fitting heuristics (edge-shelf detection, broad-band preference)
+- PEQ band modeling (peaking, lowshelf, highshelf filters) with type-safe Literal kind
+- conservative greedy fitting heuristics (edge-shelf detection, broad-band preference)
+- joint Nelder-Mead refinement pass after greedy placement
+- raw (unsmoothed) residual bandwidth estimation for narrower Q accuracy
+- injectable FitObjective weights for use-case customisation
 - filter-budget enforcement (up_to_n vs exact_n fill policies)
 - fixed-band GraphicEQ profile fitting (geq_10_band, geq_31_band)
 
@@ -228,6 +231,10 @@ The shipped product now includes:
 - mono and duplicated-channel capture rejection (all channel counts)
 - confidence/trust summaries with named threshold constants
 - 373 deterministic tests including 241 RBJ biquad coefficient reference tests
+- Wiener-regularised transfer function estimation (noise suppression at frequency extremes)
+- local-maxima alignment search (robust to room echoes)
+- joint Nelder-Mead PEQ refinement after greedy placement
+- raw residual bandwidth estimation for accurate Q on narrow features
 - `fit-offline` CLI alias for `fit` (backward compatibility)
 - type-safe PEQBand.kind (Literal, not str)
 - injectable FitObjective weights for future use-case customisation
@@ -237,9 +244,6 @@ The shipped product now includes:
 ## Likely future work
 
 Likely follow-up candidates:
-- Wiener regularisation in transfer function estimation (FR accuracy at frequency extremes)
-- residual bandwidth estimation from raw (unsmoothed) residual in _peaking_candidate
-- multi-pass joint PEQ refinement after greedy placement (Nelder-Mead or L-M)
 - vectorise fractional_octave_smoothing and replace freqz with direct biquad eval (perf)
 - additional export formats beyond APO and CamillaDSP if there is real demand
 - safe mode vs advanced mode split if the product accumulates too many knobs
