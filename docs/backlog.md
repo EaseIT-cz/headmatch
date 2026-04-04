@@ -19,29 +19,35 @@ The current shipped state includes:
 - CamillaDSP export
 - confidence / trust summaries in fit outputs
 - fixed-band GraphicEQ fitting support (10-band and 31-band profiles)
-- mono and duplicated-channel capture rejection
+- mono and duplicated-channel capture rejection (including multichannel files)
 
 ## Active
 
-1. TASK-059: Extend duplicated-channel detection to multichannel captures
+1. TASK-061: Add confidence badge styling to GUI history view
 
-   The duplicated-channel check added in TASK-054 only fires for exactly 2-channel
-   files. Multichannel recordings (3+ channels) silently use channels 0 and 1
-   without verifying they are distinct.
+   Visual differentiation (color/icon) for high/medium/low confidence in
+   the history list so users can scan results at a glance.
 
-   Suggested files: `headmatch/analysis.py`, `tests/test_pipeline.py`
+   Suggested files: `headmatch/gui_views.py`, `headmatch/gui.py`, `tests/test_gui.py`
 
-2. TASK-060: Refactor TASK-054 tests to use pytest.raises
+2. TASK-062: Add one-line confidence verdict to CLI fit output
 
-   The mono and duplicated-channel rejection tests use manual try/except/assert False
-   instead of idiomatic pytest.raises. Produces worse failure messages.
+   Single-line colored pass/fail verdict as the first line of CLI confidence
+   output, before the detailed breakdown.
 
-   Suggested files: `tests/test_pipeline.py`
+   Suggested files: `headmatch/cli.py`, `tests/test_cli.py`
 
-## Recently completed (0.2.2+)
+3. TASK-063: Add GUI setup diagnostics view
+
+   Make the GUI Setup view a proper scrollable diagnostics panel with refresh,
+   matching the CLI `headmatch doctor` experience.
+
+   Suggested files: `headmatch/gui.py`, `headmatch/gui_views.py`, `tests/test_gui.py`
+
+## Recently completed (0.2.3)
 - TASK-054: Reject mono or duplicated-channel captures during analysis
-- TASK-059: Extend duplicated-channel detection to multichannel captures (fix)
-- TASK-060: Refactor TASK-054 tests to use pytest.raises (cleanup)
+- TASK-059: Extend duplicated-channel detection to multichannel captures
+- TASK-060: Refactor TASK-054 tests to use pytest.raises
 
 ## Recently completed (0.2.2)
 - TASK-057: Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer
