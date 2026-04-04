@@ -68,6 +68,7 @@ No active tasks.
 ### Now
 - Implement import-apo refine mode (re-optimise imported preset against user measurement)
 - Implement real headphone database search (GitHub API or cached local index)
+- Live curve preview in the target editor (render the interpolated curve as the user edits)
 
 ### Next — packaging and CI hardening
 - Add pytest.ini with pythonpath config
