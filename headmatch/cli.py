@@ -29,7 +29,7 @@ def parse_seconds(value: str) -> float:
 
 
 def add_filter_budget_args(p: argparse.ArgumentParser, config) -> None:
-    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Maximum filters or bands per channel.")
+    p.add_argument("--max-filters", type=int, default=config.max_filters, help="Number of EQ filters per channel. With --fill-policy up_to_n (default), this is the maximum. With --fill-policy exact_n, exactly this many filters are placed.")
     p.add_argument(
         "--filter-family",
         choices=("peq", "graphic_eq"),
@@ -152,7 +152,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     add_filter_budget_args(p, config)
 
-    p = sub.add_parser("fit-offline", help="Analyze an imported offline recording and build Equalizer APO and CamillaDSP EQ exports.")
+    p = sub.add_parser("fit-offline", help="Alias for 'fit'. Kept for backward compatibility.")
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)

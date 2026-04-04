@@ -239,8 +239,11 @@ headmatch fit \
   --recording out/measure_usb_01/recording.wav \
   --out-dir out/fit_usb_01 \
   --target-csv my_target.csv \
-  --max-filters 8
+  --max-filters 8 \
+  --fill-policy up_to_n
 ```
+
+`--max-filters` sets the number of EQ filters per channel. With `--fill-policy up_to_n` (the default), the fitter uses up to that many filters, stopping early if the residual error is small. With `--fill-policy exact_n`, exactly that many filters are placed.
 
 ### Offline package generation
 ```bash
@@ -249,11 +252,13 @@ headmatch prepare-offline --out-dir out/offline_session_01
 
 ### Offline fitting
 ```bash
-headmatch fit-offline \
+headmatch fit \
   --recording out/offline_session_01/recording.wav \
   --out-dir out/offline_session_01/fit \
   --target-csv my_target.csv
 ```
+
+`fit-offline` is still accepted as an alias for `fit` for backward compatibility, but there is no difference between them.
 
 ### Iterative online workflow
 ```bash
@@ -262,8 +267,11 @@ headmatch iterate \
   --target-csv my_target.csv \
   --output-target "your-playback-node" \
   --input-target "your-capture-node" \
-  --iterations 3
+  --iterations 3 \
+  --iteration-mode average
 ```
+
+`--iteration-mode average` measures N times, averages the frequency responses, and fits once. This reduces noise from head position variation and ambient sound. The default `--iteration-mode independent` fits each pass separately (useful for consistency checking).
 
 ### Quick setup check
 ```bash
