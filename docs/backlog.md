@@ -25,7 +25,15 @@ The current shipped state includes:
 
 ## Active
 
-No active tasks. All planned work for 0.3.0 is complete.
+No active tasks.
+
+## Recently completed (0.3.0+)
+- TASK-073: Type-narrow PEQBand.kind to Literal
+- TASK-074: Extract confidence thresholds into named constants
+- TASK-075: _band_mask already parameterised (verified, no changes needed)
+- TASK-076: Make FitObjective.weights injectable
+- CLI/README UX cleanup: fit-offline alias, --max-filters help, --iteration-mode docs
+- Archived 15 completed task specs to docs/tasks/archive/
 
 ## Recently completed (0.3.0)
 - TASK-061: Confidence badge styling in GUI history view

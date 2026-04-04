@@ -215,27 +215,43 @@ Confidence scoring and plain-language interpretation are part of the product, no
 ## Current state
 
 The shipped product now includes:
-- beginner-first CLI workflow
-- GUI shell, history browsing, and measurement wizard
-- TUI backup workflow and history browsing
+- beginner-first CLI workflow with single-line confidence verdict (ANSI-colored on TTY)
+- GUI shell with confidence badges (✓/⚠/✗), graph display button, scrollable diagnostics
+- TUI backup workflow and history browsing (maintenance-only)
 - shared config persistence and preload
-- clone-target support
+- clone-target support with explicit relative/absolute semantics
 - Equalizer APO parametric and GraphicEQ preset export
-- CamillaDSP export
+- CamillaDSP export with correct shelf Q/S conversion
 - fixed-band GraphicEQ fitting (10-band and 31-band profiles)
 - measured-vs-target SVG review graphs in fit output folders
-- deterministic end-to-end synthetic integration tests
-- confidence/trust summaries in fit outputs
-- mono and duplicated-channel capture rejection
+- multi-pass averaging iteration mode (--iteration-mode average)
+- mono and duplicated-channel capture rejection (all channel counts)
+- confidence/trust summaries with named threshold constants
+- 373 deterministic tests including 241 RBJ biquad coefficient reference tests
+- `fit-offline` CLI alias for `fit` (backward compatibility)
+- type-safe PEQBand.kind (Literal, not str)
+- injectable FitObjective weights for future use-case customisation
 
 ---
 
 ## Likely future work
 
-If future work resumes, the most sensible candidates are:
+Likely follow-up candidates:
+- Wiener regularisation in transfer function estimation (FR accuracy at frequency extremes)
+- residual bandwidth estimation from raw (unsmoothed) residual in _peaking_candidate
+- multi-pass joint PEQ refinement after greedy placement (Nelder-Mead or L-M)
+- vectorise fractional_octave_smoothing and replace freqz with direct biquad eval (perf)
 - additional export formats beyond APO and CamillaDSP if there is real demand
-- more real-world published-curve examples
 - safe mode vs advanced mode split if the product accumulates too many knobs
+
+Deferred feature candidates:
+- asynchronous device support and clock drift compensation
+- automated HRTF target integration and scaling
+- CamillaDSP live-update integration via WebSocket API
+- closed-loop EQ refinement (measure → apply → re-measure)
+- Windows/macOS support (platform-aware measure.py backends)
+- APO AutoEQ import, headphone database integration
+- GUI target curve editor, room correction / speaker mode
 
 ---
 
