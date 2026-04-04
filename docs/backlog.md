@@ -66,9 +66,9 @@ No active tasks.
 ## Future work
 
 ### Now
-- Implement import-apo refine mode (re-optimise imported preset against user measurement)
-- Implement real headphone database search (GitHub API or cached local index)
+- TASK-077: Research and fix dense GraphicEQ clipping (feature considered broken)
 - Live curve preview in the target editor (render the interpolated curve as the user edits)
+- Implement real headphone database search (GitHub API or cached local index)
 
 ### Next — packaging and CI hardening
 - Add pytest.ini with pythonpath config
