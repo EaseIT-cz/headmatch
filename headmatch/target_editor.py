@@ -76,14 +76,49 @@ class TargetEditor:
         save_fr_csv(path, freqs, values, column_name='response_db')
 
     @classmethod
-    def from_csv(cls, path: str) -> 'TargetEditor':
-        """Load control points from an existing target CSV (sample key points)."""
+    def from_csv(cls, path: str, max_points: int = 24) -> 'TargetEditor':
+        """Load control points from an existing target CSV.
+
+        If the CSV has few points (≤ max_points), all are loaded directly.
+        For dense CSVs (e.g. 48 PPO measurement grids), the curve is
+        downsampled by picking peaks, troughs, endpoints, and evenly-spaced
+        fill points to preserve the shape in ~max_points control points.
+        """
         from .io_utils import load_fr_csv
         freqs, values = load_fr_csv(path)
-        # Sample ~8 evenly-spaced points in log frequency
-        if len(freqs) <= 8:
+        n = len(freqs)
+        if n <= max_points:
             points = [ControlPoint(float(f), float(v)) for f, v in zip(freqs, values)]
-        else:
-            indices = np.linspace(0, len(freqs) - 1, 8, dtype=int)
-            points = [ControlPoint(float(freqs[i]), float(values[i])) for i in indices]
+            return cls(points=points)
+
+        # Always include first and last
+        key_indices = {0, n - 1}
+
+        # Find local peaks and troughs
+        for i in range(1, n - 1):
+            if (values[i] > values[i - 1] and values[i] > values[i + 1]) or \
+               (values[i] < values[i - 1] and values[i] < values[i + 1]):
+                key_indices.add(i)
+
+        # If too many peaks/troughs, keep only the most prominent
+        if len(key_indices) > max_points:
+            scored = []
+            for i in key_indices:
+                if i == 0 or i == n - 1:
+                    scored.append((i, float('inf')))
+                else:
+                    prominence = abs(values[i] - (values[max(0, i-1)] + values[min(n-1, i+1)]) / 2)
+                    scored.append((i, prominence))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            key_indices = {idx for idx, _ in scored[:max_points]}
+
+        # Fill remaining budget with evenly-spaced log samples
+        remaining = max_points - len(key_indices)
+        if remaining > 0:
+            fill = np.linspace(0, n - 1, remaining + 2, dtype=int)[1:-1]
+            for idx in fill:
+                key_indices.add(int(idx))
+
+        indices = sorted(key_indices)[:max_points]
+        points = [ControlPoint(float(freqs[i]), float(values[i])) for i in indices]
         return cls(points=points)

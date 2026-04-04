@@ -56,7 +56,7 @@ def test_save_and_reload(tmp_path: Path):
     assert Path(path).exists()
 
     reloaded = TargetEditor.from_csv(path)
-    assert len(reloaded.points) == 8  # sampled to 8 key points
+    assert len(reloaded.points) >= 3  # at least endpoints plus interior points
     _, orig_values = editor.evaluate()
     _, reload_values = reloaded.evaluate()
     # Should be close but not identical (resampled)
