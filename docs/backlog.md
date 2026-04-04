@@ -27,44 +27,11 @@ The shipped product includes:
 
 ## Active
 
-- TASK-077: Research and fix dense GraphicEQ clipping (feature considered broken)
-
-## Recently completed
-
-### 0.4.5
-- Fixed target editor `from_csv` to load all points from small CSVs and intelligently downsample dense grids to ~24 control points (was hardcoded to 8)
-
-### 0.4.4
-- Dense GraphicEQ export changed from raw target to PEQ-fitted response (partial clipping fix — still under investigation)
-- Target editor: per-row "+" add button, "Load CSV" button
-- History view: "Browse…" button for search folder
-- Desktop shortcut management (`create-shortcut`, `remove-shortcut`, GUI toggle, doctor integration)
-- 7 new desktop.py tests, 2 new target_editor tests
-- CI: explicit permissions on all workflows, pytest auto-discovers test files
-
-### 0.4.1
-- Fixed `--iteration-mode` CLI passthrough, import-apo behavior, Windows security, fetch-curve validation
-- GUI feature parity: target editor, APO import, curve fetch, iteration mode views
-- Merged fit/fit-offline, positive-int validators, config error handling
-
-### 0.4.0
-- Vectorised smoothing and direct biquad evaluation (performance)
-- APO AutoEQ preset import, headphone database integration, GUI target editor
-
-### 0.3.0
-- Wiener regularisation, raw residual Q, local-maxima alignment, joint PEQ refinement
-- GUI confidence badges, CLI verdict, graph display, averaging iteration mode
-- RBJ coefficient tests, biquad stability tests, bug fixes
-
-### 0.2.x
-- Mono/duplicated-channel capture rejection, GraphicEQ fitting
+- TASK-077: Research and fix dense GraphicEQ clipping
+- TASK-078: Live curve preview in the target editor
+- TASK-079: Real headphone database search
 
 ## Future work
-
-### Now
-- TASK-077: Research and fix dense GraphicEQ clipping
-- Live curve preview in the target editor
-- Implement real headphone database search
 
 ### Next
 - Add pytest.ini with pythonpath config
