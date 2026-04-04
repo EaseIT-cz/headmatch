@@ -308,33 +308,97 @@ def render_history_results(ttk, frame, *, selection) -> None:
             ttk.Label(guide, text="Graph not available.", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(8, 0))
 
 
-def render_target_editor(ttk, frame, *, editor, on_save, on_reset):
-    """Render a simple target curve editor with control point list and save button."""
+def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_update=None):
+    """Render an interactive target curve editor with editable control points."""
+    import tkinter as tk
+
     ttk.Label(frame, text="Target curve editor", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text="Build a custom target curve by editing control points. The curve is interpolated smoothly between points.",
+        text="Edit control points to shape your target curve. The curve is smoothly interpolated between points using PCHIP.",
         wraplength=BODY_WRAP,
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(8, 12))
 
-    points_frame = ttk.LabelFrame(frame, text="Control points (frequency Hz, gain dB)", padding=SECTION_PAD)
+    points_frame = ttk.LabelFrame(frame, text="Control points", padding=SECTION_PAD)
     points_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 12))
-    points_frame.columnconfigure(0, weight=1)
+    points_frame.columnconfigure(1, weight=1)
+    frame.rowconfigure(2, weight=1)
+
+    # Header
+    ttk.Label(points_frame, text="Freq (Hz)", style="Heading.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
+    ttk.Label(points_frame, text="Gain (dB)", style="Heading.TLabel").grid(row=0, column=1, sticky="w", padx=(0, 8))
+
+    freq_vars = []
+    gain_vars = []
+
+    def _apply_changes():
+        """Read all fields back into the editor model."""
+        for i, (fv, gv) in enumerate(zip(freq_vars, gain_vars)):
+            try:
+                freq = float(fv.get())
+                gain = float(gv.get())
+                if i < len(editor.points):
+                    editor.move_point(i, max(20.0, min(20000.0, freq)), max(-20.0, min(20.0, gain)))
+            except (ValueError, IndexError):
+                pass
+        if on_update:
+            on_update()
+
+    def _remove_point(idx):
+        editor.remove_point(idx)
+        if on_update:
+            on_update()
 
     for idx, point in enumerate(editor.points):
-        row_frame = ttk.Frame(points_frame)
-        row_frame.grid(row=idx, column=0, sticky="ew", pady=2)
-        ttk.Label(row_frame, text=f"{point.freq_hz:.0f} Hz").grid(row=0, column=0, sticky="w", padx=(0, 12))
-        ttk.Label(row_frame, text=f"{point.gain_db:+.1f} dB").grid(row=0, column=1, sticky="w", padx=(0, 12))
+        row = idx + 1
+        fv = tk.StringVar(value=f"{point.freq_hz:.0f}")
+        gv = tk.StringVar(value=f"{point.gain_db:.1f}")
+        freq_vars.append(fv)
+        gain_vars.append(gv)
 
+        freq_entry = ttk.Entry(points_frame, textvariable=fv, width=10)
+        freq_entry.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+
+        gain_scale = ttk.Scale(points_frame, from_=-20.0, to=20.0, orient="horizontal",
+                               command=lambda val, gvar=gv: gvar.set(f"{float(val):.1f}"))
+        try:
+            gain_scale.set(point.gain_db)
+        except Exception:
+            pass
+        gain_scale.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=2)
+
+        gain_entry = ttk.Entry(points_frame, textvariable=gv, width=8)
+        gain_entry.grid(row=row, column=2, sticky="w", padx=(0, 8), pady=2)
+
+        if len(editor.points) > 2:
+            ttk.Button(points_frame, text="✕",
+                       command=lambda i=idx: _remove_point(i), width=3).grid(
+                row=row, column=3, sticky="w", pady=2)
+
+    # Add point button
+    add_row = len(editor.points) + 1
+
+    def _add_point():
+        # Insert at midpoint of the frequency range
+        freqs = [p.freq_hz for p in editor.points]
+        new_freq = (freqs[len(freqs) // 2] + freqs[min(len(freqs) // 2 + 1, len(freqs) - 1)]) / 2
+        editor.add_point(new_freq, 0.0)
+        if on_update:
+            on_update()
+
+    ttk.Button(points_frame, text="+ Add point", command=_add_point).grid(
+        row=add_row, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    # Actions
     actions = ttk.Frame(frame, padding=(0, 8, 0, 0))
     actions.grid(row=3, column=0, sticky="w")
-    ttk.Button(actions, text="Save as target CSV", command=on_save).grid(row=0, column=0, sticky="w")
-    ttk.Button(actions, text="Reset to flat", command=on_reset).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Button(actions, text="Apply changes", command=_apply_changes).grid(row=0, column=0, sticky="w")
+    ttk.Button(actions, text="Save as CSV", command=lambda: [_apply_changes(), on_save()]).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Button(actions, text="Reset to flat", command=on_reset).grid(row=0, column=2, sticky="w", padx=(12, 0))
     ttk.Label(
         actions,
         text="After saving, use the CSV as --target-csv in your next measurement or fit.",
         wraplength=DETAIL_WRAP,
         justify="left",
-    ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))

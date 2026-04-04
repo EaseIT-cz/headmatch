@@ -348,6 +348,7 @@ class HeadMatchGuiApp:
             editor=self.target_editor,
             on_save=_save,
             on_reset=_reset,
+            on_update=lambda: self.show_view("target-editor"),
         )
 
     def _render_import_apo(self) -> None:
