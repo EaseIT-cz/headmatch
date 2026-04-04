@@ -4,7 +4,7 @@
 
 The shipped product includes:
 - CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
-- GUI with confidence badges, graph display, diagnostics, target editor, APO import, curve fetch, iteration mode
+- GUI with confidence badges, graph display, scrollable diagnostics, target editor (load/save/edit), APO import, curve fetch, iteration mode selector, desktop shortcut management
 - TUI backup workflow (maintenance-only)
 - APO AutoEQ preset import and re-export
 - Community headphone database search guidance and HTTPS-only curve fetching
@@ -21,70 +21,62 @@ The shipped product includes:
 - Mono and duplicated-channel capture rejection (all channel counts)
 - Confidence scoring with named threshold constants and injectable weights
 - Type-safe PEQBand.kind (Literal)
-- 392 deterministic tests including 241 RBJ biquad coefficient reference tests
+- Desktop shortcut management (CLI + GUI)
+- CI with explicit least-privilege permissions and auto-discovery of test files
+- 401 deterministic tests including 241 RBJ biquad coefficient reference tests
 
 ## Active
 
-No active tasks.
+- TASK-077: Research and fix dense GraphicEQ clipping (feature considered broken)
 
 ## Recently completed
 
-### 0.4.0 — GUI parity
-- Wired target curve editor into GUI navigation (Target Editor view)
-- Added APO preset import view to GUI (Import APO)
-- Added community curve fetch view to GUI (Fetch Curve)
-- Added iteration mode selector (independent/average) to GUI measurement wizard
-- GUI now passes iteration_mode through to pipeline
-- Added _show_status helper for transient status messages in GUI
+### 0.4.5
+- Fixed target editor `from_csv` to load all points from small CSVs and intelligently downsample dense grids to ~24 control points (was hardcoded to 8)
 
-### 0.4.0 patch
-- Fixed iteration_mode not passed through CLI
-- Fixed import-apo to actually re-export imported bands
-- Fixed Windows shell=True security issue in graph opener
-- Tightened fetch-curve to HTTPS-only with 5 MB cap
-- Added tests/__init__.py for sdist compatibility
-- Merged duplicate fit/fit-offline CLI branches
-- Made search-headphone honest, added positive-int validators, config error handling
+### 0.4.4
+- Dense GraphicEQ export changed from raw target to PEQ-fitted response (partial clipping fix — still under investigation)
+- Target editor: per-row "+" add button, "Load CSV" button
+- History view: "Browse…" button for search folder
+- Desktop shortcut management (`create-shortcut`, `remove-shortcut`, GUI toggle, doctor integration)
+- 7 new desktop.py tests, 2 new target_editor tests
+- CI: explicit permissions on all workflows, pytest auto-discovers test files
+
+### 0.4.1
+- Fixed `--iteration-mode` CLI passthrough, import-apo behavior, Windows security, fetch-curve validation
+- GUI feature parity: target editor, APO import, curve fetch, iteration mode views
+- Merged fit/fit-offline, positive-int validators, config error handling
 
 ### 0.4.0
 - Vectorised smoothing and direct biquad evaluation (performance)
-- APO AutoEQ preset import
-- Community headphone database integration
-- GUI target curve editor with PCHIP interpolation
+- APO AutoEQ preset import, headphone database integration, GUI target editor
 
 ### 0.3.0
 - Wiener regularisation, raw residual Q, local-maxima alignment, joint PEQ refinement
-- GUI confidence badges, CLI verdict line, scrollable diagnostics, graph display
-- Multi-pass averaging iteration mode
-- RBJ coefficient tests, biquad stability tests
-- Bug fixes: _metrics mask, alignment_peak_ratio, shelf Q/S, dead code removal
+- GUI confidence badges, CLI verdict, graph display, averaging iteration mode
+- RBJ coefficient tests, biquad stability tests, bug fixes
 
 ### 0.2.x
-- Mono/duplicated-channel capture rejection
-- Fixed-band GraphicEQ fitting and expanded regression tests
+- Mono/duplicated-channel capture rejection, GraphicEQ fitting
 
 ## Future work
 
 ### Now
-- TASK-077: Research and fix dense GraphicEQ clipping (feature considered broken)
-- Live curve preview in the target editor (render the interpolated curve as the user edits)
-- Implement real headphone database search (GitHub API or cached local index)
+- TASK-077: Research and fix dense GraphicEQ clipping
+- Live curve preview in the target editor
+- Implement real headphone database search
 
-### Next — packaging and CI hardening
+### Next
 - Add pytest.ini with pythonpath config
 - Verify MANIFEST.in / setuptools include rules for sdist
 - Add Python 3.10–3.13 CI matrix
 - Use encoding="utf-8" consistently across all file I/O
-- Verify sdist / wheel produces self-consistent test-runnable package
 
-### Later — polish and expansion
+### Later
 - Extract repeated CLI parser setup into shared helpers
 - Cache fixed-profile basis responses for repeated runs
 - Add richer PipeWire error diagnostics
 - Add export formats beyond CamillaDSP and APO if demand exists
-- Add content-type validation to fetch-curve responses
-- Consistent cross-platform file-open across all paths
-- Streaming with size cap for all network fetches
 - Asynchronous device support and clock drift compensation
 - Automated HRTF target integration and scaling
 - CamillaDSP live-update integration via WebSocket API
