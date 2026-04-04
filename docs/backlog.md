@@ -76,7 +76,27 @@ No active tasks.
 
 ## Future follow-up candidates
 
-7. Add export formats beyond CamillaDSP and APO if users actually need them
+### Code quality / consistency
+- Use encoding="utf-8" consistently for all read_text() / write_text() calls (cross-platform safety)
+- Extract repeated CLI parser setup into shared helpers (add_fit_args, add_measure_args)
+- Improve GUI/CLI/TUI shared plumbing — advanced options are CLI-first, GUI lags behind
+- Add pytest.ini with pythonpath config and verify MANIFEST.in / setuptools include rules
+
+### Features
+- Add export formats beyond CamillaDSP and APO if users actually need them
+- Implement import-apo --import-mode refine (re-optimise imported preset against user measurement)
+- Implement real headphone database search (GitHub API or cached local index for AutoEQ)
+- Cache fixed-profile basis responses in fit_fixed_band_graphic_eq for repeated runs
+- Add richer PipeWire error diagnostics (show exact pw-play / pw-record command and target names)
+
+### Testing / CI
+- Add explicit Python 3.10–3.13 CI matrix to GitHub Actions
+- Verify sdist / wheel build produces a self-consistent test-runnable package
+- Add content-type validation to fetch-curve responses
+
+### Compatibility
+- Use os.startfile on Windows, open on macOS, xdg-open on Linux consistently across all file-open paths
+- Consider streaming with size cap for all network fetches (not just fetch-curve)
 
 ## Future feature candidates (deferred)
 
