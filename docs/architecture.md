@@ -113,7 +113,10 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 ### `gui.py`
 - primary desktop workflow
 - history browsing
-- guided measurement flow
+- guided measurement flow with iteration mode selection
+- target curve editor integration
+- APO preset import and re-export
+- community curve fetching
 
 ### `tui.py`
 - maintenance-mode terminal workflow
@@ -234,7 +237,7 @@ Confidence scoring and plain-language interpretation are part of the product, no
 
 The shipped product now includes:
 - beginner-first CLI workflow with single-line confidence verdict (ANSI-colored on TTY)
-- GUI shell with confidence badges (✓/⚠/✗), graph display button, scrollable diagnostics
+- GUI shell with confidence badges, graph display, scrollable diagnostics, target editor, APO import, curve fetch
 - TUI backup workflow and history browsing (maintenance-only)
 - shared config persistence and preload
 - clone-target support with explicit relative/absolute semantics

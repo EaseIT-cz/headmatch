@@ -23,6 +23,9 @@ from .measure import (
 )
 from .pipeline import iterative_measure_and_fit, process_single_measurement
 from .history import build_history_selection
+from .target_editor import TargetEditor
+from .apo_import import load_apo_preset
+from .headphone_db import fetch_curve_from_url
 from . import gui_views
 from .settings import load_or_create_config
 from .signals import SweepSpec
@@ -66,6 +69,9 @@ NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("measure-online", "Measure"),
     NavigationItem("setup-check", "Setup Check"),
     NavigationItem("prepare-offline", "Prepare Offline"),
+    NavigationItem("target-editor", "Target Editor"),
+    NavigationItem("import-apo", "Import APO"),
+    NavigationItem("fetch-curve", "Fetch Curve"),
     NavigationItem("history", "Results"),
 )
 
@@ -136,11 +142,18 @@ class HeadMatchGuiApp:
         self.output_target_options: tuple[str, ...] = ()
         self.input_target_options: tuple[str, ...] = ()
         self.iterations_var = tk.StringVar(master=root, value=str(state.start_iterations))
+        self.iteration_mode_var = tk.StringVar(master=root, value="independent")
         self.max_filters_var = tk.StringVar(master=root, value=str(state.max_filters))
         self.history_root_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser().parent))
         self.offline_recording_var = tk.StringVar(master=root, value="")
         self.offline_fit_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "fit"))
         self.offline_notes_var = tk.StringVar(master=root, value="")
+        self.apo_preset_var = tk.StringVar(master=root, value="")
+        self.apo_output_dir_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
+        self.fetch_url_var = tk.StringVar(master=root, value="")
+        self.fetch_output_var = tk.StringVar(master=root, value="")
+        self.target_editor = TargetEditor()
+        self.target_editor_save_path_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
         self.completion_title_var = tk.StringVar(master=root, value="")
@@ -227,6 +240,15 @@ class HeadMatchGuiApp:
         if key == "prepare-offline":
             self._render_offline_wizard()
             return
+        if key == "target-editor":
+            self._render_target_editor()
+            return
+        if key == "import-apo":
+            self._render_import_apo()
+            return
+        if key == "fetch-curve":
+            self._render_fetch_curve()
+            return
         if key == "history":
             self._render_history()
             return
@@ -299,6 +321,148 @@ class HeadMatchGuiApp:
                 on_refresh=self.refresh_setup_check,
                 on_measure=lambda: self.show_view("measure-online"),
             )
+
+    def _render_target_editor(self) -> None:
+        def _save():
+            path = self.target_editor_save_path_var.get().strip()
+            if not path:
+                if filedialog:
+                    path = filedialog.asksaveasfilename(
+                        title="Save target curve",
+                        defaultextension=".csv",
+                        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                    )
+                if not path:
+                    return
+                self.target_editor_save_path_var.set(path)
+            self.target_editor.save(path)
+            self._show_status(f"Target saved to {path}")
+
+        def _reset():
+            self.target_editor = TargetEditor()
+            self.show_view("target-editor")
+
+        gui_views.render_target_editor(
+            self._ttk,
+            self.content,
+            editor=self.target_editor,
+            on_save=_save,
+            on_reset=_reset,
+        )
+
+    def _render_import_apo(self) -> None:
+        ttk = self._ttk
+        frame = self.content
+        ttk.Label(frame, text="Import APO preset", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            frame,
+            text="Load an Equalizer APO parametric preset and re-export it as CamillaDSP and HeadMatch formats.",
+            wraplength=560,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+        form = ttk.LabelFrame(frame, text="Import settings", padding=12)
+        form.grid(row=2, column=0, sticky="ew")
+        form.columnconfigure(1, weight=1)
+        gui_views.add_picker_row(ttk, form, 0, "APO preset file", self.apo_preset_var,
+                                 button_text="Browse…", command=self._choose_apo_preset)
+        gui_views.add_picker_row(ttk, form, 1, "Output folder", self.apo_output_dir_var,
+                                 button_text="Browse…", command=self._choose_apo_output_dir)
+        ttk.Button(form, text="Import and export", command=self._run_apo_import).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    def _choose_apo_preset(self) -> None:
+        if filedialog:
+            path = filedialog.askopenfilename(
+                title="Select APO preset",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            )
+            if path:
+                self.apo_preset_var.set(path)
+
+    def _choose_apo_output_dir(self) -> None:
+        if filedialog:
+            path = filedialog.askdirectory(title="Select output folder")
+            if path:
+                self.apo_output_dir_var.set(path)
+
+    def _run_apo_import(self) -> None:
+        preset_path = self.apo_preset_var.get().strip()
+        out_dir = self.apo_output_dir_var.get().strip()
+        if not preset_path or not out_dir:
+            self._show_status("Please select both a preset file and output folder.")
+            return
+        try:
+            from .exporters import (
+                export_camilladsp_filters_yaml,
+                export_camilladsp_filter_snippet_yaml,
+                export_equalizer_apo_parametric_txt,
+            )
+            left_bands, right_bands = load_apo_preset(preset_path)
+            out = Path(out_dir)
+            out.mkdir(parents=True, exist_ok=True)
+            export_equalizer_apo_parametric_txt(out / 'equalizer_apo.txt', left_bands, right_bands)
+            export_camilladsp_filters_yaml(out / 'camilladsp_full.yaml', left_bands, right_bands)
+            export_camilladsp_filter_snippet_yaml(out / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+            self._show_status(f"Imported {len(left_bands)}L + {len(right_bands)}R filters → {out_dir}")
+        except Exception as exc:
+            self._show_status(f"Import failed: {exc}")
+
+    def _render_fetch_curve(self) -> None:
+        ttk = self._ttk
+        frame = self.content
+        ttk.Label(frame, text="Fetch published curve", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            frame,
+            text="Download a headphone frequency response CSV from a community database (AutoEQ, oratory1990, etc). Only HTTPS URLs are accepted.",
+            wraplength=560,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+        form = ttk.LabelFrame(frame, text="Fetch settings", padding=12)
+        form.grid(row=2, column=0, sticky="ew")
+        form.columnconfigure(1, weight=1)
+        gui_views.add_entry_row(ttk, form, 0, "CSV URL (HTTPS)", self.fetch_url_var)
+        gui_views.add_picker_row(ttk, form, 1, "Save to", self.fetch_output_var,
+                                 button_text="Browse…", command=self._choose_fetch_output)
+        ttk.Button(form, text="Fetch and save", command=self._run_fetch_curve).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        ttk.Label(
+            frame,
+            text="Tip: visit github.com/jaakkopasanen/AutoEq, find your headphone, copy the raw CSV URL.",
+            wraplength=560,
+            justify="left",
+        ).grid(row=3, column=0, sticky="w", pady=(12, 0))
+
+    def _choose_fetch_output(self) -> None:
+        if filedialog:
+            path = filedialog.asksaveasfilename(
+                title="Save curve as",
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if path:
+                self.fetch_output_var.set(path)
+
+    def _run_fetch_curve(self) -> None:
+        url = self.fetch_url_var.get().strip()
+        out_path = self.fetch_output_var.get().strip()
+        if not url or not out_path:
+            self._show_status("Please enter both a URL and output path.")
+            return
+        try:
+            result = fetch_curve_from_url(url, out_path)
+            self._show_status(f"Saved to {result}")
+        except Exception as exc:
+            self._show_status(f"Fetch failed: {exc}")
+
+    def _show_status(self, message: str) -> None:
+        """Show a transient status message at the bottom of the current view."""
+        import tkinter as tk
+        status = self._ttk.Label(self.content, text=message, wraplength=560, justify="left")
+        status.grid(row=99, column=0, sticky="w", pady=(12, 0))
+        self.root.after(8000, status.destroy)
 
     def _render_history(self) -> None:
         import tkinter as tk
@@ -455,6 +619,7 @@ class HeadMatchGuiApp:
                 input_target=input_target,
                 iterations=iterations,
                 max_filters=max_filters,
+                iteration_mode=self.iteration_mode_var.get().strip() or 'independent',
             ),
             on_success=lambda _result: self._set_completion(
                 title="Online measurement complete",

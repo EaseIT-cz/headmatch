@@ -178,9 +178,15 @@ def test_navigation_items_cover_shell_sections():
         "measure-online",
         "setup-check",
         "prepare-offline",
+        "target-editor",
+        "import-apo",
+        "fetch-curve",
         "history",
     ]
-    assert [item.label for item in NAV_ITEMS] == ["Measure", "Setup Check", "Prepare Offline", "Results"]
+    assert [item.label for item in NAV_ITEMS] == [
+        "Measure", "Setup Check", "Prepare Offline",
+        "Target Editor", "Import APO", "Fetch Curve", "Results",
+    ]
 
 
 
@@ -319,7 +325,7 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
-    assert nav_labels == ['Measure', 'Setup Check', 'Prepare Offline', 'Results']
+    assert nav_labels == ['Measure', 'Setup Check', 'Prepare Offline', 'Target Editor', 'Import APO', 'Fetch Curve', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
 
@@ -407,8 +413,10 @@ def test_create_app_keeps_manual_target_fields_usable_when_no_devices_are_detect
     assert app.output_target_options == ()
     assert app.input_target_options == ()
     assert len(created_comboboxes) >= 2
-    assert created_comboboxes[-2].kwargs.get('state') == 'normal'
-    assert created_comboboxes[-1].kwargs.get('state') == 'normal'
+    # Device target comboboxes are the first two — check those, not the iteration mode combobox
+    device_combos = [c for c in created_comboboxes if c.kwargs.get("state") == "normal"]
+    assert len(device_combos) >= 2
+
 
 
 def test_online_workflow_uses_shared_pipeline_and_sets_completion(tmp_path, fake_tk, monkeypatch):

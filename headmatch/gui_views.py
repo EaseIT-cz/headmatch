@@ -85,6 +85,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     add_picker_row(ttk, form, 3, "Target CSV (optional)", variables.target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
     add_entry_row(ttk, form, 4, "Iterations", variables.iterations_var)
     add_entry_row(ttk, form, 5, "Max PEQ filters", variables.max_filters_var)
+    add_combobox_row(ttk, form, 6, "Iteration mode", variables.iteration_mode_var, ("independent", "average"), empty_label="")
 
     actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
     actions.grid(row=4, column=0, sticky="w")

@@ -4,7 +4,7 @@
 
 The shipped product includes:
 - CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
-- GUI with confidence badges, graph display, scrollable diagnostics, target curve editor
+- GUI with confidence badges, graph display, diagnostics, target editor, APO import, curve fetch, iteration mode
 - TUI backup workflow (maintenance-only)
 - APO AutoEQ preset import and re-export
 - Community headphone database search guidance and HTTPS-only curve fetching
@@ -28,6 +28,14 @@ The shipped product includes:
 No active tasks.
 
 ## Recently completed
+
+### 0.4.0 — GUI parity
+- Wired target curve editor into GUI navigation (Target Editor view)
+- Added APO preset import view to GUI (Import APO)
+- Added community curve fetch view to GUI (Fetch Curve)
+- Added iteration mode selector (independent/average) to GUI measurement wizard
+- GUI now passes iteration_mode through to pipeline
+- Added _show_status helper for transient status messages in GUI
 
 ### 0.4.0 patch
 - Fixed iteration_mode not passed through CLI
@@ -57,11 +65,8 @@ No active tasks.
 
 ## Future work
 
-### Now — GUI product parity and import-apo refine
-- Wire target curve editor into GUI navigation
-- Add import-apo and fetch-curve to GUI (currently CLI-only)
-- Add iteration mode choice to GUI measurement wizard
-- Implement import-apo --import-mode refine (re-optimise imported preset against user measurement)
+### Now
+- Implement import-apo refine mode (re-optimise imported preset against user measurement)
 - Implement real headphone database search (GitHub API or cached local index)
 
 ### Next — packaging and CI hardening
