@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .history import build_history_selection
+import subprocess
+import sys
 from .troubleshooting import confidence_troubleshooting_steps
 
 
@@ -110,8 +112,21 @@ def render_setup_check(ttk, frame, *, report: str, on_refresh, on_measure) -> No
     ttk.Button(actions, text="Go to Measure", command=on_measure).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
     report_card = ttk.LabelFrame(frame, text="Readiness report", padding=SECTION_PAD)
-    report_card.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    ttk.Label(report_card, text=report, wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, sticky="w")
+    report_card.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
+    report_card.columnconfigure(0, weight=1)
+    report_card.rowconfigure(0, weight=1)
+    frame.rowconfigure(3, weight=1)
+    try:
+        import tkinter as tk
+        text_widget = tk.Text(report_card, wrap="word", height=12, relief="flat", bg=report_card.cget("background") if hasattr(report_card, 'cget') else "#ffffff")
+        text_widget.insert("1.0", report)
+        text_widget.config(state="disabled")
+        scrollbar = ttk.Scrollbar(report_card, orient="vertical", command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        text_widget.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+    except Exception:
+        ttk.Label(report_card, text=report, wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, sticky="w")
 
 
 def render_offline_wizard(ttk, frame, *, variables, on_prepare, on_fit) -> None:
@@ -174,8 +189,20 @@ def render_history(ttk, frame, *, history_root_var, config_path: Path):
     return build_history_selection(history_root_var.get(), config_path.parent)
 
 
+_CONFIDENCE_BADGES = {
+    'high': '✓',
+    'medium': '⚠',
+    'low': '✗',
+}
+
+
 def _confidence_display(label: str) -> str:
     return label.replace('_', ' ').title()
+
+
+def _confidence_badge(label: str) -> str:
+    badge = _CONFIDENCE_BADGES.get(label, '')
+    return f"{badge} {_confidence_display(label)}" if badge else _confidence_display(label)
 
 
 def render_history_results(ttk, frame, *, selection) -> None:
@@ -201,7 +228,7 @@ def render_history_results(ttk, frame, *, selection) -> None:
         ttk.Label(results, text=entry.summary.out_dir, style="Heading.TLabel").grid(row=idx * 3, column=0, sticky="w")
         ttk.Label(
             results,
-            text=f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100) — {confidence.headline}",
+            text=f"Confidence: {_confidence_badge(confidence.label)} ({confidence.score}/100) — {confidence.headline}",
             wraplength=DETAIL_WRAP,
             justify="left",
         ).grid(row=idx * 3 + 1, column=0, sticky="w")
@@ -239,7 +266,7 @@ def render_history_results(ttk, frame, *, selection) -> None:
         confidence = selected.summary.confidence
         ttk.Label(
             guide,
-            text=f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100)",
+            text=f"Confidence: {_confidence_badge(confidence.label)} ({confidence.score}/100)",
             style="Heading.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(8, 0))
         ttk.Label(guide, text=confidence.headline, wraplength=DETAIL_WRAP, justify="left").grid(row=2, column=0, sticky="w", pady=(4, 0))
@@ -259,3 +286,21 @@ def render_history_results(ttk, frame, *, selection) -> None:
                 ttk.Label(guide, text=f"- {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(2, 0))
                 row += 1
         ttk.Label(guide, text=selection.selected_guide or "", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(10, 0))
+        row += 1
+        # TASK-066: Graph display button
+        import os
+        overview_svg = os.path.join(selected.summary.out_dir, 'fit_overview.svg')
+        if os.path.isfile(overview_svg):
+            def _open_graph(path=overview_svg):
+                try:
+                    if sys.platform == 'linux':
+                        subprocess.Popen(['xdg-open', path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    elif sys.platform == 'darwin':
+                        subprocess.Popen(['open', path])
+                    else:
+                        subprocess.Popen(['start', path], shell=True)
+                except OSError:
+                    pass
+            ttk.Button(guide, text="Open fit graph", command=_open_graph).grid(row=row, column=0, sticky="w", pady=(8, 0))
+        else:
+            ttk.Label(guide, text="Graph not available.", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(8, 0))

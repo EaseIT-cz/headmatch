@@ -118,6 +118,12 @@ def build_parser(config) -> argparse.ArgumentParser:
         default=config.start_iterations,
         help="Number of online measure-and-fit passes. Default: 1 for a simple first run.",
     )
+    p.add_argument(
+        "--iteration-mode",
+        choices=("independent", "average"),
+        default="independent",
+        help="Iteration strategy: independent (fit each pass separately) or average (average all passes, fit once).",
+    )
 
     p = sub.add_parser("render-sweep", help="Generate a sweep WAV file.")
     add_common_sweep_args(p, config)
@@ -179,6 +185,12 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
     p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
     p.add_argument("--iterations", type=int, default=config.iterate_iterations)
+    p.add_argument(
+        "--iteration-mode",
+        choices=("independent", "average"),
+        default="independent",
+        help="Iteration strategy: independent (fit each pass separately) or average (average all passes, fit once).",
+    )
     add_filter_budget_args(p, config)
 
     sub.add_parser(
@@ -226,10 +238,28 @@ def _run_summary_path(cmd: str, args) -> Path | None:
     if cmd in {"fit", "fit-offline"}:
         return base / "run_summary.json"
     if cmd in {"start", "iterate"}:
+        iteration_mode = getattr(args, "iteration_mode", "independent")
+        if iteration_mode == "average":
+            return base / "run_summary.json"
         iterations = getattr(args, "iterations", None)
         if isinstance(iterations, int) and iterations > 0:
             return base / f"iter_{iterations:02d}" / "run_summary.json"
     return None
+
+
+def _verdict_line(confidence) -> str:
+    """Single-line verdict with optional ANSI color when stdout is a TTY."""
+    import sys
+    is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    if confidence.label == 'high':
+        prefix = '\033[32m✓\033[0m' if is_tty else '✓'
+        return f"{prefix} This run looks trustworthy."
+    elif confidence.label == 'medium':
+        prefix = '\033[33m⚠\033[0m' if is_tty else '⚠'
+        return f"{prefix} Moderate confidence — review the details below."
+    else:
+        prefix = '\033[31m✗\033[0m' if is_tty else '✗'
+        return f"{prefix} Low confidence — check the details below."
 
 
 def print_run_confidence(cmd: str, args) -> None:
@@ -244,6 +274,7 @@ def print_run_confidence(cmd: str, args) -> None:
 
     confidence = summary.confidence
     print()
+    print(_verdict_line(confidence))
     print(
         f"Confidence: {_confidence_display(confidence.label)} ({confidence.score}/100) — {confidence.headline}"
     )

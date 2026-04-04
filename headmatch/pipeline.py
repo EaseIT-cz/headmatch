@@ -406,6 +406,31 @@ def build_clone_curve(source_curve_path: str | Path, target_curve_path: str | Pa
 
 
 
+def _average_measurements(results: list[MeasurementResult]) -> MeasurementResult:
+    """Average multiple measurement results into a single combined result."""
+    left_db = np.mean([r.left_db for r in results], axis=0)
+    right_db = np.mean([r.right_db for r in results], axis=0)
+    left_raw_db = np.mean([r.left_raw_db for r in results], axis=0)
+    right_raw_db = np.mean([r.right_raw_db for r in results], axis=0)
+    # Average diagnostics where meaningful, take first result's structure
+    avg_diagnostics: Dict[str, float] = {}
+    all_keys = results[0].diagnostics.keys()
+    for key in all_keys:
+        values = [r.diagnostics.get(key, 0.0) for r in results]
+        avg_diagnostics[key] = float(np.mean(values))
+    return MeasurementResult(
+        freqs_hz=results[0].freqs_hz,
+        left_db=left_db,
+        right_db=right_db,
+        left_raw_db=left_raw_db,
+        right_raw_db=right_raw_db,
+        diagnostics=avg_diagnostics,
+    )
+
+
+IterationMode = str  # 'independent' or 'average'
+
+
 def iterative_measure_and_fit(
     output_dir: str | Path,
     sweep_spec: SweepSpec,
@@ -416,12 +441,16 @@ def iterative_measure_and_fit(
     max_filters: int = 8,
     *,
     filter_budget: FilterBudget | None = None,
+    iteration_mode: str = 'independent',
 ) -> list[dict]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
     target_curve: Optional[TargetCurve] = None
     summaries = []
+    all_results: list[MeasurementResult] = []
+
+    # Phase 1: measure all iterations
     for i in range(1, iterations + 1):
         iter_dir = output_dir / f'iter_{i:02d}'
         iter_dir.mkdir(exist_ok=True)
@@ -429,23 +458,51 @@ def iterative_measure_and_fit(
         sweep = iter_dir / 'sweep.wav'
         run_pipewire_measurement(sweep_spec, MeasurementPaths(sweep, recording), PipeWireDeviceConfig(output_target, input_target))
         result = analyze_measurement(recording, sweep_spec, iter_dir)
+        all_results.append(result)
         if target_curve is None:
             target_curve = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
-        left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
+
+    if iteration_mode == 'average' and len(all_results) > 1:
+        # Average all measurements, fit once, write to parent output dir
+        averaged = _average_measurements(all_results)
+        from .io_utils import save_fr_csv as _save_csv
+        _save_csv(output_dir / 'measurement_left.csv', averaged.freqs_hz, averaged.left_db)
+        _save_csv(output_dir / 'measurement_right.csv', averaged.freqs_hz, averaged.right_db)
+        left_bands, right_bands, report = fit_from_measurement(averaged, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
         run_summary = _write_fit_artifacts(
-            iter_dir,
-            kind='iteration',
-            result=result,
+            output_dir,
+            kind='fit',
+            result=averaged,
             target=target_curve,
             left_bands=left_bands,
             right_bands=right_bands,
             report=report,
             sample_rate=sweep_spec.sample_rate,
-            write_target_curve_csv=False,
+            write_target_curve_csv=True,
             filter_budget=filter_budget,
         )
         predicted = run_summary['predicted_error_db']
-        summaries.append(asdict(IterationSummary(i, predicted['left_rms'], predicted['right_rms'], predicted['left_max'], predicted['right_max'])))
+        summaries.append(asdict(IterationSummary(0, predicted['left_rms'], predicted['right_rms'], predicted['left_max'], predicted['right_max'])))
+    else:
+        # Independent mode: fit each iteration separately (original behaviour)
+        for i, result in enumerate(all_results, 1):
+            iter_dir = output_dir / f'iter_{i:02d}'
+            left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
+            run_summary = _write_fit_artifacts(
+                iter_dir,
+                kind='iteration',
+                result=result,
+                target=target_curve,
+                left_bands=left_bands,
+                right_bands=right_bands,
+                report=report,
+                sample_rate=sweep_spec.sample_rate,
+                write_target_curve_csv=False,
+                filter_budget=filter_budget,
+            )
+            predicted = run_summary['predicted_error_db']
+            summaries.append(asdict(IterationSummary(i, predicted['left_rms'], predicted['right_rms'], predicted['left_max'], predicted['right_max'])))
+
     identity = get_app_identity()
-    save_json(output_dir / 'iterations_summary.json', {'generated_by': identity.as_metadata(), 'iterations': summaries, 'count': len(summaries)})
+    save_json(output_dir / 'iterations_summary.json', {'generated_by': identity.as_metadata(), 'iterations': summaries, 'count': len(summaries), 'mode': iteration_mode})
     return summaries
