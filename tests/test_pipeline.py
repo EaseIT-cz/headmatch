@@ -364,5 +364,6 @@ def test_process_single_measurement_relative_target_exports_effective_per_channe
         '1000.0,0.0,0.0',
         '20000.0,-3.0,-4.0',
     ]
-    assert 'GraphicEQ: 20.00 2.00; 1000.00 0.00; 20000.00 -2.00' in graphiceq
-    assert 'GraphicEQ: 20.00 2.00; 1000.00 0.00; 20000.00 -2.00' in graphiceq
+    # Dense GraphicEQ now exports the fitted PEQ response, not the raw target.
+    # With max_filters=0, no bands are placed, so the GraphicEQ should be ~0 dB.
+    assert 'GraphicEQ: 20.00 0.00; 1000.00 0.00; 20000.00 0.00' in graphiceq

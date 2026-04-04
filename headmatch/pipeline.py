@@ -339,11 +339,18 @@ def _write_fit_artifacts(
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
     export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
     resolved_target = _resolve_target_curves(result, target)
+    # Dense GraphicEQ: export the actual PEQ-fitted response (what the parametric
+    # preset applies), not the raw correction target. The raw target can contain
+    # extreme swings at narrow features that the conservative PEQ fitter
+    # deliberately leaves alone, causing clipping if used directly.
+    from .peq import peq_chain_response_db as _chain_resp
+    left_fitted_eq = _chain_resp(result.freqs_hz, sample_rate, left_bands)
+    right_fitted_eq = _chain_resp(result.freqs_hz, sample_rate, right_bands)
     export_equalizer_apo_graphiceq_txt(
         out_dir / 'equalizer_apo_graphiceq.txt',
         result.freqs_hz,
-        resolved_target.left_values_db - result.left_db,
-        resolved_target.right_values_db - result.right_db,
+        left_fitted_eq,
+        right_fitted_eq,
     )
     _write_fixed_band_graphiceq_artifact(
         out_dir,
