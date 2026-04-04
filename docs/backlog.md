@@ -15,25 +15,33 @@ The current shipped state includes:
 - GitHub Actions coverage for both main and integration test suites
 - PipeWire device guidance
 - measured-vs-target graph rendering
-- Equalizer APO-compatible parametric preset export by default
+- Equalizer APO-compatible parametric and GraphicEQ preset export
+- CamillaDSP export
 - confidence / trust summaries in fit outputs
+- fixed-band GraphicEQ fitting support (10-band and 31-band profiles)
+- mono and duplicated-channel capture rejection
 
 ## Active
 
-1. TASK-054: Reject mono or duplicated-channel captures during analysis
+1. TASK-059: Extend duplicated-channel detection to multichannel captures
 
-   Mono recordings are currently accepted by duplicating the channel to stereo.
-   Task-054 requires rejecting mono captures with a clear error message, and
-   detecting duplicated stereo channel captures that indicate a broken capture chain.
+   The duplicated-channel check added in TASK-054 only fires for exactly 2-channel
+   files. Multichannel recordings (3+ channels) silently use channels 0 and 1
+   without verifying they are distinct.
 
-   Acceptance criteria:
-   - Mono captures are rejected with a clear actionable message.
-   - Obviously duplicated stereo captures are rejected with a clear actionable message.
-   - Existing real stereo workflows remain valid.
-   - Full test suite passes.
+   Suggested files: `headmatch/analysis.py`, `tests/test_pipeline.py`
 
-   Suggested files: `headmatch/analysis.py`, `tests/test_pipeline.py`, 
-   `tests/test_integration_cli.py`
+2. TASK-060: Refactor TASK-054 tests to use pytest.raises
+
+   The mono and duplicated-channel rejection tests use manual try/except/assert False
+   instead of idiomatic pytest.raises. Produces worse failure messages.
+
+   Suggested files: `tests/test_pipeline.py`
+
+## Recently completed (0.2.2+)
+- TASK-054: Reject mono or duplicated-channel captures during analysis
+- TASK-059: Extend duplicated-channel detection to multichannel captures (fix)
+- TASK-060: Refactor TASK-054 tests to use pytest.raises (cleanup)
 
 ## Recently completed (0.2.2)
 - TASK-057: Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer
@@ -63,16 +71,14 @@ The current shipped state includes:
 
 ## Future follow-up candidates
 
-1. Add GraphicEQ export / fixed-band fitting on top of the shared objective layer.
-2. Add export formats beyond CamillaDSP and APO if users actually need them.
-3. Add more published curve examples if clone-target workflows generate repeated support questions.
-4. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
-5. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
-6. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
+1. Add export formats beyond CamillaDSP and APO if users actually need them.
+2. Add more published curve examples if clone-target workflows generate repeated support questions.
+3. Add real-world recorder fixture coverage if synthetic integration testing is no longer enough.
+4. Consider a safe mode vs advanced mode split if the product starts to accumulate too many knobs.
+5. Keep the TUI functional, but treat it as maintenance-only unless a clear use case reappears.
 
 ## Future feature candidates (deferred)
 
 1. Asynchronous Device Support and Clock Drift Compensation
 2. Automated HRTF Target Integration and Scaling
 3. Integration of CamillaDSP Live-Updates via WebSocket API
-

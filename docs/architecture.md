@@ -220,23 +220,22 @@ The shipped product now includes:
 - TUI backup workflow and history browsing
 - shared config persistence and preload
 - clone-target support
-- Equalizer APO parametric preset export by default
+- Equalizer APO parametric and GraphicEQ preset export
 - CamillaDSP export
+- fixed-band GraphicEQ fitting (10-band and 31-band profiles)
 - measured-vs-target SVG review graphs in fit output folders
 - deterministic end-to-end synthetic integration tests
 - confidence/trust summaries in fit outputs
-- fixed-band GraphicEQ export and fitting support
+- mono and duplicated-channel capture rejection
 
 ---
 
 ## Likely future work
 
 If future work resumes, the most sensible candidates are:
-- GUI/CLI confidence presentation polish
-- guided troubleshooting
-- stronger device guidance
-- additional export formats if there is real demand
+- additional export formats beyond APO and CamillaDSP if there is real demand
 - more real-world published-curve examples
+- safe mode vs advanced mode split if the product accumulates too many knobs
 
 ---
 

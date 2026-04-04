@@ -29,14 +29,12 @@ def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
         raise ValueError(f'{path} is empty')
     if data.shape[1] == 1:
         raise ValueError(f'{path} is mono capture. Use a stereo recording with two distinct channels.')
-    if data.shape[1] == 2:
-        left, right = data[:, 0], data[:, 1]
-        if np.allclose(left, right, rtol=1e-6, atol=1e-10):
-            raise ValueError(f'{path} appears to be a duplicated-channel capture. Left and right channels are identical. Use a proper stereo recording.')
-        return data[:, :2]
-    if data.shape[1] >= 2:
-        return data[:, :2]
-    raise ValueError(f'{path} must contain at least one channel')
+    if data.shape[1] < 2:
+        raise ValueError(f'{path} must contain at least two channels')
+    stereo = data[:, :2]
+    if np.allclose(stereo[:, 0], stereo[:, 1], rtol=1e-6, atol=1e-10):
+        raise ValueError(f'{path} appears to be a duplicated-channel capture. Left and right channels are identical. Use a proper stereo recording.')
+    return stereo
 
 
 
