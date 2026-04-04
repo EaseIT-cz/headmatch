@@ -342,12 +342,30 @@ class HeadMatchGuiApp:
             self.target_editor = TargetEditor()
             self.show_view("target-editor")
 
+        def _load():
+            if not filedialog:
+                return
+            path = filedialog.askopenfilename(
+                title="Load target curve",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+            try:
+                self.target_editor = TargetEditor.from_csv(path)
+                self.target_editor_save_path_var.set(path)
+                self._show_status(f"Loaded {path}")
+                self.show_view("target-editor")
+            except Exception as exc:
+                self._show_status(f"Failed to load: {exc}")
+
         gui_views.render_target_editor(
             self._ttk,
             self.content,
             editor=self.target_editor,
             on_save=_save,
             on_reset=_reset,
+            on_load=_load,
             on_update=lambda: self.show_view("target-editor"),
         )
 

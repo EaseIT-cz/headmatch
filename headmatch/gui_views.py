@@ -325,7 +325,7 @@ def render_history_results(ttk, frame, *, selection) -> None:
             ttk.Label(guide, text="Graph not available.", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(8, 0))
 
 
-def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_update=None):
+def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None, on_update=None):
     """Render an interactive target curve editor with editable control points."""
     import tkinter as tk
 
@@ -415,7 +415,9 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_update=Non
     actions.grid(row=3, column=0, sticky="w")
     ttk.Button(actions, text="Apply changes", command=_apply_changes).grid(row=0, column=0, sticky="w")
     ttk.Button(actions, text="Save as CSV", command=lambda: [_apply_changes(), on_save()]).grid(row=0, column=1, sticky="w", padx=(12, 0))
-    ttk.Button(actions, text="Reset to flat", command=on_reset).grid(row=0, column=2, sticky="w", padx=(12, 0))
+    if on_load:
+        ttk.Button(actions, text="Load CSV", command=on_load).grid(row=0, column=2, sticky="w", padx=(12, 0))
+    ttk.Button(actions, text="Reset to flat", command=on_reset).grid(row=0, column=3 if on_load else 2, sticky="w", padx=(12, 0))
     ttk.Label(
         actions,
         text="After saving, use the CSV as --target-csv in your next measurement or fit.",
