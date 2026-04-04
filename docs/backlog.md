@@ -2,107 +2,96 @@
 
 ## Current status
 
-The current shipped state includes:
-- beginner-first CLI workflow with one-line confidence verdict
-- GUI shell with confidence badges, graph display, scrollable diagnostics
-- TUI backup workflow and history browsing (maintenance-only)
-- shared settings persistence and preload
-- improved capture/import robustness (mono, duplicated-channel, multichannel)
-- stronger alignment robustness coverage
-- conservative PEQ/export polish
-- clone examples and cross-source validation
-- deterministic end-to-end synthetic integration tests (373 tests)
-- RBJ reference coefficient verification (241 parametric tests)
-- biquad numerical stability verification for extreme parameters
-- GitHub Actions coverage for both main and integration test suites
-- PipeWire device guidance
-- measured-vs-target graph rendering
-- Equalizer APO-compatible parametric and GraphicEQ preset export
-- CamillaDSP export with correct shelf Q conversion
-- confidence / trust summaries in fit outputs
-- fixed-band GraphicEQ fitting support (10-band and 31-band profiles)
-- multi-pass averaging iteration mode
+The shipped product includes:
+- CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
+- GUI with confidence badges, graph display, scrollable diagnostics, target curve editor
+- TUI backup workflow (maintenance-only)
+- APO AutoEQ preset import and re-export
+- Community headphone database search guidance and HTTPS-only curve fetching
+- Multi-pass averaging iteration mode
+- Conservative PEQ fitting with joint Nelder-Mead refinement
+- Wiener-regularised frequency response estimation
+- Local-maxima alignment search (robust to room echoes)
+- Raw residual bandwidth estimation for accurate narrow-feature Q
+- Vectorised fractional-octave smoothing and direct biquad evaluation
+- Equalizer APO parametric and GraphicEQ preset export
+- CamillaDSP export with correct shelf Q/S conversion
+- Fixed-band GraphicEQ fitting (10-band and 31-band profiles)
+- Clone-target support with explicit relative/absolute semantics
+- Mono and duplicated-channel capture rejection (all channel counts)
+- Confidence scoring with named threshold constants and injectable weights
+- Type-safe PEQBand.kind (Literal)
+- 392 deterministic tests including 241 RBJ biquad coefficient reference tests
 
 ## Active
 
 No active tasks.
 
-## Recently completed (0.4.0 patch)
+## Recently completed
+
+### 0.4.0 patch
 - Fixed iteration_mode not passed through CLI to pipeline
-- Fixed import-apo: now re-exports imported bands instead of ignoring them
-- Fixed Windows shell=True security issue in graph opener (now uses os.startfile)
-- Tightened fetch-curve: HTTPS-only, 5 MB response cap
-- Added tests/__init__.py for sdist test suite compatibility
+- Fixed import-apo to actually re-export imported bands
+- Fixed Windows shell=True security issue in graph opener
+- Tightened fetch-curve to HTTPS-only with 5 MB response cap
+- Added tests/__init__.py for sdist compatibility
 - Merged duplicate fit/fit-offline CLI branches
-- Made search_headphone honest about being a placeholder
+- Made search-headphone honest about being a placeholder
 - Added user-friendly JSON config error messages
 - Added positive-int validators for --iterations and --max-filters
 
-## Recently completed (0.4.0)
-- Vectorised fractional-octave smoothing (~50x faster)
-- Direct biquad evaluation replacing scipy.signal.freqz (3-5x faster)
-- APO AutoEQ preset import (headmatch import-apo)
-- Community headphone database integration (search-headphone, fetch-curve)
+### 0.4.0
+- Vectorised fractional-octave smoothing (~50× faster)
+- Direct biquad evaluation replacing scipy.signal.freqz (3-5× faster)
+- APO AutoEQ preset import
+- Community headphone database integration
 - GUI target curve editor with PCHIP interpolation
-- 16 new tests for APO import, headphone DB, and target editor
 
-## Recently completed (0.3.0+)
+### 0.3.0
 - Wiener regularisation, raw residual Q, local-maxima alignment, joint PEQ refinement
-- Type-narrow PEQBand.kind, confidence constants, injectable weights
-- CLI/README UX cleanup
+- Confidence badges in GUI, verdict line in CLI, scrollable diagnostics
+- Graph display button in GUI results view
+- Multi-pass averaging iteration mode
+- RBJ coefficient reference tests and biquad stability tests
+- Fixed _metrics dead mask, alignment_peak_ratio, shelf Q/S export
+- Removed dead code, added plots.py and signals.py test coverage
+- Type-narrowed PEQBand.kind, extracted confidence constants, injectable weights
 
-## Recently completed (0.3.0)
-- TASK-061: Confidence badge styling in GUI history view
-- TASK-062: One-line confidence verdict in CLI fit output
-- TASK-063: GUI setup diagnostics view (scrollable, refreshable)
-- TASK-064: RBJ reference coefficient tests for biquad_response_db
-- TASK-065: Biquad numerical stability tests for extreme parameters
-- TASK-066: Graph display in GUI results view (xdg-open button)
-- TASK-067: Multi-pass averaging iteration mode
-- TASK-068: Fix dead mask in _metrics (band-limited to 80-12kHz)
-- TASK-069: Fix alignment_peak_ratio for negative offsets
-- TASK-070: Fix shelf Q/S inconsistency in CamillaDSP export
-- TASK-071: Remove dead code (validate_stereo_audio, inverse_sweep)
-- TASK-072: Smoke tests for plots.py, unit tests for signals.py
+### 0.2.3
+- Mono and duplicated-channel capture rejection (including multichannel)
 
-## Recently completed (0.2.3)
-- TASK-054: Reject mono or duplicated-channel captures during analysis
-- TASK-059: Extend duplicated-channel detection to multichannel captures
-- TASK-060: Refactor TASK-054 tests to use pytest.raises
-
-## Recently completed (0.2.2)
-- TASK-057: Add fixed-band GraphicEQ fitting on top of the shared objective/residual layer
-- TASK-058: Expand synthetic regression coverage around fitting/export edge cases
+### 0.2.2
+- Fixed-band GraphicEQ fitting and expanded regression tests
 
 ## Future follow-up candidates
 
 ### Code quality / consistency
-- Use encoding="utf-8" consistently for all read_text() / write_text() calls (cross-platform safety)
-- Extract repeated CLI parser setup into shared helpers (add_fit_args, add_measure_args)
-- Improve GUI/CLI/TUI shared plumbing — advanced options are CLI-first, GUI lags behind
-- Add pytest.ini with pythonpath config and verify MANIFEST.in / setuptools include rules
+- Use encoding="utf-8" consistently for all read_text() / write_text() calls
+- Extract repeated CLI parser setup into shared helpers
+- Improve GUI/CLI/TUI shared plumbing — advanced options are CLI-first, GUI lags
+- Add pytest.ini with pythonpath config and verify MANIFEST.in include rules
 
 ### Features
 - Add export formats beyond CamillaDSP and APO if users actually need them
-- Implement import-apo --import-mode refine (re-optimise imported preset against user measurement)
-- Implement real headphone database search (GitHub API or cached local index for AutoEQ)
-- Cache fixed-profile basis responses in fit_fixed_band_graphic_eq for repeated runs
-- Add richer PipeWire error diagnostics (show exact pw-play / pw-record command and target names)
+- Implement import-apo refine mode (re-optimise imported preset against user measurement)
+- Implement real headphone database search (GitHub API or cached local index)
+- Cache fixed-profile basis responses for repeated runs
+- Add richer PipeWire error diagnostics (show exact command and target names)
 
 ### Testing / CI
-- Add explicit Python 3.10–3.13 CI matrix to GitHub Actions
+- Add explicit Python 3.10–3.13 CI matrix
 - Verify sdist / wheel build produces a self-consistent test-runnable package
 - Add content-type validation to fetch-curve responses
 
 ### Compatibility
-- Use os.startfile on Windows, open on macOS, xdg-open on Linux consistently across all file-open paths
-- Consider streaming with size cap for all network fetches (not just fetch-curve)
+- Consistent cross-platform file-open (os.startfile / open / xdg-open) across all paths
+- Consider streaming with size cap for all network fetches
 
 ## Future feature candidates (deferred)
 
-1. Asynchronous Device Support and Clock Drift Compensation
-2. Automated HRTF Target Integration and Scaling
-3. Integration of CamillaDSP Live-Updates via WebSocket API
-4. Closed-loop EQ refinement (depends on #3)
+1. Asynchronous device support and clock drift compensation
+2. Automated HRTF target integration and scaling
+3. CamillaDSP live-update integration via WebSocket API
+4. Closed-loop EQ refinement (measure → apply → re-measure; depends on #3)
 5. Windows/macOS support (platform-aware measure.py backends)
-9. Room correction / speaker measurement mode
+6. Room correction / speaker measurement mode
