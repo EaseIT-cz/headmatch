@@ -30,68 +30,58 @@ No active tasks.
 ## Recently completed
 
 ### 0.4.0 patch
-- Fixed iteration_mode not passed through CLI to pipeline
+- Fixed iteration_mode not passed through CLI
 - Fixed import-apo to actually re-export imported bands
 - Fixed Windows shell=True security issue in graph opener
-- Tightened fetch-curve to HTTPS-only with 5 MB response cap
+- Tightened fetch-curve to HTTPS-only with 5 MB cap
 - Added tests/__init__.py for sdist compatibility
 - Merged duplicate fit/fit-offline CLI branches
-- Made search-headphone honest about being a placeholder
-- Added user-friendly JSON config error messages
-- Added positive-int validators for --iterations and --max-filters
+- Made search-headphone honest, added positive-int validators, config error handling
 
 ### 0.4.0
-- Vectorised fractional-octave smoothing (~50× faster)
-- Direct biquad evaluation replacing scipy.signal.freqz (3-5× faster)
+- Vectorised smoothing and direct biquad evaluation (performance)
 - APO AutoEQ preset import
 - Community headphone database integration
 - GUI target curve editor with PCHIP interpolation
 
 ### 0.3.0
 - Wiener regularisation, raw residual Q, local-maxima alignment, joint PEQ refinement
-- Confidence badges in GUI, verdict line in CLI, scrollable diagnostics
-- Graph display button in GUI results view
+- GUI confidence badges, CLI verdict line, scrollable diagnostics, graph display
 - Multi-pass averaging iteration mode
-- RBJ coefficient reference tests and biquad stability tests
-- Fixed _metrics dead mask, alignment_peak_ratio, shelf Q/S export
-- Removed dead code, added plots.py and signals.py test coverage
-- Type-narrowed PEQBand.kind, extracted confidence constants, injectable weights
+- RBJ coefficient tests, biquad stability tests
+- Bug fixes: _metrics mask, alignment_peak_ratio, shelf Q/S, dead code removal
 
-### 0.2.3
-- Mono and duplicated-channel capture rejection (including multichannel)
-
-### 0.2.2
+### 0.2.x
+- Mono/duplicated-channel capture rejection
 - Fixed-band GraphicEQ fitting and expanded regression tests
 
-## Future follow-up candidates
+## Future work
 
-### Code quality / consistency
-- Use encoding="utf-8" consistently for all read_text() / write_text() calls
-- Extract repeated CLI parser setup into shared helpers
-- Improve GUI/CLI/TUI shared plumbing — advanced options are CLI-first, GUI lags
-- Add pytest.ini with pythonpath config and verify MANIFEST.in include rules
-
-### Features
-- Add export formats beyond CamillaDSP and APO if users actually need them
-- Implement import-apo refine mode (re-optimise imported preset against user measurement)
+### Now — GUI product parity and import-apo refine
+- Wire target curve editor into GUI navigation
+- Add import-apo and fetch-curve to GUI (currently CLI-only)
+- Add iteration mode choice to GUI measurement wizard
+- Implement import-apo --import-mode refine (re-optimise imported preset against user measurement)
 - Implement real headphone database search (GitHub API or cached local index)
+
+### Next — packaging and CI hardening
+- Add pytest.ini with pythonpath config
+- Verify MANIFEST.in / setuptools include rules for sdist
+- Add Python 3.10–3.13 CI matrix
+- Use encoding="utf-8" consistently across all file I/O
+- Verify sdist / wheel produces self-consistent test-runnable package
+
+### Later — polish and expansion
+- Extract repeated CLI parser setup into shared helpers
 - Cache fixed-profile basis responses for repeated runs
-- Add richer PipeWire error diagnostics (show exact command and target names)
-
-### Testing / CI
-- Add explicit Python 3.10–3.13 CI matrix
-- Verify sdist / wheel build produces a self-consistent test-runnable package
+- Add richer PipeWire error diagnostics
+- Add export formats beyond CamillaDSP and APO if demand exists
 - Add content-type validation to fetch-curve responses
-
-### Compatibility
-- Consistent cross-platform file-open (os.startfile / open / xdg-open) across all paths
-- Consider streaming with size cap for all network fetches
-
-## Future feature candidates (deferred)
-
-1. Asynchronous device support and clock drift compensation
-2. Automated HRTF target integration and scaling
-3. CamillaDSP live-update integration via WebSocket API
-4. Closed-loop EQ refinement (measure → apply → re-measure; depends on #3)
-5. Windows/macOS support (platform-aware measure.py backends)
-6. Room correction / speaker measurement mode
+- Consistent cross-platform file-open across all paths
+- Streaming with size cap for all network fetches
+- Asynchronous device support and clock drift compensation
+- Automated HRTF target integration and scaling
+- CamillaDSP live-update integration via WebSocket API
+- Closed-loop EQ refinement (depends on CamillaDSP WebSocket)
+- Windows/macOS support (platform-aware measure.py backends)
+- Room correction / speaker measurement mode
