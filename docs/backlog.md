@@ -44,6 +44,34 @@ The current shipped state includes:
 
    Suggested files: `headmatch/gui.py`, `headmatch/gui_views.py`, `tests/test_gui.py`
 
+4. TASK-064: Add RBJ reference coefficient tests for biquad_response_db
+
+   Verify biquad coefficient computation against RBJ cookbook formulas across
+   a dense parameter grid (Fc × Q × Gain × Fs × filter type).
+
+   Suggested files: `tests/test_peq_exporters.py` or `tests/test_biquad_coefficients.py`
+
+5. TASK-065: Verify biquad numerical stability for extreme filter parameters
+
+   Test extreme parameter combinations (low Fc, near-Nyquist, high Q, large gain)
+   to catch any precision failures in float64 biquad computation.
+
+   Suggested files: `tests/test_peq_exporters.py` or `tests/test_biquad_coefficients.py`
+
+6. TASK-066: Display fit SVG graphs in the GUI results view
+
+   Show the measured-vs-target graph in the history results view. Zero-dependency
+   fallback (xdg-open button), optional inline rendering if a rasterizer is available.
+
+   Suggested files: `headmatch/gui_views.py`, `headmatch/gui.py`, `tests/test_gui.py`
+
+7. TASK-067: Add multi-pass averaging iteration mode
+
+   Measure N times, average the frequency responses, fit once. Reduces measurement
+   noise and improves fit quality. Keep existing independent mode as default.
+
+   Suggested files: `headmatch/pipeline.py`, `headmatch/cli.py`, `tests/test_pipeline.py`
+
 ## Recently completed (0.2.3)
 - TASK-054: Reject mono or duplicated-channel captures during analysis
 - TASK-059: Extend duplicated-channel detection to multichannel captures
@@ -88,3 +116,4 @@ The current shipped state includes:
 1. Asynchronous Device Support and Clock Drift Compensation
 2. Automated HRTF Target Integration and Scaling
 3. Integration of CamillaDSP Live-Updates via WebSocket API
+4. Closed-loop EQ refinement (measure → apply EQ → re-measure → correct residual; depends on #3)
