@@ -424,8 +424,30 @@ def main(argv: list[str] | None = None) -> None:
             render_sweep_file(spec_from_args(args), args.out)
         elif args.cmd == "list-targets":
             print(format_pipewire_targets(list_pipewire_targets()))
+        elif args.cmd == "create-shortcut":
+            from .desktop import create_shortcut, find_gui_binary
+            gui = find_gui_binary()
+            if gui:
+                path = create_shortcut(gui)
+                print(f"Desktop shortcut created: {path}")
+                print(f"Using GUI binary: {gui}")
+            else:
+                print("Could not find headmatch-gui. Is HeadMatch installed?")
+        elif args.cmd == "remove-shortcut":
+            from .desktop import remove_shortcut
+            if remove_shortcut():
+                print("Desktop shortcut removed.")
+            else:
+                print("No desktop shortcut found.")
         elif args.cmd == "doctor":
+            from .desktop import shortcut_exists, find_gui_binary
             print(format_doctor_report(collect_doctor_checks(config_path, config), config_path=config_path))
+            gui = find_gui_binary()
+            if gui and not shortcut_exists():
+                print(f"\nTip: Run 'headmatch create-shortcut' to add HeadMatch to your desktop launcher.")
+                print(f"     (Found GUI at: {gui})")
+            elif shortcut_exists():
+                print(f"\nDesktop shortcut: installed ✓")
         elif args.cmd == "measure":
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)

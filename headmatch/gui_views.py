@@ -112,6 +112,23 @@ def render_setup_check(ttk, frame, *, report: str, on_refresh, on_measure) -> No
     ttk.Button(actions, text="Refresh setup check", command=on_refresh).grid(row=0, column=0, sticky="w")
     ttk.Button(actions, text="Go to Measure", command=on_measure).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
+    # Desktop shortcut button
+    from .desktop import shortcut_exists, create_shortcut, find_gui_binary
+    gui = find_gui_binary()
+    if gui:
+        def _toggle_shortcut():
+            try:
+                if shortcut_exists():
+                    from .desktop import remove_shortcut
+                    remove_shortcut()
+                else:
+                    create_shortcut(gui)
+            except Exception:
+                pass
+            on_refresh()
+        shortcut_label = "Remove desktop shortcut" if shortcut_exists() else "Create desktop shortcut"
+        ttk.Button(actions, text=shortcut_label, command=_toggle_shortcut).grid(row=0, column=2, sticky="w", padx=(12, 0))
+
     report_card = ttk.LabelFrame(frame, text="Readiness report", padding=SECTION_PAD)
     report_card.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
     report_card.columnconfigure(0, weight=1)
