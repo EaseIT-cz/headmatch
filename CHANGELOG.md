@@ -1,27 +1,104 @@
-## 0.2.2 (in development)
+# HeadMatch Changelog
+
+## 0.4.5
+
+### Fixes
+- Target editor `from_csv` now loads all points from small CSVs and intelligently downsamples dense grids to ~24 control points (was hardcoded to 8).
+
+## 0.4.4
+
+### Fixes
+- Dense GraphicEQ export now writes the PEQ-fitted response instead of the raw correction target, reducing clipping risk. (Note: further GraphicEQ clipping investigation tracked in TASK-077.)
 
 ### Features
-- **Fixed-band GraphicEQ export**: Added export of fixed-band GraphicEQ profiles (geq_10_band and geq_31_band) for Equalizer APO integration.
-- **Fixed-band GraphicEQ fitting**: New fit mode that applies correction directly to the shared objective/residual layer using predefined GraphicEQ frequency points.
-- **Exact-count PEQ mode**: The `exact_n` fill policy ensures exactly N filters are used when specified, enabling precise control over filter count for multi-peak targets.
+- Target editor: per-row "+" add button inserts points between neighbours instead of a single confusing "Add point" button.
+- Target editor: "Load CSV" button to load existing target curves for editing.
+- History view: "Browse…" button for the search folder.
+- Desktop shortcut management: `headmatch create-shortcut` / `remove-shortcut` CLI commands, GUI toggle button in Setup Check, and `headmatch doctor` integration.
 
-### Improvements
-- **Synthetic regression test coverage**: Expanded the synthetic integration test suite with focused tests for:
-  - exact_n fill policy with multi-peaked targets
-  - underfitting when target changes are minimal
-  - clone target normalization behavior
-  - GraphicEQ export edge cases (zero preamp values)
-  - Fixed-band profile generation (10-band and 31-band)
-  - CamillaDSP filter ordering and naming
+## 0.4.1
 
-### Documentation
-- Updated `docs/architecture.md` to document fixed-band GraphicEQ support
-- Updated `docs/backlog.md` to reflect completed tasks and new feature candidates
-- Improved clarity around filter family vs. fill policy separation
+### Fixes
+- `--iteration-mode` now passed through CLI to pipeline (was silently ignored).
+- `import-apo` re-exports imported bands to APO + CamillaDSP formats (was ignoring them).
+- Windows graph opener uses `os.startfile()` instead of `shell=True` (security fix).
+- `fetch-curve` restricted to HTTPS-only with 5 MB response cap.
+- Added `tests/__init__.py` for sdist test suite compatibility.
+- Merged duplicate `fit`/`fit-offline` CLI branches.
+- `search-headphone` now honestly states it is a placeholder.
+- Config JSON parse errors produce user-friendly messages.
+- `--iterations` and `--max-filters` reject negative/zero values.
 
-### Technical details
-- Backend contract remains stable; no breaking changes
-- New fit mode `graphic_eq` now available for fixed-band fitting workflows
-- Export formats: Equalizer APO parametric, Equalizer APO GraphicEQ, CamillaDSP YAML
-- All existing export formats and workflows continue to work as before
+### Features
+- GUI: Target Editor, Import APO, Fetch Curve, and iteration mode views added (full CLI parity).
 
+## 0.4.0
+
+### Performance
+- Vectorised fractional-octave smoothing (~50× faster).
+- Direct biquad transfer function evaluation replacing `scipy.signal.freqz` (3-5× faster).
+
+### Features
+- APO AutoEQ preset import (`headmatch import-apo`).
+- Community headphone database integration (`headmatch search-headphone`, `headmatch fetch-curve`).
+- GUI target curve editor with PCHIP interpolation.
+
+## 0.3.0
+
+### DSP accuracy
+- Wiener-regularised transfer function estimation (noise suppression at frequency extremes).
+- Raw residual bandwidth estimation for narrower Q accuracy on presence-region features.
+- Local-maxima alignment search replacing top-8 global sort (robust to room echoes).
+- Joint Nelder-Mead PEQ refinement after greedy placement.
+
+### Features
+- Multi-pass averaging iteration mode (`--iteration-mode average`).
+- CLI one-line colored confidence verdict.
+- GUI confidence badges (✓/⚠/✗), graph display button, scrollable setup diagnostics.
+
+### Code quality
+- 241 RBJ biquad coefficient reference tests across dense parameter grid.
+- Extreme parameter stability tests (all finite and bounded).
+- Smoke tests for `plots.py`, unit tests for `signals.py`.
+- Type-narrowed `PEQBand.kind` to `Literal`.
+- Confidence scoring thresholds extracted to named constants.
+- Injectable `FitObjective.weights`.
+
+### Fixes
+- `_metrics` dead mask (was always-true, inflating confidence penalties).
+- `alignment_peak_ratio` returning 0.0 for negative offsets.
+- Shelf Q/S inconsistency in CamillaDSP export.
+- Removed dead code (`validate_stereo_audio`, `inverse_sweep`).
+
+## 0.2.3
+
+### Fixes
+- Mono captures rejected with clear error message.
+- Duplicated-channel captures detected and rejected (all channel counts).
+- Tests refactored to use `pytest.raises`.
+
+## 0.2.2
+
+### Features
+- Fixed-band GraphicEQ export (10-band and 31-band profiles).
+- Fixed-band GraphicEQ fitting on shared objective/residual layer.
+- Exact-count PEQ mode (`exact_n` fill policy).
+- Expanded synthetic regression test coverage.
+
+## 0.2.1
+
+### Fixes
+- Clone-target semantics corrected (relative targets resolved before fitting).
+- PEQ filter-budget enforcement fixed.
+- PEQ fitter no longer wastes search budget on rejected candidates.
+
+## 0.2.0
+
+Initial public release.
+- Beginner-first CLI, GUI, and TUI workflows.
+- PipeWire online measurement and offline recorder-first path.
+- Conservative PEQ fitting with edge-shelf detection.
+- Equalizer APO and CamillaDSP export.
+- Clone-target headphone-to-headphone workflow.
+- Confidence/trust summaries with plain-language interpretation.
+- Measured-vs-target SVG review graphs.
