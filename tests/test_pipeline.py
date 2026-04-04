@@ -237,13 +237,16 @@ def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path
 
 
 
-def test_analyze_accepts_mono_recording_by_duplicating_channel(tmp_path: Path):
+def test_analyze_rejects_mono_recording(tmp_path: Path):
     recording, spec = simulate_headphone_recording(tmp_path)
     original, _sr = sf.read(str(recording), always_2d=True)
     mono_path = tmp_path / 'mono.wav'
     write_wav(mono_path, original[:, :1], spec.sample_rate)
-    result = analyze_measurement(mono_path, spec, out_dir=tmp_path)
-    assert np.allclose(result.left_db, result.right_db)
+    try:
+        analyze_measurement(mono_path, spec, out_dir=tmp_path)
+        assert False, "Expected ValueError for mono capture"
+    except ValueError as e:
+        assert "mono capture" in str(e)
 
 
 
@@ -256,6 +259,18 @@ def test_analyze_accepts_multichannel_recording_using_first_two_channels(tmp_pat
     result = analyze_measurement(quad_path, spec, out_dir=tmp_path)
     assert len(result.freqs_hz) > 100
     assert np.max(np.abs(result.left_db - result.right_db)) > 0.1
+
+def test_analyze_rejects_duplicated_channel_capture(tmp_path: Path):
+    recording, spec = simulate_headphone_recording(tmp_path)
+    stereo, _sr = sf.read(str(recording), always_2d=True)
+    dup_path = tmp_path / 'duplicated.wav'
+    write_wav(dup_path, np.column_stack([stereo[:, 0], stereo[:, 0]]), spec.sample_rate)
+    try:
+        analyze_measurement(dup_path, spec, out_dir=tmp_path)
+        assert False, "Expected ValueError for duplicated-channel capture"
+    except ValueError as e:
+        assert "duplicated-channel" in str(e)
+
 
 
 
