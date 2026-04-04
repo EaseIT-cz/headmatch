@@ -43,13 +43,19 @@ class FitObjective:
     weights: np.ndarray
 
     @classmethod
-    def from_target(cls, freqs_hz: np.ndarray, target_eq_db: np.ndarray, sample_rate: int) -> "FitObjective":
+    def from_target(
+        cls,
+        freqs_hz: np.ndarray,
+        target_eq_db: np.ndarray,
+        sample_rate: int,
+        weights: np.ndarray | None = None,
+    ) -> "FitObjective":
         eq_target = fractional_octave_smoothing(freqs_hz, target_eq_db, fraction=8)
         return cls(
             freqs_hz=freqs_hz,
             eq_target_db=eq_target,
             sample_rate=sample_rate,
-            weights=_residual_priority_weights(freqs_hz),
+            weights=weights if weights is not None else _residual_priority_weights(freqs_hz),
         )
 
     def residual_from_response_db(self, response_db: np.ndarray) -> np.ndarray:
@@ -68,7 +74,7 @@ class FitObjective:
 
 @dataclass
 class PEQBand:
-    kind: str  # peaking, lowshelf, highshelf
+    kind: Literal["peaking", "lowshelf", "highshelf"]
     freq: float
     gain_db: float
     q: float
