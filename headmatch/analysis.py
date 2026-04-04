@@ -73,7 +73,9 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
             segment[seg_start:seg_start + (end - start)] = mono_rec[start:end]
         score = _alignment_reference_score(segment[gate], ref[gate])
         peak_index = int(offset + len(reference) - 1)
-        peak = float(corr_abs[peak_index]) if 0 <= peak_index < len(corr_abs) else 0.0
+        # Clamp to valid range — negative offsets can produce negative peak_index
+        peak_index = max(0, min(peak_index, len(corr_abs) - 1))
+        peak = float(corr_abs[peak_index])
         if score > best_score:
             best_score = score
             best_offset = offset

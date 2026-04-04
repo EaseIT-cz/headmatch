@@ -14,11 +14,32 @@ APO_FILTER_TYPE_NAMES = {'peaking': 'PK', 'lowshelf': 'LS', 'highshelf': 'HS'}
 
 
 
+def _shelf_s_to_q(s: float, gain_db: float) -> float:
+    """Convert RBJ shelf slope parameter S to equivalent Q for CamillaDSP.
+
+    The RBJ cookbook defines shelf alpha using S (slope). CamillaDSP expects
+    Q for shelf filters. The relationship is:
+        Q = 1 / sqrt((A + 1/A) * (1/S - 1) + 2)
+    where A = 10^(gain_db/40).
+    """
+    s = max(0.1, min(1.0, s))
+    A = 10 ** (abs(gain_db) / 40) if abs(gain_db) > 0.01 else 1.0
+    inner = (A + 1.0 / A) * (1.0 / s - 1.0) + 2.0
+    if inner <= 0:
+        return 0.707
+    return round(1.0 / (inner ** 0.5), 4)
+
+
 def _band_payload(band: PEQBand) -> dict:
+    if band.kind == 'peaking':
+        q = round(band.q, 4)
+    else:
+        # Shelf filters: convert slope S stored in band.q to true Q for CamillaDSP
+        q = _shelf_s_to_q(band.q, band.gain_db)
     return {
         'type': FILTER_TYPE_NAMES[band.kind],
         'freq': round(band.freq, 3),
-        'q': round(band.q, 4) if band.kind == 'peaking' else round(max(0.1, min(1.0, band.q)), 4),
+        'q': q,
         'gain': round(band.gain_db, 3),
     }
 

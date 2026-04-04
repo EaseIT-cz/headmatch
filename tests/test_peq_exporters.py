@@ -99,7 +99,9 @@ def test_export_camilladsp_full_yaml_includes_clear_placeholders_and_metadata(tm
     assert payload['devices']['playback']['device'] == 'replace-with-your-output-device'
     assert payload['pipeline'][0]['description'] == 'Left headphone channel filters'
     assert payload['pipeline'][1]['description'] == 'Right headphone channel filters'
-    assert payload['filters']['L_1_lowshelf']['parameters']['q'] == 0.7
+    # After S-to-Q conversion, shelf Q differs from the raw S=0.7 stored in band.q
+    assert payload['filters']['L_1_lowshelf']['parameters']['q'] != 0.7  # not raw S
+    assert 0.55 < payload['filters']['L_1_lowshelf']['parameters']['q'] < 0.65  # converted Q
 
 
 def test_export_camilladsp_snippet_uses_same_filter_payloads(tmp_path):
@@ -114,7 +116,8 @@ def test_export_camilladsp_snippet_uses_same_filter_payloads(tmp_path):
 
     assert payload['metadata']['title'] == 'headmatch CamillaDSP filter snippet'
     assert payload['filters']['L_1_peaking']['parameters']['q'] == 2.75
-    assert payload['filters']['R_1_highshelf']['parameters']['q'] == 1.0
+    # Shelf S=1.5 clamped to 1.0, then converted to Q
+    assert abs(payload['filters']['R_1_highshelf']['parameters']['q'] - 0.7071) < 0.01
     assert payload['pipeline'][0]['names'] == ['L_1_peaking']
     assert payload['pipeline'][1]['names'] == ['R_1_highshelf']
 

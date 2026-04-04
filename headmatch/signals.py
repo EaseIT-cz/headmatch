@@ -55,20 +55,6 @@ def generate_log_sweep(spec: SweepSpec) -> Tuple[np.ndarray, np.ndarray]:
 
 
 
-def inverse_sweep(reference_sweep: np.ndarray) -> np.ndarray:
-    """Approximate inverse filter for Farina-style logarithmic sweep deconvolution."""
-    n = len(reference_sweep)
-    t = np.arange(n)
-    # Exponential amplitude correction for log sweep.
-    f0 = 1.0
-    # Robust and simple approximation that works well enough for FR estimation.
-    amp = np.exp(t / max(n - 1, 1) * np.log(1000.0))
-    inv = reference_sweep[::-1] / amp
-    inv /= max(np.max(np.abs(inv)), 1e-12)
-    return inv.astype(np.float64)
-
-
-
 def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fraction: float = 12.0) -> np.ndarray:
     if len(freqs_hz) != len(values_db):
         raise ValueError('freq and values must have the same length')

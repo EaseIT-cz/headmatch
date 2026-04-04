@@ -72,8 +72,13 @@ def flat_target_csv() -> Path:
     return Path(__file__).with_name('fixtures') / 'flat_target.csv'
 
 
-def _rms_error(values_db: np.ndarray, target_db: np.ndarray) -> float:
-    return float(np.sqrt(np.mean((values_db - target_db) ** 2)))
+def _rms_error(values_db: np.ndarray, target_db: np.ndarray, freqs_hz: np.ndarray | None = None) -> float:
+    err = values_db - target_db
+    if freqs_hz is not None:
+        mask = (freqs_hz >= 80) & (freqs_hz <= 12000)
+        if np.any(mask):
+            err = err[mask]
+    return float(np.sqrt(np.mean(err ** 2)))
 
 
 def _predicted_errors(out_dir: Path, sample_rate: int) -> dict[str, float]:
@@ -99,10 +104,10 @@ def _predicted_errors(out_dir: Path, sample_rate: int) -> dict[str, float]:
     left_bands = [PEQBand(**band) for band in report["left_bands"]]
     right_bands = [PEQBand(**band) for band in report["right_bands"]]
 
-    left_before = _rms_error(left, left_target)
-    right_before = _rms_error(right, right_target)
-    left_after = _rms_error(left + peq_chain_response_db(freqs, sample_rate, left_bands), left_target)
-    right_after = _rms_error(right + peq_chain_response_db(freqs, sample_rate, right_bands), right_target)
+    left_before = _rms_error(left, left_target, freqs)
+    right_before = _rms_error(right, right_target, freqs)
+    left_after = _rms_error(left + peq_chain_response_db(freqs, sample_rate, left_bands), left_target, freqs)
+    right_after = _rms_error(right + peq_chain_response_db(freqs, sample_rate, right_bands), right_target, freqs)
 
     return {
         "left_before": left_before,

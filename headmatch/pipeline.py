@@ -332,9 +332,13 @@ def _write_fit_artifacts(
     return summary.to_dict()
 
 
-def _metrics(measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
+def _metrics(freqs_hz: np.ndarray, measured_db: np.ndarray, target_db: np.ndarray) -> tuple[float, float]:
     err = measured_db - target_db
-    mask = (np.arange(len(err)) >= 0)
+    # Restrict error metrics to the audible band (80-12000 Hz),
+    # consistent with the band mask used for roughness/mismatch diagnostics.
+    mask = (freqs_hz >= 80) & (freqs_hz <= 12000)
+    if not np.any(mask):
+        mask = np.ones(len(err), dtype=bool)
     rms = float(np.sqrt(np.mean(err[mask] ** 2)))
     max_abs = float(np.max(np.abs(err[mask])))
     return rms, max_abs
@@ -350,8 +354,8 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
     right_bands = fit_peq(result.freqs_hz, right_eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
     left_pred = result.left_db + peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)
     right_pred = result.right_db + peq_chain_response_db(result.freqs_hz, sample_rate, right_bands)
-    l_rms, l_max = _metrics(left_pred, resolved_target.left_values_db)
-    r_rms, r_max = _metrics(right_pred, resolved_target.right_values_db)
+    l_rms, l_max = _metrics(result.freqs_hz, left_pred, resolved_target.left_values_db)
+    r_rms, r_max = _metrics(result.freqs_hz, right_pred, resolved_target.right_values_db)
     identity = get_app_identity()
     report = {
         'generated_by': identity.as_metadata(),
