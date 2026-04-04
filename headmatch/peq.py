@@ -166,9 +166,14 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
     else:
         raise ValueError(f"Unsupported band type: {band.kind}")
 
-    b = np.array([b0, b1, b2]) / a0
-    a = np.array([1.0, a1 / a0, a2 / a0])
-    _, h = signal.freqz(b, a, worN=2 * np.pi * freqs_hz / fs)
+    # Direct biquad evaluation on the unit circle — avoids signal.freqz overhead.
+    # H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2)
+    z = np.exp(1j * 2 * np.pi * freqs_hz / fs)
+    z_inv = 1.0 / z
+    z_inv2 = z_inv * z_inv
+    num = b0 + b1 * z_inv + b2 * z_inv2
+    den = a0 + a1 * z_inv + a2 * z_inv2
+    h = num / den
     return 20 * np.log10(np.maximum(np.abs(h), 1e-12))
 
 

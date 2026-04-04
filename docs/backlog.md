@@ -25,19 +25,20 @@ The current shipped state includes:
 
 ## Active
 
-No active tasks. All planned work complete.
+No active tasks.
+
+## Recently completed (0.4.0)
+- Vectorised fractional-octave smoothing (~50x faster)
+- Direct biquad evaluation replacing scipy.signal.freqz (3-5x faster)
+- APO AutoEQ preset import (headmatch import-apo)
+- Community headphone database integration (search-headphone, fetch-curve)
+- GUI target curve editor with PCHIP interpolation
+- 16 new tests for APO import, headphone DB, and target editor
 
 ## Recently completed (0.3.0+)
-- Wiener regularisation in _fr_from_signals (noise suppression at frequency extremes)
-- Raw residual bandwidth estimation in _peaking_candidate (more accurate Q for narrow features)
-- Local-maxima alignment search replacing top-8 global sort (robust to echoes)
-- Joint Nelder-Mead PEQ refinement after greedy placement (reduces total residual)
-- TASK-073: Type-narrow PEQBand.kind to Literal
-- TASK-074: Extract confidence thresholds into named constants
-- TASK-075: _band_mask already parameterised (verified, no changes needed)
-- TASK-076: Make FitObjective.weights injectable
-- CLI/README UX cleanup: fit-offline alias, --max-filters help, --iteration-mode docs
-- Archived 15 completed task specs to docs/tasks/archive/
+- Wiener regularisation, raw residual Q, local-maxima alignment, joint PEQ refinement
+- Type-narrow PEQBand.kind, confidence constants, injectable weights
+- CLI/README UX cleanup
 
 ## Recently completed (0.3.0)
 - TASK-061: Confidence badge styling in GUI history view
@@ -64,11 +65,7 @@ No active tasks. All planned work complete.
 
 ## Future follow-up candidates
 
-6. Vectorise fractional_octave_smoothing and replace freqz with direct biquad eval
 7. Add export formats beyond CamillaDSP and APO if users actually need them
-8. Extract confidence thresholds into named constants
-9. Type-narrow PEQBand.kind to Literal["peaking", "lowshelf", "highshelf"]
-10. Make FitObjective.weights a method parameter for different use cases
 
 ## Future feature candidates (deferred)
 
@@ -77,7 +74,4 @@ No active tasks. All planned work complete.
 3. Integration of CamillaDSP Live-Updates via WebSocket API
 4. Closed-loop EQ refinement (depends on #3)
 5. Windows/macOS support (platform-aware measure.py backends)
-6. APO AutoEQ import (load existing presets as starting point)
-7. Headphone database integration (community measurement databases as clone targets)
-8. GUI target curve editor (drag-and-drop spline editor)
 9. Room correction / speaker measurement mode

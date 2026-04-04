@@ -74,6 +74,19 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - CamillaDSP export generation (snippet and full YAML)
 - shared export for both L/R channels from the same fit result
 
+### `apo_import.py`
+- Equalizer APO parametric preset parser
+- per-channel and mono preset support
+
+### `headphone_db.py`
+- community headphone database search and curve fetching
+- AutoEQ CSV parser and format conversion
+
+### `target_editor.py`
+- drag-point target curve editor model
+- PCHIP interpolation on 48 PPO grid
+- save/load from standard HeadMatch CSV
+
 ### `plots.py`
 - dependency-free SVG review graph generation
 - shared measured-vs-target fitted overlays
@@ -238,13 +251,16 @@ The shipped product now includes:
 - `fit-offline` CLI alias for `fit` (backward compatibility)
 - type-safe PEQBand.kind (Literal, not str)
 - injectable FitObjective weights for future use-case customisation
+- vectorised fractional-octave smoothing and direct biquad evaluation (performance)
+- APO AutoEQ preset import and re-optimisation
+- community headphone database search and curve fetching
+- GUI target curve editor with PCHIP interpolation
 
 ---
 
 ## Likely future work
 
 Likely follow-up candidates:
-- vectorise fractional_octave_smoothing and replace freqz with direct biquad eval (perf)
 - additional export formats beyond APO and CamillaDSP if there is real demand
 - safe mode vs advanced mode split if the product accumulates too many knobs
 

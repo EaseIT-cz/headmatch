@@ -304,3 +304,35 @@ def render_history_results(ttk, frame, *, selection) -> None:
             ttk.Button(guide, text="Open fit graph", command=_open_graph).grid(row=row, column=0, sticky="w", pady=(8, 0))
         else:
             ttk.Label(guide, text="Graph not available.", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(8, 0))
+
+
+def render_target_editor(ttk, frame, *, editor, on_save, on_reset):
+    """Render a simple target curve editor with control point list and save button."""
+    ttk.Label(frame, text="Target curve editor", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Build a custom target curve by editing control points. The curve is interpolated smoothly between points.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+    points_frame = ttk.LabelFrame(frame, text="Control points (frequency Hz, gain dB)", padding=SECTION_PAD)
+    points_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 12))
+    points_frame.columnconfigure(0, weight=1)
+
+    for idx, point in enumerate(editor.points):
+        row_frame = ttk.Frame(points_frame)
+        row_frame.grid(row=idx, column=0, sticky="ew", pady=2)
+        ttk.Label(row_frame, text=f"{point.freq_hz:.0f} Hz").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(row_frame, text=f"{point.gain_db:+.1f} dB").grid(row=0, column=1, sticky="w", padx=(0, 12))
+
+    actions = ttk.Frame(frame, padding=(0, 8, 0, 0))
+    actions.grid(row=3, column=0, sticky="w")
+    ttk.Button(actions, text="Save as target CSV", command=on_save).grid(row=0, column=0, sticky="w")
+    ttk.Button(actions, text="Reset to flat", command=on_reset).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Label(
+        actions,
+        text="After saving, use the CSV as --target-csv in your next measurement or fit.",
+        wraplength=DETAIL_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))

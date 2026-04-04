@@ -58,14 +58,13 @@ def generate_log_sweep(spec: SweepSpec) -> Tuple[np.ndarray, np.ndarray]:
 def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fraction: float = 12.0) -> np.ndarray:
     if len(freqs_hz) != len(values_db):
         raise ValueError('freq and values must have the same length')
-    out = np.empty_like(values_db)
     logf = np.log(np.maximum(freqs_hz, 1e-9))
-    half_bw = np.log(2.0) / (2.0 * fraction)
-    for i, lf in enumerate(logf):
-        w = np.exp(-0.5 * ((logf - lf) / max(half_bw, 1e-9)) ** 2)
-        w_sum = np.sum(w)
-        out[i] = np.sum(w * values_db) / max(w_sum, 1e-12)
-    return out
+    half_bw = max(np.log(2.0) / (2.0 * fraction), 1e-9)
+    # Vectorised: compute full NxN Gaussian weight matrix via outer product
+    diff = logf[:, None] - logf[None, :]
+    w = np.exp(-0.5 * (diff / half_bw) ** 2)
+    w_sum = np.sum(w, axis=1)
+    return np.where(w_sum > 1e-12, w @ values_db / w_sum, values_db)
 
 
 
