@@ -65,12 +65,36 @@ if os.path.isdir(targets_dir):
                 (os.path.join(targets_dir, f), os.path.join('docs', 'examples', 'targets'))
             )
 
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+
+# Collect tkinter and its Tcl/Tk data files
+tkinter_hiddenimports = collect_submodules('tkinter')
+tkinter_datas = collect_data_files('tkinter')
+
+# Also try to collect Tcl/Tk shared data
+import tkinter
+import os as _os
+_tcl_root = _os.environ.get('TCL_LIBRARY', '')
+_tk_root = _os.environ.get('TK_LIBRARY', '')
+_tcl_tk_datas = []
+if not _tcl_root:
+    try:
+        _root = tkinter.Tk(useTk=False)
+        _tcl_root = _root.tk.eval('info library')
+        _root.destroy()
+    except Exception:
+        pass
+if _tcl_root and _os.path.isdir(_tcl_root):
+    _tcl_tk_datas.append((_tcl_root, 'tcl'))
+if _tk_root and _os.path.isdir(_tk_root):
+    _tcl_tk_datas.append((_tk_root, 'tk'))
+
 a = Analysis(
     ['scripts/entry_gui.py'],
     pathex=['.'],
     binaries=_blas_libs,
-    datas=example_targets,
-    hiddenimports=[
+    datas=example_targets + tkinter_datas + _tcl_tk_datas,
+    hiddenimports=tkinter_hiddenimports + [
         'headmatch',
         'headmatch.cli',
         'headmatch.gui',
