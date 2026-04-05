@@ -46,6 +46,18 @@ def main(argv: list[str] | None = None) -> None:
     try:
         import headmatch
         print(f"Building HeadMatch {headmatch.__version__}")
+
+
+    # Check numpy BLAS source — pip wheels are preferred for portability
+    try:
+        import numpy as np
+        np_dir = Path(np.__file__).parent
+        libs_dir = np_dir / ".libs"
+        if libs_dir.is_dir() and any(f for f in libs_dir.iterdir() if "openblas" in f.name.lower()):
+            print(f"  numpy BLAS: bundled OpenBLAS in {libs_dir} ✓")
+        else:
+            print(f"  numpy BLAS: system library (binary may not be portable!)")
+            print(f"  Tip: pip install numpy --force-reinstall to use the pip wheel with bundled OpenBLAS")
     except ImportError:
         print("headmatch package not found. Install with: pip install -e .")
         sys.exit(1)

@@ -11,44 +11,48 @@ from pathlib import Path
 
 block_cipher = None
 
-# ── Collect BLAS/LAPACK shared libraries ──
-# PyInstaller misses these on Fedora (FlexiBLAS) and some other distros.
-import subprocess
-import glob
+# ── Collect BLAS/LAPACK shared libraries from numpy/scipy ──
+# pip-installed wheels bundle their own OpenBLAS in .libs directories.
+# PyInstaller's hooks usually find these, but we add them explicitly
+# as a safety net for cross-distro compatibility.
 
 _blas_libs = []
-_lib_dirs = ['/usr/lib64', '/usr/lib', '/usr/lib/x86_64-linux-gnu']
 
-for pattern in [
-    'libflexiblas*', 'libopenblas*', 'libblas*', 'liblapack*',
-    'libgfortran*', 'libquadmath*',
-]:
-    for lib_dir in _lib_dirs:
-        for path in glob.glob(os.path.join(lib_dir, pattern + '.so*')):
-            if os.path.isfile(path) and not os.path.islink(path):
-                _blas_libs.append((path, '.'))
-            elif os.path.islink(path):
-                real = os.path.realpath(path)
-                if os.path.isfile(real):
-                    _blas_libs.append((real, '.'))
-
-# Also try to find numpy's bundled openblas
-try:
-    import numpy
-    np_dir = os.path.dirname(numpy.__file__)
-    for root, dirs, files in os.walk(np_dir):
-        for f in files:
-            if 'openblas' in f.lower() or 'blas' in f.lower() or 'lapack' in f.lower():
-                full = os.path.join(root, f)
-                if full.endswith('.so') or '.so.' in full:
+for pkg_name in ('numpy', 'scipy'):
+    try:
+        pkg = __import__(pkg_name)
+        pkg_dir = os.path.dirname(pkg.__file__)
+        # Check .libs directory (pip wheel layout)
+        libs_dir = os.path.join(pkg_dir, '.libs')
+        if os.path.isdir(libs_dir):
+            for f in os.listdir(libs_dir):
+                full = os.path.join(libs_dir, f)
+                if os.path.isfile(full) and ('.so' in f or '.dylib' in f):
                     _blas_libs.append((full, '.'))
-except ImportError:
-    pass
+        # Also check for .so files directly in the package (some builds)
+        for root, _dirs, files in os.walk(pkg_dir):
+            for f in files:
+                if ('openblas' in f.lower() or 'lapack' in f.lower()) and ('.so' in f or '.dylib' in f):
+                    full = os.path.join(root, f)
+                    if os.path.isfile(full):
+                        _blas_libs.append((full, '.'))
+    except ImportError:
+        pass
 
-if _blas_libs:
-    print(f"Bundling {len(_blas_libs)} BLAS/LAPACK libraries")
-else:
-    print("WARNING: No BLAS/LAPACK libraries found to bundle")
+# Deduplicate by basename
+_seen = set()
+_deduped = []
+for src, dst in _blas_libs:
+    name = os.path.basename(src)
+    if name not in _seen:
+        _seen.add(name)
+        _deduped.append((src, dst))
+_blas_libs = _deduped
+
+print(f"Bundling {len(_blas_libs)} BLAS/LAPACK libraries from pip packages")
+for src, _ in _blas_libs:
+    print(f"  {src}")
+
 
 
 # Collect example target CSVs as data files

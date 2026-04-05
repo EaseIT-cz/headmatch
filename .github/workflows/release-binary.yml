@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # Use pip wheels for numpy/scipy — they bundle their own OpenBLAS.
+          # This ensures the binary works on any Linux distro, not just the build host.
+          pip install numpy scipy soundfile PyYAML
           pip install -e .
           pip install pyinstaller
 
