@@ -20,9 +20,23 @@ def default_config_path() -> Path:
     return default_config_dir() / CONFIG_FILENAME
 
 
+# Map new platform-neutral field names to the canonical dataclass fields
+_FIELD_ALIASES = {
+    "output_target": "pipewire_output_target",
+    "input_target": "pipewire_input_target",
+}
+
+
 def _coerce_payload(payload: dict[str, Any]) -> FrontendConfig:
     allowed = {field.name for field in fields(FrontendConfig)}
-    filtered = {key: value for key, value in payload.items() if key in allowed}
+    filtered = {}
+    for key, value in payload.items():
+        # Accept new field names, mapping to canonical names
+        canonical = _FIELD_ALIASES.get(key, key)
+        if canonical in allowed:
+            # New-style names don't overwrite existing old-style values
+            if canonical not in filtered:
+                filtered[canonical] = value
     if "schema_version" not in filtered:
         filtered["schema_version"] = CONFIG_SCHEMA_VERSION
     return FrontendConfig(**filtered)

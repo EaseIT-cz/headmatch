@@ -804,7 +804,7 @@ class HeadMatchGuiApp:
                 summary=str(exc),
                 steps=(
                     "Check the paths and device targets shown in the wizard.",
-                    "If this was an online run, confirm PipeWire playback and capture work from the terminal too.",
+                    "If this was an online run, confirm audio playback and capture work from the terminal too.",
                 ),
             )
             return

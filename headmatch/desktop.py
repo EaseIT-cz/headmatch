@@ -16,7 +16,7 @@ Exec={gui_path}
 Icon=audio-headphones
 Terminal=false
 Categories=AudioVideo;Audio;Utility;
-Keywords=headphones;measurement;eq;pipewire;
+Keywords=headphones;measurement;eq;audio;
 StartupNotify=true
 """
 

@@ -92,3 +92,58 @@ def test_cache_dir_fallback_on_oserror(tmp_path, monkeypatch):
     d = paths.cache_dir()
     assert "headmatch" in str(d)
     assert d.exists()
+
+
+# ── Config field aliasing tests (TASK-089) ──
+
+def test_config_new_field_names_loaded(tmp_path):
+    """Config JSON with output_target/input_target should load correctly."""
+    import json
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "output_target": "my-dac",
+        "input_target": "my-mic",
+    }))
+    from headmatch.settings import load_config
+    config = load_config(config_file)
+    assert config.pipewire_output_target == "my-dac"
+    assert config.pipewire_input_target == "my-mic"
+    assert config.output_target == "my-dac"
+    assert config.input_target == "my-mic"
+
+
+def test_config_old_field_names_still_work(tmp_path):
+    """Config JSON with pipewire_output_target should still load."""
+    import json
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "pipewire_output_target": "old-dac",
+        "pipewire_input_target": "old-mic",
+    }))
+    from headmatch.settings import load_config
+    config = load_config(config_file)
+    assert config.output_target == "old-dac"
+    assert config.input_target == "old-mic"
+
+
+def test_config_old_names_take_precedence(tmp_path):
+    """If both old and new names exist, old (canonical) wins."""
+    import json
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "pipewire_output_target": "canonical-dac",
+        "output_target": "alias-dac",
+    }))
+    from headmatch.settings import load_config
+    config = load_config(config_file)
+    assert config.output_target == "canonical-dac"
+
+
+def test_config_property_setter():
+    """Setting output_target property should update pipewire_output_target."""
+    from headmatch.contracts import FrontendConfig
+    config = FrontendConfig()
+    config.output_target = "new-dac"
+    assert config.pipewire_output_target == "new-dac"
+    config.input_target = "new-mic"
+    assert config.pipewire_input_target == "new-mic"

@@ -119,8 +119,8 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, reports, and EQ export files.")
     p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
-    p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional PipeWire playback node.name or match string. Run 'headmatch list-targets' to discover likely values.")
-    p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional PipeWire capture node.name or match string. Run 'headmatch list-targets' to discover likely values.")
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Optional playback device name or ID. Run 'headmatch list-targets' to discover likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="Optional capture device name or ID. Run 'headmatch list-targets' to discover likely values.")
     add_filter_budget_args(p, config)
     p.add_argument(
         "--iterations",
@@ -139,11 +139,11 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_common_sweep_args(p, config)
     p.add_argument("--out", required=True)
 
-    p = sub.add_parser("measure", help="Play sweep via PipeWire and record the transfer.")
+    p = sub.add_parser("measure", help="Play sweep and record the transfer.")
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
-    p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Playback device name or ID. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="Capture device name or ID. Use 'headmatch list-targets' to see likely values.")
 
     p = sub.add_parser("prepare-offline", help="Create sweep + metadata for Zoom/H2n or SD-card recording workflows.")
     add_common_sweep_args(p, config)
@@ -192,9 +192,9 @@ def build_parser(config) -> argparse.ArgumentParser:
 
     sub.add_parser(
         "list-targets",
-        help="List likely PipeWire playback and capture targets.",
+        help="List likely audio playback and capture targets.",
         description=(
-            "Inspect PipeWire nodes and print beginner-friendly suggestions for "
+            "Inspect audio devices and print beginner-friendly suggestions for "
             "--output-target and --input-target."
         ),
     )
@@ -203,8 +203,8 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_common_sweep_args(p, config)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--target-csv", default=config.preferred_target_csv)
-    p.add_argument("--output-target", default=config.pipewire_output_target, help="PipeWire playback node.name or match string. Use 'headmatch list-targets' to see likely values.")
-    p.add_argument("--input-target", default=config.pipewire_input_target, help="PipeWire capture node.name or match string. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Playback device name or ID. Use 'headmatch list-targets' to see likely values.")
+    p.add_argument("--input-target", default=config.pipewire_input_target, help="Capture device name or ID. Use 'headmatch list-targets' to see likely values.")
     p.add_argument("--iterations", type=positive_int, default=config.iterate_iterations)
     p.add_argument(
         "--iteration-mode",
@@ -217,7 +217,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     sub.add_parser(
         "doctor",
         help="Check whether the local HeadMatch environment looks ready.",
-        description="Run a small beginner-friendly readiness check for config, PipeWire tools, and device discovery.",
+        description="Run a small beginner-friendly readiness check for config, audio tools, and device discovery.",
     )
 
     sub.add_parser(
@@ -317,7 +317,7 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
-        print("If PipeWire did not pick the right devices, run 'headmatch list-targets' and rerun with --output-target and/or --input-target.")
+        print("If the wrong devices were used, run 'headmatch list-targets' and rerun with --output-target and/or --input-target.")
     elif cmd == "measure":
         print()
         print(f"Measurement saved in {out_dir}.")

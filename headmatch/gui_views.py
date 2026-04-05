@@ -9,7 +9,7 @@ from .troubleshooting import confidence_troubleshooting_steps
 
 
 ONLINE_STEPS = (
-    "Check the output folder and saved PipeWire targets.",
+    "Check the output folder and saved audio device targets.",
     "Playback target = the DAC, headphones, speakers, or interface output that should play the sweep.",
     "Capture target = the mic, recorder, or interface input that should hear it.",
     "If you are unsure, run 'headmatch list-targets' first and paste the exact node names.",
@@ -67,7 +67,7 @@ def render_online_wizard(ttk, frame, *, variables, on_start) -> None:
     ttk.Label(frame, text="Online measurement wizard", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text="Use this when PipeWire playback and capture are available now. Choose the output that should play the sweep and the input that should hear it.",
+        text="Use this when audio playback and capture are available now. Choose the output that should play the sweep and the input that should hear it.",
         wraplength=BODY_WRAP,
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(8, 12))
