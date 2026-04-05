@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.6.0a1 (pre-release). 447 deterministic tests.
+Version 0.6.0a1 (pre-release). 505 deterministic tests.
 Audio backend interface extracted (Phase 1 macOS support complete).
 
 Key capabilities:
@@ -24,20 +24,14 @@ Key capabilities:
 - TASK-077: Research and fix dense GraphicEQ clipping (awaiting user testing)
 
 ### macOS support
-- TASK-087: PortAudio audio backend (High — core enabler)
-- TASK-088: Platform-aware config/cache paths (Medium)
-- TASK-089: Platform-aware GUI/CLI text (Low — cosmetic)
-- TASK-090: macOS integration testing and release (High — gates release, depends on 087)
+- TASK-090: macOS integration testing and release (High — gates 0.6.0)
 
 ## Future work
 
 ### Now
-- TASK-087: PortAudio audio backend for macOS
-- TASK-090: macOS integration testing and release (after 087)
+- TASK-090: macOS integration testing and release
 
 ### Next
-- TASK-088: Platform-aware config/cache paths
-- TASK-089: Platform-aware GUI/CLI text
 - GUI shell/view split — gui.py is 865 lines; further extraction possible
 - Extract repeated CLI parser setup into shared helpers
 - Add richer error diagnostics per backend (device not found, permission denied, timeout)
