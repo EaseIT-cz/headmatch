@@ -470,8 +470,17 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "search-headphone":
             from .headphone_db import search_headphone
             results = search_headphone(args.query)
-            for line in results:
-                print(line)
+            if not results:
+                print(f"No matches for '{args.query}'. Try a broader search or check your network connection.")
+            else:
+                print(f"Found {len(results)} match{'es' if len(results) != 1 else ''} for '{args.query}':\n")
+                for entry in results[:25]:
+                    print(f"  {entry.name}")
+                    print(f"    Source: {entry.source} ({entry.form_factor})")
+                    print(f"    Fetch:  headmatch fetch-curve --url \"{entry.raw_csv_url}\" --out \"{entry.name}.csv\"")
+                    print()
+                if len(results) > 25:
+                    print(f"  ... and {len(results) - 25} more. Narrow your search for fewer results.")
         elif args.cmd == "fetch-curve":
             from .headphone_db import fetch_curve_from_url
             out = fetch_curve_from_url(args.url, args.out)

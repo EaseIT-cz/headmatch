@@ -4,10 +4,11 @@
 
 The shipped product includes:
 - CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
-- GUI with confidence badges, graph display, scrollable diagnostics, target editor (load/save/edit), APO import, curve fetch, iteration mode selector, desktop shortcut management
+- GUI with confidence badges, graph display, scrollable diagnostics, target editor (load/save/edit), APO import, headphone database search, curve fetch, iteration mode selector, desktop shortcut management
 - TUI backup workflow (maintenance-only)
 - APO AutoEQ preset import and re-export
-- Community headphone database search guidance and HTTPS-only curve fetching
+- Real headphone database search via GitHub API with local 24h cache
+- HTTPS-only community curve fetching with 5 MB cap
 - Multi-pass averaging iteration mode
 - Conservative PEQ fitting with joint Nelder-Mead refinement
 - Wiener-regularised frequency response estimation
@@ -25,7 +26,7 @@ The shipped product includes:
 - Desktop shortcut management (CLI + GUI)
 - CI with explicit least-privilege permissions and auto-discovery of test files
 - Pipeline split into orchestration / artifacts / confidence modules
-- 416 deterministic tests including 241 RBJ biquad coefficient reference tests
+- 430 deterministic tests including 241 RBJ biquad coefficient reference tests
 
 ## Active
 
@@ -34,7 +35,6 @@ The shipped product includes:
 
 ### Medium priority
 - TASK-078: Live curve preview in the target editor
-- TASK-079: Real headphone database search
 
 ## Future work
 
@@ -46,7 +46,7 @@ The shipped product includes:
 - Use encoding="utf-8" consistently across all file I/O
 - PipeWire capture pipe hardening (stdout→DEVNULL, stderr to file)
 - Add CI coverage reporting as artifact
-- UTF-8 decode error handling in headphone_db.py curve fetcher
+- APO import "refine" mode (re-optimise imported preset against a fresh measurement)
 
 ### Later
 - Extract repeated CLI parser setup into shared helpers

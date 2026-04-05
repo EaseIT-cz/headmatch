@@ -25,7 +25,7 @@ from .pipeline import iterative_measure_and_fit, process_single_measurement
 from .history import build_history_selection
 from .target_editor import TargetEditor
 from .apo_import import load_apo_preset
-from .headphone_db import fetch_curve_from_url
+from .headphone_db import fetch_curve_from_url, search_headphone
 from . import gui_views
 from .settings import load_or_create_config
 from .signals import SweepSpec
@@ -152,6 +152,7 @@ class HeadMatchGuiApp:
         self.apo_output_dir_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
         self.fetch_url_var = tk.StringVar(master=root, value="")
         self.fetch_output_var = tk.StringVar(master=root, value="")
+        self.fetch_search_var = tk.StringVar(master=root, value="")
         self.target_editor = TargetEditor()
         self.target_editor_save_path_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
@@ -433,13 +434,29 @@ class HeadMatchGuiApp:
         ttk.Label(frame, text="Fetch published curve", style="Title.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
             frame,
-            text="Download a headphone frequency response CSV from a community database (AutoEQ, oratory1990, etc). Only HTTPS URLs are accepted.",
+            text="Search the AutoEQ database for a headphone model, or paste a direct CSV URL.",
             wraplength=560,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(8, 12))
 
-        form = ttk.LabelFrame(frame, text="Fetch settings", padding=12)
-        form.grid(row=2, column=0, sticky="ew")
+        # Search section
+        search_frame = ttk.LabelFrame(frame, text="Search headphone database", padding=12)
+        search_frame.grid(row=2, column=0, sticky="ew")
+        search_frame.columnconfigure(1, weight=1)
+        gui_views.add_entry_row(ttk, search_frame, 0, "Headphone model", self.fetch_search_var)
+        ttk.Button(search_frame, text="Search", command=self._run_search_headphone).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        # Search results listbox
+        self._search_results_frame = ttk.Frame(frame)
+        self._search_results_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        self._search_results_frame.columnconfigure(0, weight=1)
+        self._search_results_list = None
+        self._search_results_data: list = []
+
+        # Direct URL section
+        form = ttk.LabelFrame(frame, text="Fetch by URL", padding=12)
+        form.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         form.columnconfigure(1, weight=1)
         gui_views.add_entry_row(ttk, form, 0, "CSV URL (HTTPS)", self.fetch_url_var)
         gui_views.add_picker_row(ttk, form, 1, "Save to", self.fetch_output_var,
@@ -447,12 +464,53 @@ class HeadMatchGuiApp:
         ttk.Button(form, text="Fetch and save", command=self._run_fetch_curve).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+    def _run_search_headphone(self) -> None:
+        query = self.fetch_search_var.get().strip()
+        if not query:
+            self._show_status("Enter a headphone model name to search.")
+            return
+        try:
+            results = search_headphone(query)
+        except Exception as exc:
+            self._show_status(f"Search failed: {exc}")
+            return
+        self._search_results_data = results
+        # Clear previous results
+        for widget in self._search_results_frame.winfo_children():
+            widget.destroy()
+        if not results:
+            ttk = self._ttk
+            ttk.Label(self._search_results_frame, text=f"No matches for '{query}'.").grid(row=0, column=0, sticky="w")
+            return
+        ttk = self._ttk
         ttk.Label(
-            frame,
-            text="Tip: visit github.com/jaakkopasanen/AutoEq, find your headphone, copy the raw CSV URL.",
-            wraplength=560,
-            justify="left",
-        ).grid(row=3, column=0, sticky="w", pady=(12, 0))
+            self._search_results_frame,
+            text=f"{len(results)} match{'es' if len(results) != 1 else ''} — select one to populate the URL:",
+        ).grid(row=0, column=0, sticky="w")
+        import tkinter as _tk
+        listbox = _tk.Listbox(self._search_results_frame, height=min(len(results), 8), width=70)
+        for entry in results[:50]:
+            listbox.insert(_tk.END, f"{entry.name}  [{entry.source}, {entry.form_factor}]")
+        listbox.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        scrollbar = ttk.Scrollbar(self._search_results_frame, orient="vertical", command=listbox.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns", pady=(4, 0))
+        listbox.configure(yscrollcommand=scrollbar.set)
+        listbox.bind("<<ListboxSelect>>", self._on_search_result_selected)
+        self._search_results_list = listbox
+
+    def _on_search_result_selected(self, event) -> None:
+        if not self._search_results_list:
+            return
+        selection = self._search_results_list.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        if idx < len(self._search_results_data):
+            entry = self._search_results_data[idx]
+            self.fetch_url_var.set(entry.raw_csv_url)
+            if not self.fetch_output_var.get().strip():
+                self.fetch_output_var.set(f"{entry.name}.csv")
+            self._show_status(f"Selected: {entry.name} — click 'Fetch and save' to download.")
 
     def _choose_fetch_output(self) -> None:
         if filedialog:
