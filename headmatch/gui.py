@@ -550,7 +550,8 @@ class HeadMatchGuiApp:
             entry = self._search_results_data[idx]
             self.fetch_url_var.set(entry.raw_csv_url)
             safe_name = entry.name.replace("/", "_").replace("\\", "_")
-            self.fetch_output_var.set(f"{safe_name}.csv")
+            from .paths import documents_dir
+            self.fetch_output_var.set(str(Path(documents_dir()) / f"{safe_name}.csv"))
             self.root.update_idletasks()
             self._show_status(f"Selected: {entry.name} — click \u2018Fetch and save\u2019 to download.")
 

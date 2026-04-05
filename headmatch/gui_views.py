@@ -473,7 +473,6 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
             except (ValueError, IndexError):
                 pass
         _geom[0] = _render_curve_preview(canvas, editor)
-        _bind_drag_events()
 
     def _on_slider_change(val, gvar, glabel):
         """Called on every slider tick — update the gain var, label, and redraw."""
