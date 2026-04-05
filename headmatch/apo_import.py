@@ -68,11 +68,13 @@ def parse_apo_parametric(text: str) -> Tuple[List[PEQBand], List[PEQBand]]:
         if kind is None:
             continue
 
+        q_val = float(m.group(4))
         band = PEQBand(
             kind=kind,
             freq=float(m.group(2)),
             gain_db=float(m.group(3)),
-            q=float(m.group(4)),
+            q=q_val,
+            slope=q_val if kind in ("lowshelf", "highshelf") else None,
         )
 
         if current_channel == 'left':

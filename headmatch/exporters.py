@@ -34,8 +34,9 @@ def _band_payload(band: PEQBand) -> dict:
     if band.kind == 'peaking':
         q = round(band.q, 4)
     else:
-        # Shelf filters: convert slope S stored in band.q to true Q for CamillaDSP
-        q = _shelf_s_to_q(band.q, band.gain_db)
+        # Shelf filters: use the band's shelf_q property which computes
+        # true Q from the explicit slope (or legacy q-as-slope fallback).
+        q = round(band.shelf_q, 4)
     return {
         'type': FILTER_TYPE_NAMES[band.kind],
         'freq': round(band.freq, 3),

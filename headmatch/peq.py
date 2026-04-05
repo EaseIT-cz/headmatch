@@ -84,10 +84,46 @@ class FitObjective:
 
 @dataclass
 class PEQBand:
+    """A single parametric EQ band.
+
+    For peaking filters, ``q`` is the standard Q factor.
+    For shelf filters, ``q`` is interpreted as the RBJ cookbook slope parameter S
+    (legacy convention kept for backward compatibility).  Prefer setting
+    ``slope`` explicitly for shelf bands — when ``slope`` is provided it takes
+    precedence over ``q`` in biquad evaluation and export.
+    """
     kind: Literal["peaking", "lowshelf", "highshelf"]
     freq: float
     gain_db: float
     q: float
+    slope: float | None = None
+
+    @property
+    def effective_slope(self) -> float:
+        """Return the shelf slope S (only meaningful for shelf kinds).
+
+        If *slope* was set explicitly it wins; otherwise fall back to *q*
+        (the legacy convention where shelf q actually stores S).
+        """
+        if self.slope is not None:
+            return self.slope
+        # Legacy: q stores slope S for shelves
+        return self.q
+
+    @property
+    def shelf_q(self) -> float:
+        """Compute the true Q for shelf filters from slope S.
+
+        Uses the RBJ cookbook relationship:
+            Q = 1 / sqrt((A + 1/A) * (1/S - 1) + 2)
+        where A = 10^(|gain_dB|/40).
+        """
+        s = max(0.1, min(1.0, self.effective_slope))
+        A = 10 ** (abs(self.gain_db) / 40) if abs(self.gain_db) > 0.01 else 1.0
+        inner = (A + 1.0 / A) * (1.0 / s - 1.0) + 2.0
+        if inner <= 0:
+            return 0.707
+        return 1.0 / (inner ** 0.5)
 
 
 @dataclass(frozen=True)
@@ -145,7 +181,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a2 = 1 - alpha / A
     elif band.kind == "lowshelf":
         sqrtA = np.sqrt(A)
-        S = max(0.1, min(1.0, band.q))
+        S = max(0.1, min(1.0, band.effective_slope))
         alpha = np.sin(w0) / 2 * np.sqrt((A + 1 / A) * (1 / S - 1) + 2)
         b0 = A * ((A + 1) - (A - 1) * cosw + 2 * sqrtA * alpha)
         b1 = 2 * A * ((A - 1) - (A + 1) * cosw)
@@ -155,7 +191,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a2 = (A + 1) + (A - 1) * cosw - 2 * sqrtA * alpha
     elif band.kind == "highshelf":
         sqrtA = np.sqrt(A)
-        S = max(0.1, min(1.0, band.q))
+        S = max(0.1, min(1.0, band.effective_slope))
         alpha = np.sin(w0) / 2 * np.sqrt((A + 1 / A) * (1 / S - 1) + 2)
         b0 = A * ((A + 1) + (A - 1) * cosw + 2 * sqrtA * alpha)
         b1 = -2 * A * ((A - 1) + (A + 1) * cosw)
@@ -252,7 +288,7 @@ def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: 
         return None
     if _same_sign_fraction(edge_values, edge_mean) < 0.7:
         return None
-    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7)
+    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7, slope=0.7)
 
 
 def _max_q_for_frequency(freq_hz: float, requested_max_q: float) -> float:
