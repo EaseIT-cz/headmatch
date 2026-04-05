@@ -2,12 +2,17 @@
 
 ## Product shape
 
-HeadMatch is a Linux-first headphone measurement and EQ tool built for non-technical audio enthusiasts.
+HeadMatch is a cross-platform headphone measurement and EQ tool built for non-technical audio enthusiasts.
 
 It provides one shared measurement/fitting backend with three user-facing frontends:
 - **GUI** as the primary product experience
 - **CLI** for explicit, scriptable, and power-user workflows
 - **TUI** as a maintenance-only backup path, mainly for offline processing and non-desktop environments
+
+Supported platforms:
+- **Linux** via PipeWire (primary, fully tested)
+- **macOS** via PortAudio/CoreAudio (0.6.0, requires `pip install headmatch[portaudio]`)
+- **Windows** via PortAudio (untested, expected to work with `sounddevice`)
 
 The product direction is deliberately conservative:
 - guided workflows over flexible-but-confusing ones
@@ -20,11 +25,11 @@ The product direction is deliberately conservative:
 
 ## Core workflow
 
-The shared backend performs the same high-level pipeline regardless of frontend:
+The shared backend performs the same high-level pipeline regardless of frontend or platform:
 
 1. generate a logarithmic sweep
 2. either:
-   - play/record it with PipeWire, or
+   - play/record via the active audio backend (PipeWire or PortAudio), or
    - export an offline sweep package for recorder-first use
 3. align the recording to the reference sweep
 4. estimate left/right frequency response
@@ -37,27 +42,47 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 
 ---
 
+## Audio backend architecture
+
+Audio I/O is abstracted behind a pluggable backend system:
+
+### `audio_backend.py`
+- `AudioBackend` protocol defining the contract for all backends
+- `AudioDevice` dataclass for discovered devices
+- `DeviceConfig`, `DeviceSelection`, `MeasurementPaths` shared types
+- `get_audio_backend()` factory: selects backend based on `sys.platform`
+  - Linux → `PipeWireBackend`
+  - macOS/Windows → `PortAudioBackend`
+
+### `backend_pipewire.py`
+- PipeWire implementation of `AudioBackend`
+- Device discovery via `pw-dump` JSON parsing
+- Default device detection via `wpctl status` + `wpctl inspect`
+- Play-and-record via `pw-play` / `pw-record` subprocesses
+- PipeWire-specific doctor checks (tool availability + device count)
+
+### `backend_portaudio.py`
+- PortAudio implementation via `sounddevice` library
+- Device discovery via `sd.query_devices()`; duplex devices split into separate playback/capture entries
+- Default device detection via `sd.default.device`
+- Simultaneous play/record via `sd.playrec(blocking=True)`
+- Device targets accept both numeric IDs and name substrings
+- PortAudio-specific doctor checks (sounddevice availability + device count)
+
+### `measure.py`
+- Platform-agnostic measurement orchestration
+- Sweep rendering, offline measurement package generation
+- Doctor checks: config validation + backend-specific checks + saved target validation
+- Backward-compatible API wrappers (`PipeWireTarget`, `PipeWireDeviceConfig`, etc. are aliases to the new types)
+
+---
+
 ## Main modules
 
 ### `signals.py`
 - sweep generation
 - smoothing helpers
 - frequency-grid helpers
-
-### `audio_backend.py`
-- abstract `AudioBackend` protocol and `AudioDevice` dataclass
-- `get_audio_backend()` factory: auto-detects platform (PipeWire on Linux, PortAudio planned for macOS/Windows)
-
-### `backend_pipewire.py`
-- PipeWire implementation of `AudioBackend`
-- device discovery via `pw-dump`, defaults via `wpctl`
-- play-and-record via `pw-play` / `pw-record` subprocesses
-
-### `measure.py`
-- platform-agnostic measurement orchestration
-- sweep rendering, offline measurement package generation
-- backward-compatible API wrappers that delegate to the active audio backend
-- doctor checks (config validation + backend-specific device checks)
 
 ### `analysis.py`
 - recording alignment via local-maxima cross-correlation search
@@ -84,17 +109,17 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - CamillaDSP export generation (snippet and full YAML)
 - shared export for both L/R channels from the same fit result
 
-### `apo_import.py`
+### `apo_import.py` / `apo_refine.py`
 - Equalizer APO parametric preset parser
 - per-channel and mono preset support
-- re-export imported presets to CamillaDSP and HeadMatch formats
+- re-optimisation of imported presets against fresh measurements via joint Nelder-Mead
 
 ### `headphone_db.py`
 - real headphone database search via GitHub API (AutoEQ repository)
 - local index cache with 24-hour TTL
-- case-insensitive multi-token model name matching
+- case-insensitive, space-insensitive model name matching
 - AutoEQ CSV parser and format conversion
-- HTTPS-only URL validation with 5 MB response cap
+- HTTPS-only URL validation with 5 MB response cap; URLs percent-encoded for spaces
 
 ### `target_editor.py`
 - drag-point target curve editor model
@@ -120,9 +145,20 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - run summary construction
 - shared by single-fit and iterative paths
 
+### `paths.py`
+- platform-aware config and cache directory helpers
+- Linux: XDG paths; macOS: ~/Library; Windows: %APPDATA%
+- tempdir fallback if primary path is not writable
+
 ### `settings.py`
-- shared config loading/saving
+- shared config loading/saving with field alias support
 - first-run defaults
+- config auto-saved by GUI after each successful workflow
+
+### `contracts.py`
+- `FrontendConfig` with platform-neutral `output_target`/`input_target` properties
+- config serialization uses new field names; loading accepts both old (`pipewire_*`) and new
+- run summary, confidence, and error dataclasses
 
 ### `history.py`
 - shared run-summary discovery for GUI and TUI
@@ -130,14 +166,19 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 ### `cli.py`
 - command-line entry points
 - explicit workflow surface
+- platform-neutral help text
 
-### `gui.py`
-- primary desktop workflow
-- history browsing
+### `gui.py` (~865 lines)
+- primary desktop workflow shell
+- view rendering delegated to `gui_views.py`
 - guided measurement flow with iteration mode selection
-- target curve editor integration
-- APO preset import and re-export
-- community curve fetching
+- auto-saves config after every successful run
+
+### `gui_views.py` (~756 lines)
+- all view rendering functions (online wizard, offline wizard, setup check, target editor, import APO, fetch curve, history, progress, completion)
+- target editor with live-updating sliders, canvas drag-to-move, scrollable control points
+- `_PlotGeometry` for bidirectional freq↔pixel coordinate mapping
+- curve preview renderer shared by target editor and drag handlers
 
 ### `tui.py`
 - maintenance-mode terminal workflow
@@ -174,25 +215,30 @@ All three frontends share:
 
 HeadMatch uses one shared config file for GUI, CLI, and TUI.
 
-Default path:
-- `$XDG_CONFIG_HOME/headmatch/config.json`
-- fallback: `~/.config/headmatch/config.json`
+Default paths (platform-aware via `paths.py`):
+- Linux: `$XDG_CONFIG_HOME/headmatch/config.json` or `~/.config/headmatch/config.json`
+- macOS: `~/Library/Application Support/headmatch/config.json`
+- Windows: `%APPDATA%/headmatch/config.json`
 
-The config stores small, stable user preferences such as:
+The config stores small, stable user preferences:
 - output directory defaults
-- PipeWire playback target
-- PipeWire capture target
+- audio device targets (`output_target` / `input_target`)
 - preferred target CSV
 - sweep/fit defaults
 
+Field naming migration:
+- Old: `pipewire_output_target` / `pipewire_input_target`
+- New: `output_target` / `input_target`
+- Both accepted on read; new names written on save
+- GUI auto-saves after each run, naturally migrating old configs
+
 Explicit CLI flags override saved config for the current run.
-The GUI and TUI preload the same saved defaults.
 
 ---
 
 ## Output contract
 
-Each run should produce outputs that are understandable without digging through code.
+Each run produces outputs that are understandable without digging through code.
 
 Important artifacts:
 - `README.txt` — human-readable explanation of the output folder
@@ -203,8 +249,6 @@ Important artifacts:
 - CamillaDSP YAML exports
 - measurement CSVs
 - shared SVG review graphs
-
-The GUI and TUI history views use `run_summary.json` plus `README.txt` as the stable review contract.
 
 ---
 
@@ -218,128 +262,55 @@ The frontends should orchestrate the same core logic, not reimplement it.
 
 ### 3. GUI-first product strategy
 New product-facing improvements should generally land in the GUI and CLI first.
-The TUI is maintained as a backup, not as a co-equal primary surface.
 
 ### 4. Offline mode is first-class
 Recorder-first workflows are part of the product, not a fallback hack.
 
-### 4a. Target semantics must stay explicit
-HeadMatch has two distinct target concepts:
-- **absolute targets**: the desired normalized response shape after EQ
-- **relative transform / clone targets**: a tonal delta that should be applied to the measured source response
-
-The backend must not treat those as interchangeable.
-If a relative clone target is used, the pipeline must resolve it into an effective absolute per-run target before fitting, plotting, and reporting.
-
 ### 5. Conservative EQ is a feature
 The goal is useful tonal correction, not maximally clever curve chasing.
 
-### 5a. Filter family and fill policy must stay separate
-HeadMatch treats these as orthogonal choices:
-- **filter family / actuator model**
-  - free-form PEQ (peaking, shelf filters)
-  - fixed-band GraphicEQ (geq_10_band, geq_31_band profiles)
-- **fill policy**
-  - conservative `up_to_n`
-  - exact-count `exact_n`
+### 6. Pluggable audio backends
+Platform-specific audio I/O is behind a protocol. Adding a new platform means one new file implementing `AudioBackend`, not touching the pipeline.
 
-That separation keeps the current conservative PEQ mode intact while allowing an exact-count PEQ mode and fixed-band GraphicEQ mode without rewriting the objective/residual logic.
-
-### 6. Output clarity matters
+### 7. Output clarity matters
 Users should be able to open a folder and understand what happened.
 
-### 7. Trust signals matter
-Users should not have to guess whether a run is believable.
-Confidence scoring and plain-language interpretation are part of the product, not optional analytics.
+### 8. Trust signals matter
+Confidence scoring and plain-language interpretation are part of the product.
 
 ---
 
 ## Current state
 
-The shipped product now includes:
-- beginner-first CLI workflow with single-line confidence verdict (ANSI-colored on TTY)
-- GUI shell with confidence badges, graph display, scrollable diagnostics, target editor, APO import, curve fetch
-- TUI backup workflow and history browsing (maintenance-only)
-- shared config persistence and preload
-- clone-target support with explicit relative/absolute semantics
-- Equalizer APO parametric and GraphicEQ preset export
-- CamillaDSP export with correct shelf Q/S conversion
-- fixed-band GraphicEQ fitting (10-band and 31-band profiles)
-- measured-vs-target SVG review graphs in fit output folders
-- multi-pass averaging iteration mode (--iteration-mode average)
-- mono and duplicated-channel capture rejection (all channel counts)
-- confidence/trust summaries with named threshold constants
-- 432 deterministic tests including 241 RBJ biquad coefficient reference tests
-- Wiener-regularised transfer function estimation (noise suppression at frequency extremes)
-- local-maxima alignment search (robust to room echoes)
-- joint Nelder-Mead PEQ refinement after greedy placement
-- raw residual bandwidth estimation for accurate Q on narrow features
-- `fit-offline` CLI alias for `fit` (backward compatibility)
-- type-safe PEQBand.kind (Literal, not str)
-- injectable FitObjective weights for future use-case customisation
-- vectorised fractional-octave smoothing and direct biquad evaluation (performance)
-- APO AutoEQ preset import and re-optimisation
-- community headphone database search and curve fetching
-- GUI target curve editor with PCHIP interpolation
+Version 0.6.0a1 (pre-release). 507 deterministic tests.
+
+The shipped product includes:
+- Cross-platform audio backend (PipeWire on Linux, PortAudio on macOS/Windows)
+- Platform-aware config/cache paths
+- GUI with live-updating target editor, canvas drag-to-move, confidence badges
+- Beginner-first CLI with single-line confidence verdict
+- Real headphone database search with space-insensitive matching
+- APO import with Nelder-Mead refine mode
+- Equalizer APO (parametric + GraphicEQ) and CamillaDSP export
+- Clone-target headphone-to-headphone workflow
+- Multi-pass averaging iteration mode
+- SVG review graphs in fit output folders
+- CI matrix across Python 3.10–3.13 with coverage reporting
+- Config auto-save from GUI with field name migration
 
 ---
 
 ## Likely future work
 
-Likely follow-up candidates:
-- additional export formats beyond APO and CamillaDSP if there is real demand
-- safe mode vs advanced mode split if the product accumulates too many knobs
+### Next
+- GUI shell/view split — further extraction from gui.py
+- Extract repeated CLI parser setup into shared helpers
+- Richer per-backend error diagnostics
 
-Deferred feature candidates:
-- asynchronous device support and clock drift compensation
-- automated HRTF target integration and scaling
+### Later
+- Additional export formats beyond APO and CamillaDSP
 - CamillaDSP live-update integration via WebSocket API
-- closed-loop EQ refinement (measure → apply → re-measure)
-- Windows/macOS support (platform-aware measure.py backends)
-- APO AutoEQ import, headphone database integration
-- GUI target curve editor, room correction / speaker mode
-
----
-
-## Refactor direction for the current phase
-
-The codebase does not need a broad redesign, but two targeted refactors are now justified because they directly support the active product work.
-
-### 1. Keep the pipeline contract stable, but reduce output-writing duplication
-
-`pipeline.py` currently owns both the fitting logic and the repeated artifact-writing flow for single runs and iterative runs.
-
-The intended direction is:
-- keep one shared fit/output contract
-- extract repeated artifact writing behind a small helper or result-writer layer
-- avoid changing output filenames or summary schema unless explicitly planned
-
-This is a maintainability refactor, not a product redesign.
-
-### 2. Treat the GUI as a shell plus workflow views, not one growing class
-
-`gui.py` currently combines:
-- shell layout
-- view rendering
-- local form state
-- background task orchestration
-- history display
-- completion/error presentation
-
-Because the GUI is the primary product surface, future work should move toward:
-- a thin app shell/controller
-- smaller view-rendering helpers or components
-- shared presentation helpers for confidence/result messaging where practical
-
-The goal is to make GUI-first product polish easier without changing the backend workflow contract.
-
-### 3. Strengthen typed frontend-facing summary contracts
-
-Confidence and run-summary payloads now matter to the product experience, not just internal reporting.
-
-The intended direction is:
-- keep `run_summary.json` as the stable frontend contract
-- introduce clearer typed structures for confidence and summary payloads
-- make GUI/CLI/TUI presentation changes safer by reducing ad-hoc dict usage
-
-This should remain lightweight: dataclasses or `TypedDict`-level structure is enough.
+- Closed-loop EQ refinement (measure → apply → re-measure)
+- Room correction / speaker measurement mode
+- Windows installer and testing
+- Safe mode vs advanced mode UI split
