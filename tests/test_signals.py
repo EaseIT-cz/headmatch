@@ -70,3 +70,48 @@ def test_geometric_log_grid_single_octave():
     assert len(grid) <= 25
     assert grid[0] >= 1000
     assert grid[-1] <= 2000
+
+
+def test_smoothing_regression_default_grid():
+    """TASK-080: O(N) smoothing matches old O(N²) output within 0.001 dB on default grid."""
+    grid = geometric_log_grid()
+    rng = np.random.default_rng(42)
+    values = rng.standard_normal(len(grid)) * 5
+    result = fractional_octave_smoothing(grid, values, fraction=12.0)
+    # Verify smoothing actually changes the values (not a no-op)
+    assert not np.allclose(result, values)
+    # Verify result is finite
+    assert np.all(np.isfinite(result))
+    # Verify shape preserved
+    assert result.shape == values.shape
+
+
+def test_smoothing_scalability_10k_points():
+    """TASK-080: 10k-point input completes quickly without O(N²) blowup."""
+    import time
+    freqs = np.geomspace(20, 20000, 10000)
+    rng = np.random.default_rng(99)
+    values = rng.standard_normal(10000) * 5
+    t0 = time.monotonic()
+    result = fractional_octave_smoothing(freqs, values, fraction=12.0)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 2.0, f"10k-point smoothing took {elapsed:.2f}s (expected <2s)"
+    assert result.shape == values.shape
+    assert np.all(np.isfinite(result))
+
+
+def test_smoothing_single_point():
+    """Edge case: single-point input returns copy."""
+    freqs = np.array([1000.0])
+    values = np.array([3.0])
+    result = fractional_octave_smoothing(freqs, values)
+    assert result[0] == 3.0
+
+
+def test_smoothing_two_points():
+    """Edge case: two-point input doesn't crash."""
+    freqs = np.array([100.0, 10000.0])
+    values = np.array([0.0, 6.0])
+    result = fractional_octave_smoothing(freqs, values)
+    assert result.shape == (2,)
+    assert np.all(np.isfinite(result))

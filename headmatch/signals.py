@@ -6,6 +6,7 @@ from typing import Tuple
 
 import numpy as np
 from scipy import signal
+from scipy.ndimage import gaussian_filter1d
 
 
 @dataclass
@@ -56,15 +57,33 @@ def generate_log_sweep(spec: SweepSpec) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fraction: float = 12.0) -> np.ndarray:
+    """Fractional-octave Gaussian smoothing in log-frequency domain.
+
+    Uses a uniform log2-frequency grid with scipy gaussian_filter1d for O(N)
+    time and memory, instead of the previous O(N²) weight-matrix approach.
+    Edge handling replicates the truncated-kernel normalization of the original
+    by dividing smoothed values by smoothed ones (constant zero padding).
+    """
     if len(freqs_hz) != len(values_db):
         raise ValueError('freq and values must have the same length')
-    logf = np.log(np.maximum(freqs_hz, 1e-9))
-    half_bw = max(np.log(2.0) / (2.0 * fraction), 1e-9)
-    # Vectorised: compute full NxN Gaussian weight matrix via outer product
-    diff = logf[:, None] - logf[None, :]
-    w = np.exp(-0.5 * (diff / half_bw) ** 2)
-    w_sum = np.sum(w, axis=1)
-    return np.where(w_sum > 1e-12, w @ values_db / w_sum, values_db)
+    if len(freqs_hz) < 2:
+        return values_db.copy()
+    logf = np.log2(np.maximum(freqs_hz, 1e-9))
+    # Resample onto a uniform log2-frequency grid
+    n = len(logf)
+    grid = np.linspace(logf[0], logf[-1], n)
+    v_uniform = np.interp(grid, logf, values_db)
+    # Sigma in octaves ≈ 1/(2*fraction), converted to grid samples
+    sigma_oct = 1.0 / (2.0 * max(fraction, 1e-9))
+    step = (grid[-1] - grid[0]) / max(n - 1, 1)
+    sigma_samples = sigma_oct / max(step, 1e-12)
+    # Normalized smoothing: smooth(values)/smooth(ones) replicates the
+    # truncated-kernel edge behavior of the original NxN approach.
+    numerator = gaussian_filter1d(v_uniform, sigma_samples, mode="constant", cval=0.0)
+    denominator = gaussian_filter1d(np.ones(n), sigma_samples, mode="constant", cval=0.0)
+    v_smoothed = np.where(denominator > 1e-12, numerator / denominator, v_uniform)
+    # Interpolate back to original (possibly non-uniform) frequency points
+    return np.interp(logf, grid, v_smoothed)
 
 
 
