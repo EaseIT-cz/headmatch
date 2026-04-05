@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "headmatch"
 dynamic = ["version"]
-description = "PipeWire headphone measurement, EQ fitting, and headphone cloning toolkit"
+description = "Headphone measurement, EQ fitting, and headphone cloning toolkit"
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
@@ -18,6 +18,9 @@ dependencies = [
 headmatch = "headmatch.cli:main"
 headmatch-tui = "headmatch.tui:main"
 headmatch-gui = "headmatch.gui:main"
+
+[project.optional-dependencies]
+portaudio = ["sounddevice>=0.4"]
 
 [tool.setuptools.dynamic]
 version = {attr = "headmatch.__version__"}
