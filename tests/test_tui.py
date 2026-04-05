@@ -78,7 +78,7 @@ def test_run_tui_offline_writes_measurement_plan(monkeypatch, tmp_path):
     assert calls["plan"].notes == "bring recorder"
     out = stdout.getvalue()
     assert "Step 1/2: writing the offline sweep package" in out
-    assert "headmatch fit-offline --recording" in out
+    assert "headmatch fit --recording" in out
 
 
 def test_run_tui_history_browser_shows_recent_run(tmp_path):

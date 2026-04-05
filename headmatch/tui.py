@@ -276,7 +276,7 @@ class HeadMatchWizard:
         self.io.write()
         next_steps = (
             f"Record the sweep from {out_dir / 'sweep.wav'} and save the capture as recording.wav.",
-            f"Then run: headmatch fit-offline --recording {out_dir / 'recording.wav'} --out-dir {out_dir / 'fit'}",
+            f"Then run: headmatch fit --recording {out_dir / 'recording.wav'} --out-dir {out_dir / 'fit'}",
         )
         for step in next_steps:
             self.io.write(f"- {step}")

@@ -19,7 +19,7 @@ from headmatch import cli
             'Use a target file that includes frequency + response data and spans 1 kHz.',
         ),
         (
-            'fit-offline',
+            'fit',
             'Could not find a frequency column in bad.csv. Supported names include frequency_hz, frequency, freq, freq_hz, or hz.',
             'Expected a CSV with a frequency column such as frequency_hz/frequency/freq',
         ),

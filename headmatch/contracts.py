@@ -18,7 +18,7 @@ WorkflowName = Literal[
     "prepare-offline",
     "analyze",
     "fit",
-    "fit-offline",
+    "fit",
     "iterate",
     "clone-target",
 ]

@@ -835,7 +835,7 @@ class HeadMatchGuiApp:
         max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.target_csv_var.get().strip() or None
         self._run_background_task(
-            task_name="fit-offline",
+            task_name="fit",
             progress_title="Fitting imported offline recording",
             progress_body=f"Analyzing {recording} and exporting EQ outputs into {out_dir}.",
             worker=lambda: self._offline_fit_runner(recording, out_dir, self._build_sweep(), target_path=target_csv, max_filters=max_filters),

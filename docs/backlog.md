@@ -34,7 +34,6 @@ Key capabilities:
 - Add richer PipeWire error diagnostics (device not found, permission denied, timeout)
 
 ### Later
-- Remove fit-offline alias entirely (deprecated in current, warn on use)
 - Add export formats beyond CamillaDSP and APO if demand exists
 - CamillaDSP live-update integration via WebSocket API
 - Closed-loop EQ refinement (measure → apply → re-measure; depends on CamillaDSP WebSocket)

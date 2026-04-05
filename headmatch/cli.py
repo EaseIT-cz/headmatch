@@ -162,13 +162,6 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     add_filter_budget_args(p, config)
 
-    p = sub.add_parser("fit-offline", help="Deprecated alias for 'fit'. Use 'headmatch fit' instead.")
-    add_common_sweep_args(p, config)
-    p.add_argument("--recording", required=True)
-    p.add_argument("--out-dir", required=True)
-    p.add_argument("--target-csv", default=config.preferred_target_csv)
-    add_filter_budget_args(p, config)
-
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
 
@@ -245,7 +238,7 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     print("2) If your recorder is more reliable offline:")
     print("   headmatch prepare-offline --out-dir out/session_01")
     print("   ...record the sweep, then run:")
-    print("   headmatch fit-offline --recording out/session_01/recording.wav --out-dir out/session_01/fit")
+    print("   headmatch fit --recording out/session_01/recording.wav --out-dir out/session_01/fit")
     print()
     print("Not sure your setup is ready? Run: headmatch doctor")
     print("Need device names? Run: headmatch list-targets")
@@ -263,7 +256,7 @@ def _run_summary_path(cmd: str, args) -> Path | None:
     if not out_dir:
         return None
     base = Path(out_dir)
-    if cmd in {"fit", "fit-offline"}:
+    if cmd in {"fit", "fit"}:
         return base / "run_summary.json"
     if cmd in {"start", "iterate"}:
         iteration_mode = getattr(args, "iteration_mode", "independent")
@@ -332,12 +325,12 @@ def print_next_steps(cmd: str, args) -> None:
     elif cmd == "prepare-offline":
         print()
         print(f"Offline package saved in {out_dir}.")
-        print("Record the sweep, copy the WAV to recording.wav, then run fit-offline.")
+        print("Record the sweep, copy the WAV to recording.wav, then run fit.")
     elif cmd == "analyze":
         print()
         print(f"Analysis written to {out_dir}.")
-        print("Review the CSVs, or run fit/fit-offline to build EQ.")
-    elif cmd in {"fit", "fit-offline", "iterate"}:
+        print("Review the CSVs, or run fit to build EQ.")
+    elif cmd in {"fit", "fit", "iterate"}:
         print_run_confidence(cmd, args)
         print()
         print(f"Done. Review outputs in {out_dir}.")
@@ -345,7 +338,7 @@ def print_next_steps(cmd: str, args) -> None:
     elif cmd == "clone-target":
         print()
         print(f"Clone target written to {args.out}.")
-        print("Next: pass that CSV to fit, fit-offline, or start with --target-csv.")
+        print("Next: pass that CSV to fit, fit, or start with --target-csv.")
     elif cmd == "tui":
         print()
         result = getattr(args, "tui_result", None)
@@ -364,12 +357,12 @@ def format_user_error(cmd: str, exc: ValueError) -> str:
             f"clone-target failed: {message}\n"
             "Check that both input CSVs include frequency and response columns, span 1 kHz, and that --out points to a new file."
         )
-    if cmd in {"fit", "fit-offline", "start", "iterate"} and 'Target curve' in message:
+    if cmd in {"fit", "fit", "start", "iterate"} and 'Target curve' in message:
         return (
             f"target CSV could not be used: {message}\n"
             "Use a target file that includes frequency + response data and spans 1 kHz."
         )
-    if cmd in {"fit", "fit-offline", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
+    if cmd in {"fit", "fit", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
         return (
             f"target CSV could not be read: {message}\n"
             "Expected a CSV with a frequency column such as frequency_hz/frequency/freq and a response column such as response_db/raw/target_db."
@@ -472,15 +465,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         elif args.cmd == "analyze":
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
-        elif args.cmd in ("fit", "fit-offline"):
-            if args.cmd == "fit-offline":
-                import warnings
-                warnings.warn(
-                    "'fit-offline' is deprecated and will be removed in a future release. Use 'headmatch fit' instead.",
-                    DeprecationWarning,
-                    stacklevel=1,
-                )
-                print("Warning: 'fit-offline' is deprecated. Use 'headmatch fit' instead.", file=sys.stderr)
+        elif args.cmd == "fit":
             process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
         elif args.cmd == "search-headphone":
             from .headphone_db import search_headphone
