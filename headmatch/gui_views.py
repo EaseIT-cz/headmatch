@@ -538,10 +538,31 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
 
     # ── Control points table ──
 
-    points_frame = ttk.LabelFrame(frame, text="Control points", padding=SECTION_PAD)
-    points_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 8))
-    points_frame.columnconfigure(1, weight=1)
+    points_outer = ttk.LabelFrame(frame, text="Control points", padding=SECTION_PAD)
+    points_outer.grid(row=3, column=0, sticky="nsew", pady=(0, 8))
+    points_outer.columnconfigure(0, weight=1)
+    points_outer.rowconfigure(0, weight=1)
     frame.rowconfigure(3, weight=1)
+
+    # Use a scrollable canvas wrapper when there are many points
+    if len(editor.points) > 8:
+        _scroll_canvas = tk.Canvas(points_outer, highlightthickness=0, height=220)
+        _scroll_canvas.grid(row=0, column=0, sticky="nsew")
+        _scrollbar = ttk.Scrollbar(points_outer, orient="vertical", command=_scroll_canvas.yview)
+        _scrollbar.grid(row=0, column=1, sticky="ns")
+        _scroll_canvas.configure(yscrollcommand=_scrollbar.set)
+        points_frame = ttk.Frame(_scroll_canvas)
+        _scroll_win = _scroll_canvas.create_window((0, 0), window=points_frame, anchor="nw")
+        def _on_points_configure(_event=None):
+            _scroll_canvas.configure(scrollregion=_scroll_canvas.bbox("all"))
+        def _on_canvas_configure(event):
+            _scroll_canvas.itemconfigure(_scroll_win, width=event.width)
+        points_frame.bind("<Configure>", _on_points_configure)
+        _scroll_canvas.bind("<Configure>", _on_canvas_configure)
+    else:
+        points_frame = ttk.Frame(points_outer)
+        points_frame.grid(row=0, column=0, sticky="nsew")
+    points_frame.columnconfigure(1, weight=1)
 
     # Header row
     ttk.Label(points_frame, text="Freq (Hz)", style="Heading.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))

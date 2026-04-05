@@ -819,3 +819,66 @@ class TestPlotGeometry:
         db_bot = geom.y_to_db(500)
         assert -20.0 <= db_top <= 20.0
         assert -20.0 <= db_bot <= 20.0
+
+
+class TestCurvePreviewWithAddedPoints:
+    """Verify the curve preview works correctly with dynamically added points."""
+
+    def _make_fake_canvas(self):
+        class FakeCanvas:
+            def __init__(self):
+                self.items = []
+            def delete(self, *args):
+                self.items.clear()
+            def create_rectangle(self, *args, **kwargs):
+                self.items.append(('rect', args, kwargs))
+                return len(self.items)
+            def create_line(self, *args, **kwargs):
+                self.items.append(('line', args, kwargs))
+                return len(self.items)
+            def create_text(self, *args, **kwargs):
+                self.items.append(('text', args, kwargs))
+                return len(self.items)
+            def create_oval(self, *args, **kwargs):
+                self.items.append(('oval', args, kwargs))
+                return len(self.items)
+            def tag_bind(self, *args, **kwargs):
+                pass
+        return FakeCanvas()
+
+    def test_render_with_added_point(self):
+        from headmatch.gui_views import _render_curve_preview
+        from headmatch.target_editor import TargetEditor
+        editor = TargetEditor()
+        editor.add_point(500.0, 5.0)
+        assert len(editor.points) == 7
+        canvas = self._make_fake_canvas()
+        _render_curve_preview(canvas, editor)
+        ovals = [i for i in canvas.items if i[0] == 'oval']
+        assert len(ovals) == 7, f"Expected 7 control points, got {len(ovals)}"
+
+    def test_render_with_many_points(self):
+        from headmatch.gui_views import _render_curve_preview
+        from headmatch.target_editor import TargetEditor
+        editor = TargetEditor()
+        # Add many points
+        for freq in [30, 50, 80, 150, 300, 600, 800, 1500, 2500, 3500, 7000, 12000, 15000]:
+            editor.add_point(float(freq), 0.0)
+        assert len(editor.points) > 15
+        canvas = self._make_fake_canvas()
+        _render_curve_preview(canvas, editor)
+        ovals = [i for i in canvas.items if i[0] == 'oval']
+        assert len(ovals) == len(editor.points), \
+            f"Expected {len(editor.points)} control points, got {len(ovals)}"
+
+    def test_render_with_minimum_points(self):
+        from headmatch.gui_views import _render_curve_preview
+        from headmatch.target_editor import TargetEditor, ControlPoint
+        editor = TargetEditor(points=[
+            ControlPoint(20.0, 0.0),
+            ControlPoint(20000.0, 0.0),
+        ])
+        canvas = self._make_fake_canvas()
+        _render_curve_preview(canvas, editor)
+        ovals = [i for i in canvas.items if i[0] == 'oval']
+        assert len(ovals) == 2
