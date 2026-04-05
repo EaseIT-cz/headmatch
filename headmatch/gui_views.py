@@ -458,10 +458,12 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     # ── Live update helpers ──
 
     # Mutable container so closures always see the latest lists
-    _vars = {"freq": [], "gain": [], "gain_labels": [], "gain_scales": []}
+    _vars = {"freq": [], "gain": [], "gain_labels": [], "gain_scales": [], "setup_done": False}
 
     def _sync_editor_and_redraw():
         """Read all widget values into the editor model and redraw."""
+        if not _vars["setup_done"]:
+            return
         for i, (fv, gv) in enumerate(zip(_vars["freq"], _vars["gain"])):
             try:
                 freq = float(fv.get())
@@ -478,7 +480,8 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         rounded = f"{float(val):.1f}"
         gvar.set(rounded)
         glabel.config(text=f"{rounded} dB")
-        _sync_editor_and_redraw()
+        if _vars["setup_done"]:
+            _sync_editor_and_redraw()
 
     def _on_entry_commit(_event=None):
         """Called on Return or FocusOut from any entry."""
@@ -622,6 +625,8 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         if len(editor.points) > 2:
             ttk.Button(points_frame, text="\u2715", command=lambda i=idx: _remove_point(i), width=3).grid(
                 row=row, column=4, sticky="w", pady=2)
+
+    _vars["setup_done"] = True
 
     # ── Action buttons ──
 
