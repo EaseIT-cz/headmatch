@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Tuple
 from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.parse import quote
 
 import numpy as np
 
@@ -57,7 +58,8 @@ class HeadphoneEntry:
     @property
     def raw_csv_url(self) -> str:
         """Direct raw.githubusercontent.com URL for the CSV."""
-        return f"{AUTOEQ_RAW_BASE}/{self.csv_path}"
+        encoded_path = quote(self.csv_path, safe="/")
+        return f"{AUTOEQ_RAW_BASE}/{encoded_path}"
 
     def to_dict(self) -> dict:
         d = asdict(self)

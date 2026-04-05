@@ -259,3 +259,14 @@ def test_search_compact_query_matches_spaced_model(mock_idx):
     results = search_headphone("K371")
     assert len(results) == 1
     assert results[0].name == "AKG K371"
+
+
+def test_raw_csv_url_encodes_spaces():
+    """URLs must percent-encode spaces for urlopen compatibility."""
+    entry = HeadphoneEntry(
+        name="Sennheiser HD 650", source="test", form_factor="over-ear",
+        csv_path="results/test/over-ear/Sennheiser HD 650/Sennheiser HD 650.csv",
+    )
+    url = entry.raw_csv_url
+    assert " " not in url, f"URL contains unencoded spaces: {url}"
+    assert "Sennheiser%20HD%20650" in url
