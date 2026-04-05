@@ -811,10 +811,34 @@ class HeadMatchGuiApp:
         on_success, result = payload
         on_success(result)
 
+    def _save_current_config(self) -> None:
+        """Persist current GUI settings to the config file."""
+        try:
+            from .settings import save_config
+            config = FrontendConfig(
+                default_output_dir=self.output_dir_var.get().strip() or None,
+                preferred_target_csv=self.target_csv_var.get().strip() or None,
+                pipewire_output_target=self.output_target_var.get().strip() or None,
+                pipewire_input_target=self.input_target_var.get().strip() or None,
+                sample_rate=self.state.sample_rate,
+                duration_s=self.state.duration_s,
+                f_start_hz=self.state.f_start_hz,
+                f_end_hz=self.state.f_end_hz,
+                pre_silence_s=self.state.pre_silence_s,
+                post_silence_s=self.state.post_silence_s,
+                amplitude=self.state.amplitude,
+                start_iterations=self._parse_positive_int(self.iterations_var.get().strip(), "Iterations"),
+                max_filters=self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters"),
+            )
+            save_config(config, self.state.config_path)
+        except Exception:
+            pass  # Config save is best-effort; don't interrupt the workflow
+
     def _set_completion(self, *, title: str, summary: str, steps: tuple[str, ...]) -> None:
         self._last_completion_steps = steps
         self.completion_title_var.set(title)
         self.completion_body_var.set(summary)
+        self._save_current_config()
         for child in self.content.winfo_children():
             child.destroy()
         self._render_completion()

@@ -65,7 +65,13 @@ class FrontendConfig:
         self.pipewire_input_target = value
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        # Migrate to platform-neutral field names on write
+        if "pipewire_output_target" in d:
+            d["output_target"] = d.pop("pipewire_output_target")
+        if "pipewire_input_target" in d:
+            d["input_target"] = d.pop("pipewire_input_target")
+        return d
 
 
 @dataclass(frozen=True)

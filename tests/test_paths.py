@@ -147,3 +147,27 @@ def test_config_property_setter():
     assert config.pipewire_output_target == "new-dac"
     config.input_target = "new-mic"
     assert config.pipewire_input_target == "new-mic"
+
+
+def test_config_serializes_with_new_field_names():
+    """to_dict() should use output_target, not pipewire_output_target."""
+    from headmatch.contracts import FrontendConfig
+    config = FrontendConfig(pipewire_output_target="dac", pipewire_input_target="mic")
+    d = config.to_dict()
+    assert "output_target" in d
+    assert "input_target" in d
+    assert "pipewire_output_target" not in d
+    assert "pipewire_input_target" not in d
+    assert d["output_target"] == "dac"
+    assert d["input_target"] == "mic"
+
+
+def test_config_round_trip_through_new_names(tmp_path):
+    """Save with new names, load back, verify values."""
+    from headmatch.contracts import FrontendConfig
+    from headmatch.settings import save_config, load_config
+    config = FrontendConfig(pipewire_output_target="my-dac", pipewire_input_target="my-mic")
+    path = save_config(config, tmp_path / "config.json")
+    reloaded = load_config(path)
+    assert reloaded.output_target == "my-dac"
+    assert reloaded.input_target == "my-mic"
