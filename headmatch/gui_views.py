@@ -620,3 +620,137 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         wraplength=DETAIL_WRAP,
         justify="left",
     ).grid(row=1, column=0, columnspan=col + 1, sticky="w", pady=(8, 0))
+
+
+# ── Import APO view (extracted from gui.py) ──
+
+def render_import_apo(ttk, frame, *, variables, on_import, on_refine,
+                      on_choose_preset, on_choose_output, on_choose_refine_recording,
+                      on_choose_refine_target, on_choose_refine_output):
+    """Render the Import APO preset view with import + refine sections."""
+    ttk.Label(frame, text="Import APO preset", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Load an Equalizer APO parametric preset and re-export it as CamillaDSP and HeadMatch formats.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+    form = ttk.LabelFrame(frame, text="Import settings", padding=SECTION_PAD)
+    form.grid(row=2, column=0, sticky="ew")
+    form.columnconfigure(1, weight=1)
+    add_picker_row(ttk, form, 0, "APO preset file", variables.apo_preset_var,
+                   button_text="Browse\u2026", command=on_choose_preset)
+    add_picker_row(ttk, form, 1, "Output folder", variables.apo_output_dir_var,
+                   button_text="Browse\u2026", command=on_choose_output)
+    ttk.Button(form, text="Import and convert", command=on_import).grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    refine_frame = ttk.LabelFrame(frame, text="Refine against a measurement", padding=SECTION_PAD)
+    refine_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    refine_frame.columnconfigure(1, weight=1)
+    ttk.Label(
+        refine_frame,
+        text="Load the same APO preset above, plus a recording WAV, to re-optimise the bands against your actual measurement.",
+        wraplength=DETAIL_WRAP,
+        justify="left",
+    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+    add_picker_row(ttk, refine_frame, 1, "Recording WAV", variables.apo_refine_recording_var,
+                   button_text="Browse\u2026", command=on_choose_refine_recording)
+    add_picker_row(ttk, refine_frame, 2, "Target CSV (optional)", variables.apo_refine_target_var,
+                   button_text="Browse\u2026", command=on_choose_refine_target)
+    add_picker_row(ttk, refine_frame, 3, "Output folder", variables.apo_refine_output_var,
+                   button_text="Browse\u2026", command=on_choose_refine_output)
+    ttk.Button(refine_frame, text="Refine preset", command=on_refine).grid(
+        row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+
+# ── Fetch Curve view (extracted from gui.py) ──
+
+def render_fetch_curve(ttk, frame, *, variables, on_search, on_choose_output, on_fetch):
+    """Render the Fetch Curve view with search + direct URL sections.
+
+    Returns a dict with 'results_frame' key for the caller to populate search results.
+    """
+    ttk.Label(frame, text="Fetch published curve", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Search the AutoEQ database for a headphone model, or paste a direct CSV URL.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+    search_frame = ttk.LabelFrame(frame, text="Search headphone database", padding=SECTION_PAD)
+    search_frame.grid(row=2, column=0, sticky="ew")
+    search_frame.columnconfigure(1, weight=1)
+    add_entry_row(ttk, search_frame, 0, "Headphone model", variables.fetch_search_var)
+    ttk.Button(search_frame, text="Search", command=on_search).grid(
+        row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    results_frame = ttk.Frame(frame)
+    results_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    results_frame.columnconfigure(0, weight=1)
+
+    form = ttk.LabelFrame(frame, text="Fetch by URL", padding=SECTION_PAD)
+    form.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+    form.columnconfigure(1, weight=1)
+    add_entry_row(ttk, form, 0, "CSV URL (HTTPS)", variables.fetch_url_var)
+    add_picker_row(ttk, form, 1, "Save to", variables.fetch_output_var,
+                   button_text="Browse\u2026", command=on_choose_output)
+    ttk.Button(form, text="Fetch and save", command=on_fetch).grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    return {"results_frame": results_frame}
+
+
+# ── History page view (extracted from gui.py) ──
+
+def render_history_page(ttk, frame, *, history_root_var, config_path,
+                        on_browse, on_refresh):
+    """Render the full Results/History page with scrollable results list."""
+    import tkinter as tk
+
+    frame.rowconfigure(3, weight=1)
+    ttk.Label(frame, text="Results", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Browse recent runs by scanning for run_summary.json files.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+    controls = ttk.LabelFrame(frame, text="Search", padding=SECTION_PAD)
+    controls.grid(row=2, column=0, sticky="ew")
+    controls.columnconfigure(1, weight=1)
+    ttk.Label(controls, text="Search folder").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+    ttk.Entry(controls, textvariable=history_root_var).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+    ttk.Button(controls, text="Browse\u2026", command=on_browse).grid(row=0, column=2, sticky="e", padx=(8, 0), pady=(0, 8))
+    ttk.Button(controls, text="Refresh", command=on_refresh).grid(row=0, column=3, sticky="e", padx=(4, 0), pady=(0, 8))
+
+    scroll_frame = ttk.Frame(frame)
+    scroll_frame.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
+    scroll_frame.columnconfigure(0, weight=1)
+    scroll_frame.rowconfigure(0, weight=1)
+
+    canvas = tk.Canvas(scroll_frame, highlightthickness=0)
+    canvas.grid(row=0, column=0, sticky="nsew")
+    scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    results = ttk.Frame(canvas, padding=(0, 0, 4, 0))
+    canvas_window = canvas.create_window((0, 0), window=results, anchor="nw")
+
+    def _sync_scroll_region(_event=None):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def _fit_width(event):
+        canvas.itemconfigure(canvas_window, width=event.width)
+
+    results.bind("<Configure>", _sync_scroll_region)
+    canvas.bind("<Configure>", _fit_width)
+
+    selection = render_history(ttk, results, history_root_var=history_root_var, config_path=config_path)
+    render_history_results(ttk, results, selection=selection)
+    _sync_scroll_region()
+

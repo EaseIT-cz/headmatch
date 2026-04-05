@@ -375,44 +375,15 @@ class HeadMatchGuiApp:
         )
 
     def _render_import_apo(self) -> None:
-        ttk = self._ttk
-        frame = self.content
-        ttk.Label(frame, text="Import APO preset", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            frame,
-            text="Load an Equalizer APO parametric preset and re-export it as CamillaDSP and HeadMatch formats.",
-            wraplength=560,
-            justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-
-        form = ttk.LabelFrame(frame, text="Import settings", padding=12)
-        form.grid(row=2, column=0, sticky="ew")
-        form.columnconfigure(1, weight=1)
-        gui_views.add_picker_row(ttk, form, 0, "APO preset file", self.apo_preset_var,
-                                 button_text="Browse…", command=self._choose_apo_preset)
-        gui_views.add_picker_row(ttk, form, 1, "Output folder", self.apo_output_dir_var,
-                                 button_text="Browse…", command=self._choose_apo_output_dir)
-        ttk.Button(form, text="Import and convert", command=self._run_apo_import).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-
-        # Refine section
-        refine_frame = ttk.LabelFrame(frame, text="Refine against a measurement", padding=12)
-        refine_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-        refine_frame.columnconfigure(1, weight=1)
-        ttk.Label(
-            refine_frame,
-            text="Load the same APO preset above, plus a recording WAV, to re-optimise the bands against your actual measurement.",
-            wraplength=520,
-            justify="left",
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-        gui_views.add_picker_row(ttk, refine_frame, 1, "Recording WAV", self.apo_refine_recording_var,
-                                 button_text="Browse…", command=self._choose_refine_recording)
-        gui_views.add_picker_row(ttk, refine_frame, 2, "Target CSV (optional)", self.apo_refine_target_var,
-                                 button_text="Browse…", command=self._choose_refine_target)
-        gui_views.add_picker_row(ttk, refine_frame, 3, "Output folder", self.apo_refine_output_var,
-                                 button_text="Browse…", command=self._choose_refine_output)
-        ttk.Button(refine_frame, text="Refine preset", command=self._run_apo_refine).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        gui_views.render_import_apo(
+            self._ttk, self.content, variables=self,
+            on_import=self._run_apo_import, on_refine=self._run_apo_refine,
+            on_choose_preset=self._choose_apo_preset,
+            on_choose_output=self._choose_apo_output_dir,
+            on_choose_refine_recording=self._choose_refine_recording,
+            on_choose_refine_target=self._choose_refine_target,
+            on_choose_refine_output=self._choose_refine_output,
+        )
 
     def _choose_apo_preset(self) -> None:
         if filedialog:
@@ -513,40 +484,15 @@ class HeadMatchGuiApp:
             self._show_status(f"Import failed: {exc}")
 
     def _render_fetch_curve(self) -> None:
-        ttk = self._ttk
-        frame = self.content
-        ttk.Label(frame, text="Fetch published curve", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            frame,
-            text="Search the AutoEQ database for a headphone model, or paste a direct CSV URL.",
-            wraplength=560,
-            justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-
-        # Search section
-        search_frame = ttk.LabelFrame(frame, text="Search headphone database", padding=12)
-        search_frame.grid(row=2, column=0, sticky="ew")
-        search_frame.columnconfigure(1, weight=1)
-        gui_views.add_entry_row(ttk, search_frame, 0, "Headphone model", self.fetch_search_var)
-        ttk.Button(search_frame, text="Search", command=self._run_search_headphone).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
-
-        # Search results listbox
-        self._search_results_frame = ttk.Frame(frame)
-        self._search_results_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
-        self._search_results_frame.columnconfigure(0, weight=1)
+        view = gui_views.render_fetch_curve(
+            self._ttk, self.content, variables=self,
+            on_search=self._run_search_headphone,
+            on_choose_output=self._choose_fetch_output,
+            on_fetch=self._run_fetch_curve,
+        )
+        self._search_results_frame = view["results_frame"]
         self._search_results_list = None
         self._search_results_data: list = []
-
-        # Direct URL section
-        form = ttk.LabelFrame(frame, text="Fetch by URL", padding=12)
-        form.grid(row=4, column=0, sticky="ew", pady=(12, 0))
-        form.columnconfigure(1, weight=1)
-        gui_views.add_entry_row(ttk, form, 0, "CSV URL (HTTPS)", self.fetch_url_var)
-        gui_views.add_picker_row(ttk, form, 1, "Save to", self.fetch_output_var,
-                                 button_text="Browse…", command=self._choose_fetch_output)
-        ttk.Button(form, text="Fetch and save", command=self._run_fetch_curve).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
     def _run_search_headphone(self) -> None:
         query = self.fetch_search_var.get().strip()
@@ -625,59 +571,20 @@ class HeadMatchGuiApp:
         self.root.after(8000, status.destroy)
 
     def _render_history(self) -> None:
-        import tkinter as tk
-
-        ttk = self._ttk
-        frame = self.content
-        frame.rowconfigure(3, weight=1)
-        ttk.Label(frame, text="Results", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            frame,
-            text="Browse recent runs by scanning for run_summary.json files.",
-            wraplength=560,
-            justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-
-        controls = ttk.LabelFrame(frame, text="Search", padding=12)
-        controls.grid(row=2, column=0, sticky="ew")
-        controls.columnconfigure(1, weight=1)
-        ttk.Label(controls, text="Search folder").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
-        ttk.Entry(controls, textvariable=self.history_root_var).grid(row=0, column=1, sticky="ew", pady=(0, 8))
         def _browse_history():
             if filedialog:
                 path = filedialog.askdirectory(title="Select results folder")
                 if path:
                     self.history_root_var.set(path)
                     self.show_view("history")
-        ttk.Button(controls, text="Browse…", command=_browse_history).grid(row=0, column=2, sticky="e", padx=(8, 0), pady=(0, 8))
-        ttk.Button(controls, text="Refresh", command=lambda: self.show_view("history")).grid(row=0, column=3, sticky="e", padx=(4, 0), pady=(0, 8))
 
-        scroll_frame = ttk.Frame(frame)
-        scroll_frame.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
-        scroll_frame.columnconfigure(0, weight=1)
-        scroll_frame.rowconfigure(0, weight=1)
-
-        canvas = tk.Canvas(scroll_frame, highlightthickness=0)
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        results = ttk.Frame(canvas, padding=(0, 0, 4, 0))
-        canvas_window = canvas.create_window((0, 0), window=results, anchor="nw")
-
-        def _sync_scroll_region(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _fit_width(event) -> None:
-            canvas.itemconfigure(canvas_window, width=event.width)
-
-        results.bind("<Configure>", _sync_scroll_region)
-        canvas.bind("<Configure>", _fit_width)
-
-        selection = gui_views.render_history(self._ttk, results, history_root_var=self.history_root_var, config_path=self.state.config_path)
-        gui_views.render_history_results(self._ttk, results, selection=selection)
-        _sync_scroll_region()
+        gui_views.render_history_page(
+            self._ttk, self.content,
+            history_root_var=self.history_root_var,
+            config_path=self.state.config_path,
+            on_browse=_browse_history,
+            on_refresh=lambda: self.show_view("history"),
+        )
 
 
     def _build_sweep(self) -> SweepSpec:
