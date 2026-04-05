@@ -32,23 +32,29 @@ jobs:
       - name: Build binary
         run: python scripts/build.py --clean
 
-      - name: Verify binary exists
+      - name: Verify binaries exist
         run: |
-          ls -lh dist/headmatch-gui
-          file dist/headmatch-gui
+          ls -lh dist/headmatch-gui dist/headmatch
+          file dist/headmatch-gui dist/headmatch
 
       - name: Rename with platform suffix
-        run: mv dist/headmatch-gui dist/headmatch-gui-linux-x64
+        run: |
+          mv dist/headmatch-gui dist/headmatch-gui-linux-x64
+          mv dist/headmatch dist/headmatch-linux-x64
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: headmatch-gui-linux-x64
-          path: dist/headmatch-gui-linux-x64
+          name: headmatch-linux-x64
+          path: |
+            dist/headmatch-gui-linux-x64
+            dist/headmatch-linux-x64
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/headmatch-gui-linux-x64
+          files: |
+            dist/headmatch-gui-linux-x64
+            dist/headmatch-linux-x64
           fail_on_unmatched_files: true

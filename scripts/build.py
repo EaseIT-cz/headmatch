@@ -58,40 +58,44 @@ def main(argv: list[str] | None = None) -> None:
         print("PyInstaller build failed.")
         sys.exit(1)
 
-    # Find the output binary
-    binary_name = "headmatch-gui.exe" if sys.platform == "win32" else "headmatch-gui"
-    binary = DIST / binary_name
-    if not binary.exists():
-        print(f"Expected output not found: {binary}")
+    # Find output binaries
+    ext = ".exe" if sys.platform == "win32" else ""
+    binaries = {
+        "headmatch-gui": DIST / f"headmatch-gui{ext}",
+        "headmatch": DIST / f"headmatch{ext}",
+    }
+
+    print("\nBuild results:")
+    all_ok = True
+    for name, path in binaries.items():
+        if path.exists():
+            size_mb = path.stat().st_size / (1024 * 1024)
+            print(f"  ✓ {name}: {path} ({size_mb:.1f} MB)")
+        else:
+            print(f"  ✗ {name}: NOT FOUND at {path}")
+            all_ok = False
+
+    if not all_ok:
+        print("\nSome binaries were not produced.")
         sys.exit(1)
 
-    size_mb = binary.stat().st_size / (1024 * 1024)
-    print(f"\nBuild successful!")
-    print(f"  Output: {binary}")
-    print(f"  Size:   {size_mb:.1f} MB")
-
-    # Smoke test: --help should work
-    print("\nSmoke test: running --help...")
+    # Smoke test CLI with --version
+    cli_binary = binaries["headmatch"]
+    print(f"\nSmoke test: {cli_binary.name} --version ...")
     smoke = subprocess.run(
-        [str(binary), "--help"],
+        [str(cli_binary), "--version"],
         capture_output=True,
         text=True,
         timeout=30,
-        env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", "")},
     )
     if smoke.returncode == 0:
-        print("  Smoke test passed.")
+        print(f"  {smoke.stdout.strip()}")
     else:
-        # --help may fail without display; check if it's a TclError
-        stderr = smoke.stderr or ""
-        if "TclError" in stderr or "no display" in stderr.lower():
-            print("  Smoke test: binary runs but no display available (expected in CI).")
-        else:
-            print(f"  Smoke test returned {smoke.returncode}")
-            if smoke.stderr:
-                print(f"  stderr: {smoke.stderr[:500]}")
+        print(f"  Returned {smoke.returncode}: {(smoke.stderr or '')[:300]}")
 
-    print(f"\nDone. Distribute: {binary}")
+    print(f"\nDone. Distribute:")
+    for name, path in binaries.items():
+        print(f"  {path}")
 
 
 if __name__ == "__main__":

@@ -90,3 +90,74 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+
+# ── CLI binary ──
+
+cli_a = Analysis(
+    ['headmatch/cli.py'],
+    pathex=['.'],
+    binaries=[],
+    datas=example_targets,
+    hiddenimports=[
+        'headmatch',
+        'headmatch.cli',
+        'headmatch.audio_backend',
+        'headmatch.backend_pipewire',
+        'headmatch.measure',
+        'headmatch.pipeline',
+        'headmatch.pipeline_artifacts',
+        'headmatch.pipeline_confidence',
+        'headmatch.analysis',
+        'headmatch.peq',
+        'headmatch.signals',
+        'headmatch.targets',
+        'headmatch.target_editor',
+        'headmatch.exporters',
+        'headmatch.plots',
+        'headmatch.io_utils',
+        'headmatch.settings',
+        'headmatch.contracts',
+        'headmatch.paths',
+        'headmatch.history',
+        'headmatch.app_identity',
+        'headmatch.apo_import',
+        'headmatch.apo_refine',
+        'headmatch.headphone_db',
+        'headmatch.desktop',
+        'headmatch.troubleshooting',
+        'headmatch.tui',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=['sounddevice', 'matplotlib', 'IPython', 'notebook', 'pytest'],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+cli_pyz = PYZ(cli_a.pure, cli_a.zipped_data, cipher=block_cipher)
+
+cli_exe = EXE(
+    cli_pyz,
+    cli_a.scripts,
+    cli_a.binaries,
+    cli_a.zipfiles,
+    cli_a.datas,
+    [],
+    name='headmatch',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=True,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # CLI needs terminal
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
