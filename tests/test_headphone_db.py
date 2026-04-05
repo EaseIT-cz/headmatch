@@ -230,3 +230,32 @@ def test_entry_to_dict():
     assert d["name"] == "Test HP"
     assert "raw_csv_url" in d
     assert d["raw_csv_url"].endswith(".csv")
+
+
+# ── Space-insensitive search tests (TASK-084) ──
+
+@patch("headmatch.headphone_db._get_index", return_value=MOCK_INDEX)
+def test_search_without_spaces_finds_spaced_name(mock_idx):
+    """'HD650' (no space) should find 'Sennheiser HD 650'."""
+    results = search_headphone("HD650")
+    assert len(results) >= 1
+    assert any("HD 650" in r.name for r in results)
+
+
+@patch("headmatch.headphone_db._get_index", return_value=MOCK_INDEX)
+def test_search_spaced_finds_compact_name(mock_idx):
+    """Searching with spaces still works when the DB name has no spaces."""
+    # This uses the existing token match path — just confirming no regression
+    results = search_headphone("HD 650")
+    assert len(results) == 2
+
+
+@patch("headmatch.headphone_db._get_index", return_value=[
+    {"name": "AKG K371", "source": "oratory1990", "form_factor": "over-ear",
+     "csv_path": "results/oratory1990/over-ear/AKG K371/AKG K371.csv"},
+])
+def test_search_compact_query_matches_spaced_model(mock_idx):
+    """'K371' should match 'AKG K371' via compact comparison."""
+    results = search_headphone("K371")
+    assert len(results) == 1
+    assert results[0].name == "AKG K371"

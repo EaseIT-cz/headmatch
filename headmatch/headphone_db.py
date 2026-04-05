@@ -172,10 +172,14 @@ def search_headphone(query: str, database: str = "autoeq") -> list[HeadphoneEntr
     query_tokens = query_norm.split()
 
     matches = []
+    query_compact = query_norm.replace(" ", "")
+
     for entry in entries:
         name_norm = _normalize_for_search(entry["name"])
-        # All query tokens must appear in the name
-        if all(token in name_norm for token in query_tokens):
+        name_compact = name_norm.replace(" ", "")
+        # All query tokens must appear in the name, OR the space-stripped
+        # query appears in the space-stripped name (handles HD650 → HD 650)
+        if all(token in name_norm for token in query_tokens) or query_compact in name_compact:
             matches.append(HeadphoneEntry(
                 name=entry["name"],
                 source=entry["source"],
@@ -186,7 +190,8 @@ def search_headphone(query: str, database: str = "autoeq") -> list[HeadphoneEntr
     # Sort: exact prefix match first, then by name length (shorter = more specific), then alphabetical
     def sort_key(e: HeadphoneEntry) -> tuple:
         name_norm = _normalize_for_search(e.name)
-        is_prefix = name_norm.startswith(query_norm)
+        name_compact = name_norm.replace(" ", "")
+        is_prefix = name_norm.startswith(query_norm) or name_compact.startswith(query_compact)
         return (not is_prefix, len(e.name), e.name.lower())
 
     matches.sort(key=sort_key)
