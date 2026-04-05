@@ -470,7 +470,7 @@ class HeadMatchGuiApp:
         try:
             from .signals import SweepSpec
             from .settings import load_or_create_config
-            config, _, _ = load_or_create_config(self.config_path)
+            config, _, _ = load_or_create_config(self.state.config_path)
             spec = SweepSpec(
                 sample_rate=config.sample_rate,
                 duration_s=config.duration_s,
