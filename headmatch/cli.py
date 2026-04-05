@@ -162,7 +162,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     add_filter_budget_args(p, config)
 
-    p = sub.add_parser("fit-offline", help="Alias for 'fit'. Kept for backward compatibility.")
+    p = sub.add_parser("fit-offline", help="Deprecated alias for 'fit'. Use 'headmatch fit' instead.")
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
@@ -473,6 +473,14 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "analyze":
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
         elif args.cmd in ("fit", "fit-offline"):
+            if args.cmd == "fit-offline":
+                import warnings
+                warnings.warn(
+                    "'fit-offline' is deprecated and will be removed in a future release. Use 'headmatch fit' instead.",
+                    DeprecationWarning,
+                    stacklevel=1,
+                )
+                print("Warning: 'fit-offline' is deprecated. Use 'headmatch fit' instead.", file=sys.stderr)
             process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
         elif args.cmd == "search-headphone":
             from .headphone_db import search_headphone

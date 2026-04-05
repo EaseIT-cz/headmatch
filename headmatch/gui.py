@@ -25,6 +25,7 @@ from .pipeline import iterative_measure_and_fit, process_single_measurement
 from .history import build_history_selection
 from .target_editor import TargetEditor
 from .apo_import import load_apo_preset
+from .apo_refine import refine_apo_preset
 from .headphone_db import fetch_curve_from_url, search_headphone
 from . import gui_views
 from .settings import load_or_create_config
@@ -150,6 +151,9 @@ class HeadMatchGuiApp:
         self.offline_notes_var = tk.StringVar(master=root, value="")
         self.apo_preset_var = tk.StringVar(master=root, value="")
         self.apo_output_dir_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
+        self.apo_refine_recording_var = tk.StringVar(master=root, value="")
+        self.apo_refine_target_var = tk.StringVar(master=root, value="")
+        self.apo_refine_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "refined"))
         self.fetch_url_var = tk.StringVar(master=root, value="")
         self.fetch_output_var = tk.StringVar(master=root, value="")
         self.fetch_search_var = tk.StringVar(master=root, value="")
@@ -388,8 +392,27 @@ class HeadMatchGuiApp:
                                  button_text="Browse…", command=self._choose_apo_preset)
         gui_views.add_picker_row(ttk, form, 1, "Output folder", self.apo_output_dir_var,
                                  button_text="Browse…", command=self._choose_apo_output_dir)
-        ttk.Button(form, text="Import and export", command=self._run_apo_import).grid(
+        ttk.Button(form, text="Import and convert", command=self._run_apo_import).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        # Refine section
+        refine_frame = ttk.LabelFrame(frame, text="Refine against a measurement", padding=12)
+        refine_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        refine_frame.columnconfigure(1, weight=1)
+        ttk.Label(
+            refine_frame,
+            text="Load the same APO preset above, plus a recording WAV, to re-optimise the bands against your actual measurement.",
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        gui_views.add_picker_row(ttk, refine_frame, 1, "Recording WAV", self.apo_refine_recording_var,
+                                 button_text="Browse…", command=self._choose_refine_recording)
+        gui_views.add_picker_row(ttk, refine_frame, 2, "Target CSV (optional)", self.apo_refine_target_var,
+                                 button_text="Browse…", command=self._choose_refine_target)
+        gui_views.add_picker_row(ttk, refine_frame, 3, "Output folder", self.apo_refine_output_var,
+                                 button_text="Browse…", command=self._choose_refine_output)
+        ttk.Button(refine_frame, text="Refine preset", command=self._run_apo_refine).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
     def _choose_apo_preset(self) -> None:
         if filedialog:
@@ -405,6 +428,67 @@ class HeadMatchGuiApp:
             path = filedialog.askdirectory(title="Select output folder")
             if path:
                 self.apo_output_dir_var.set(path)
+
+    def _choose_refine_recording(self) -> None:
+        if filedialog:
+            path = filedialog.askopenfilename(
+                title="Select recording WAV",
+                filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            )
+            if path:
+                self.apo_refine_recording_var.set(path)
+
+    def _choose_refine_target(self) -> None:
+        if filedialog:
+            path = filedialog.askopenfilename(
+                title="Select target CSV (optional)",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if path:
+                self.apo_refine_target_var.set(path)
+
+    def _choose_refine_output(self) -> None:
+        if filedialog:
+            path = filedialog.askdirectory(title="Select output folder for refined results")
+            if path:
+                self.apo_refine_output_var.set(path)
+
+    def _run_apo_refine(self) -> None:
+        preset_path = self.apo_preset_var.get().strip()
+        recording_path = self.apo_refine_recording_var.get().strip()
+        out_dir = self.apo_refine_output_var.get().strip()
+        target_path = self.apo_refine_target_var.get().strip() or None
+        if not preset_path:
+            self._show_status("Select an APO preset file in the Import section above.")
+            return
+        if not recording_path:
+            self._show_status("Select a recording WAV to refine against.")
+            return
+        if not out_dir:
+            self._show_status("Select an output folder.")
+            return
+        try:
+            from .signals import SweepSpec
+            from .settings import load_or_create_config
+            config, _, _ = load_or_create_config(self.config_path)
+            spec = SweepSpec(
+                sample_rate=config.sample_rate,
+                duration_s=config.duration_s,
+            )
+            report = refine_apo_preset(
+                preset_path=preset_path,
+                recording_wav=recording_path,
+                sweep_spec=spec,
+                out_dir=out_dir,
+                target_path=target_path,
+            )
+            orig = report.get('original_error', {})
+            self._show_status(
+                f"Refined: L {orig.get('left_rms', 0):.1f}→{report['predicted_left_rms_error_db']:.1f} dB, "
+                f"R {orig.get('right_rms', 0):.1f}→{report['predicted_right_rms_error_db']:.1f} dB → {out_dir}"
+            )
+        except Exception as exc:
+            self._show_status(f"Refine failed: {exc}")
 
     def _run_apo_import(self) -> None:
         preset_path = self.apo_preset_var.get().strip()

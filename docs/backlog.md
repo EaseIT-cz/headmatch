@@ -9,12 +9,12 @@ Key capabilities:
 - Real headphone database search via GitHub API with local cache
 - Live curve preview in target editor
 - Conservative PEQ fitting with Nelder-Mead refinement
-- APO import with refine mode (re-optimise against a fresh measurement)
+- APO import with refine mode (CLI + GUI) — re-optimise against a fresh measurement
 - Equalizer APO (parametric + GraphicEQ) and CamillaDSP export
 - Clone-target headphone-to-headphone workflow
 - Multi-pass averaging iteration mode
 - Confidence scoring with plain-language interpretation
-- CI matrix across Python 3.10–3.13
+- CI matrix across Python 3.10–3.13 with coverage reporting
 
 ## Active
 
@@ -24,18 +24,17 @@ Key capabilities:
 ## Future work
 
 ### Now
-- GUI refine-apo view (wire refine-apo into the GUI Import APO screen)
+- (no blockers — ready for next release)
 
-### Next (medium-term improvements)
+### Next
 - Drag-to-move control points on target editor canvas
 - GUI shell/view split — extract view rendering from gui.py monolith into smaller components
 - Extract repeated CLI parser setup into shared helpers
 - Cache fixed-profile basis responses for repeated GraphicEQ runs
-- Add CI coverage reporting as artifact
 - Add richer PipeWire error diagnostics (device not found, permission denied, timeout)
-- Deprecate fit-offline alias (keep code path, warn on use)
 
-### Later (strategic / larger scope)
+### Later
+- Remove fit-offline alias entirely (deprecated in current, warn on use)
 - Add export formats beyond CamillaDSP and APO if demand exists
 - CamillaDSP live-update integration via WebSocket API
 - Closed-loop EQ refinement (measure → apply → re-measure; depends on CamillaDSP WebSocket)
