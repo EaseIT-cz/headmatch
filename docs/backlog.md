@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.5.2 shipped. 447 deterministic tests.
+Version 0.6.0a1 (pre-release). 447 deterministic tests.
 Audio backend interface extracted (Phase 1 macOS support complete).
 
 Key capabilities:
