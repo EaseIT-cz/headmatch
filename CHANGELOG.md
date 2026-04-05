@@ -1,5 +1,34 @@
 # HeadMatch Changelog
 
+## 0.5.0
+
+### Features
+- Real headphone database search: `headmatch search-headphone "HD 650"` queries AutoEQ via GitHub API, returns matching models with copy-paste fetch commands. Results cached locally for 24 hours.
+- GUI search: new search field in Fetch Curve view with listbox results; selecting a model populates the URL for one-click download.
+- Live curve preview in target editor: Canvas widget renders the PCHIP-interpolated target curve in real time with log-frequency axis, dB grid, octave lines, and control point markers.
+
+### Performance
+- O(N) fractional-octave smoothing replaces O(N²) matrix approach. Default grid: identical output (<0.001 dB). Dense 10k-point curves: ~4ms instead of quadratic blowup.
+- Alignment peak detection uses `scipy.signal.find_peaks` (C-backed) instead of Python loop.
+
+### Architecture
+- Explicit shelf parameter semantics: `PEQBand.slope` field distinguishes shelf slope S from peaking Q. Backward compatible — existing code that sets `q` for shelves still works.
+- Pipeline split: `pipeline.py` (547→267 lines) extracted into `pipeline_confidence.py` and `pipeline_artifacts.py`. Public API unchanged.
+
+### Fixes
+- UTF-8 encoding specified on all file I/O (prevents locale-dependent failures on Windows).
+- `fetch_curve_from_url` raises `ValueError` on non-UTF-8 downloads instead of `UnicodeDecodeError`.
+- Cache directory falls back to temp dir when home is read-only.
+
+### Packaging
+- Added `pytest.ini` with `pythonpath` config (tests runnable without editable install).
+- Added `MANIFEST.in` for complete sdist (LICENSE, docs, tests, changelog).
+- Added `[tool.setuptools.packages.find]` to exclude `tests/` from wheel.
+
+### Tests
+- 401 → 432 deterministic tests (+31).
+- New coverage: smoothing regression/scalability, shelf semantics, alignment robustness, headphone DB search/caching/fallback, curve preview rendering.
+
 ## 0.4.5
 
 ### Fixes

@@ -80,7 +80,9 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - re-export imported presets to CamillaDSP and HeadMatch formats
 
 ### `headphone_db.py`
-- community headphone database search guidance and curve fetching
+- real headphone database search via GitHub API (AutoEQ repository)
+- local index cache with 24-hour TTL
+- case-insensitive multi-token model name matching
 - AutoEQ CSV parser and format conversion
 - HTTPS-only URL validation with 5 MB response cap
 
@@ -96,8 +98,17 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 ### `pipeline.py`
 - measurement-to-fit orchestration
 - iterative workflow support
-- result-summary generation
-- confidence/trust interpretation generation
+- target curve resolution (relative vs absolute)
+
+### `pipeline_confidence.py`
+- confidence scoring algorithm and threshold constants
+- trustworthiness summary generation
+- warning and interpretation text
+
+### `pipeline_artifacts.py`
+- fit artifact writing (exports, graphs, README, summary JSON)
+- run summary construction
+- shared by single-fit and iterative paths
 
 ### `settings.py`
 - shared config loading/saving
@@ -248,7 +259,7 @@ The shipped product now includes:
 - multi-pass averaging iteration mode (--iteration-mode average)
 - mono and duplicated-channel capture rejection (all channel counts)
 - confidence/trust summaries with named threshold constants
-- 373 deterministic tests including 241 RBJ biquad coefficient reference tests
+- 432 deterministic tests including 241 RBJ biquad coefficient reference tests
 - Wiener-regularised transfer function estimation (noise suppression at frequency extremes)
 - local-maxima alignment search (robust to room echoes)
 - joint Nelder-Mead PEQ refinement after greedy placement
