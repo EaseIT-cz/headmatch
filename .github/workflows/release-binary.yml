@@ -23,14 +23,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           # Use pip wheels for numpy/scipy — they bundle their own OpenBLAS.
-          # This ensures the binary works on any Linux distro, not just the build host.
           pip install numpy scipy soundfile PyYAML
           pip install -e .
           pip install pyinstaller
+
+      - name: Verify tkinter is available
+        run: python -c "import tkinter; print(f'tkinter OK: Tcl {tkinter.TclVersion}, Tk {tkinter.TkVersion}')"
 
       - name: Build binary
         run: python scripts/build.py --clean
