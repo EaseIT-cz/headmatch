@@ -11,6 +11,46 @@ from pathlib import Path
 
 block_cipher = None
 
+# ── Collect BLAS/LAPACK shared libraries ──
+# PyInstaller misses these on Fedora (FlexiBLAS) and some other distros.
+import subprocess
+import glob
+
+_blas_libs = []
+_lib_dirs = ['/usr/lib64', '/usr/lib', '/usr/lib/x86_64-linux-gnu']
+
+for pattern in [
+    'libflexiblas*', 'libopenblas*', 'libblas*', 'liblapack*',
+    'libgfortran*', 'libquadmath*',
+]:
+    for lib_dir in _lib_dirs:
+        for path in glob.glob(os.path.join(lib_dir, pattern + '.so*')):
+            if os.path.isfile(path) and not os.path.islink(path):
+                _blas_libs.append((path, '.'))
+            elif os.path.islink(path):
+                real = os.path.realpath(path)
+                if os.path.isfile(real):
+                    _blas_libs.append((real, '.'))
+
+# Also try to find numpy's bundled openblas
+try:
+    import numpy
+    np_dir = os.path.dirname(numpy.__file__)
+    for root, dirs, files in os.walk(np_dir):
+        for f in files:
+            if 'openblas' in f.lower() or 'blas' in f.lower() or 'lapack' in f.lower():
+                full = os.path.join(root, f)
+                if full.endswith('.so') or '.so.' in full:
+                    _blas_libs.append((full, '.'))
+except ImportError:
+    pass
+
+if _blas_libs:
+    print(f"Bundling {len(_blas_libs)} BLAS/LAPACK libraries")
+else:
+    print("WARNING: No BLAS/LAPACK libraries found to bundle")
+
+
 # Collect example target CSVs as data files
 example_targets = []
 targets_dir = os.path.join('docs', 'examples', 'targets')
@@ -24,7 +64,7 @@ if os.path.isdir(targets_dir):
 a = Analysis(
     ['scripts/entry_gui.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=_blas_libs,
     datas=example_targets,
     hiddenimports=[
         'headmatch',
@@ -97,7 +137,7 @@ exe = EXE(
 cli_a = Analysis(
     ['scripts/entry_cli.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=_blas_libs,
     datas=example_targets,
     hiddenimports=[
         'headmatch',
