@@ -27,17 +27,28 @@ The shipped product includes:
 
 ## Active
 
-- TASK-077: Research and fix dense GraphicEQ clipping
+### High priority
+- TASK-077: Research and fix dense GraphicEQ clipping (broken shipped feature)
+- TASK-080: Replace O(N²) fractional-octave smoothing with O(N) implementation
+- TASK-081: Make shelf-band parameter semantics explicit (q vs slope S)
+
+### Medium priority
+- TASK-082: Replace Python-loop peak detection with scipy.signal.find_peaks
+- TASK-083: Split pipeline.py into fit / artifacts / confidence modules
 - TASK-078: Live curve preview in the target editor
 - TASK-079: Real headphone database search
 
 ## Future work
 
 ### Next
+- Fix CHANGELOG header (still says "0.2.2 in development", should reflect 0.4.5)
 - Add pytest.ini with pythonpath config
 - Verify MANIFEST.in / setuptools include rules for sdist
 - Add Python 3.10–3.13 CI matrix
 - Use encoding="utf-8" consistently across all file I/O
+- PipeWire capture pipe hardening (stdout→DEVNULL, stderr to file)
+- Add CI coverage reporting as artifact
+- UTF-8 decode error handling in headphone_db.py curve fetcher
 
 ### Later
 - Extract repeated CLI parser setup into shared helpers
