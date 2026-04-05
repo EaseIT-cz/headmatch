@@ -46,7 +46,9 @@ def main(argv: list[str] | None = None) -> None:
     try:
         import headmatch
         print(f"Building HeadMatch {headmatch.__version__}")
-
+    except ImportError:
+        print("headmatch package not found. Install with: pip install -e .")
+        sys.exit(1)
 
     # Check numpy BLAS source — pip wheels are preferred for portability
     try:
@@ -59,8 +61,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  numpy BLAS: system library (binary may not be portable!)")
             print(f"  Tip: pip install numpy --force-reinstall to use the pip wheel with bundled OpenBLAS")
     except ImportError:
-        print("headmatch package not found. Install with: pip install -e .")
-        sys.exit(1)
+        pass
 
     # Run PyInstaller
     cmd = [sys.executable, "-m", "PyInstaller", str(SPEC), "--noconfirm"]
