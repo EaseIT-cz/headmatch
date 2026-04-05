@@ -11,30 +11,28 @@ The shipped product includes:
 - Multi-pass averaging iteration mode
 - Conservative PEQ fitting with joint Nelder-Mead refinement
 - Wiener-regularised frequency response estimation
-- Local-maxima alignment search (robust to room echoes)
+- Local-maxima alignment search via scipy.signal.find_peaks (robust to room echoes)
 - Raw residual bandwidth estimation for accurate narrow-feature Q
-- Vectorised fractional-octave smoothing and direct biquad evaluation
+- O(N) fractional-octave smoothing via scipy gaussian_filter1d
+- Direct biquad evaluation with explicit shelf slope/Q semantics
 - Equalizer APO parametric and GraphicEQ preset export
 - CamillaDSP export with correct shelf Q/S conversion
 - Fixed-band GraphicEQ fitting (10-band and 31-band profiles)
 - Clone-target support with explicit relative/absolute semantics
 - Mono and duplicated-channel capture rejection (all channel counts)
 - Confidence scoring with named threshold constants and injectable weights
-- Type-safe PEQBand.kind (Literal)
+- Type-safe PEQBand.kind (Literal) with explicit slope field for shelf bands
 - Desktop shortcut management (CLI + GUI)
 - CI with explicit least-privilege permissions and auto-discovery of test files
-- 401 deterministic tests including 241 RBJ biquad coefficient reference tests
+- Pipeline split into orchestration / artifacts / confidence modules
+- 416 deterministic tests including 241 RBJ biquad coefficient reference tests
 
 ## Active
 
 ### High priority
-- TASK-077: Research and fix dense GraphicEQ clipping (broken shipped feature)
-- TASK-080: Replace O(N²) fractional-octave smoothing with O(N) implementation
-- TASK-081: Make shelf-band parameter semantics explicit (q vs slope S)
+- TASK-077: Research and fix dense GraphicEQ clipping (on hold — awaiting user testing)
 
 ### Medium priority
-- TASK-082: Replace Python-loop peak detection with scipy.signal.find_peaks
-- TASK-083: Split pipeline.py into fit / artifacts / confidence modules
 - TASK-078: Live curve preview in the target editor
 - TASK-079: Real headphone database search
 
