@@ -4,11 +4,11 @@
 
 The shipped product includes:
 - CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
-- GUI with confidence badges, graph display, scrollable diagnostics, target editor (load/save/edit), APO import, headphone database search, curve fetch, iteration mode selector, desktop shortcut management
+- GUI with confidence badges, graph display, scrollable diagnostics, target editor with live curve preview (load/save/edit), APO import, headphone database search, curve fetch, iteration mode selector, desktop shortcut management
 - TUI backup workflow (maintenance-only)
 - APO AutoEQ preset import and re-export
 - Real headphone database search via GitHub API with local 24h cache
-- HTTPS-only community curve fetching with 5 MB cap
+- HTTPS-only community curve fetching with 5 MB cap and UTF-8 validation
 - Multi-pass averaging iteration mode
 - Conservative PEQ fitting with joint Nelder-Mead refinement
 - Wiener-regularised frequency response estimation
@@ -26,15 +26,12 @@ The shipped product includes:
 - Desktop shortcut management (CLI + GUI)
 - CI with explicit least-privilege permissions and auto-discovery of test files
 - Pipeline split into orchestration / artifacts / confidence modules
-- 430 deterministic tests including 241 RBJ biquad coefficient reference tests
+- 432 deterministic tests including 241 RBJ biquad coefficient reference tests
 
 ## Active
 
-### High priority
-- TASK-077: Research and fix dense GraphicEQ clipping (on hold — awaiting user testing)
-
-### Medium priority
-- TASK-078: Live curve preview in the target editor
+### On hold
+- TASK-077: Research and fix dense GraphicEQ clipping (awaiting user testing)
 
 ## Future work
 
@@ -53,6 +50,7 @@ The shipped product includes:
 - Cache fixed-profile basis responses for repeated runs
 - Add richer PipeWire error diagnostics
 - Add export formats beyond CamillaDSP and APO if demand exists
+- Drag-to-move control points on target editor canvas
 - Asynchronous device support and clock drift compensation
 - Automated HRTF target integration and scaling
 - CamillaDSP live-update integration via WebSocket API

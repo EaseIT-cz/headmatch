@@ -699,3 +699,84 @@ def test_picker_cancel_leaves_existing_values_unchanged(tmp_path, fake_tk, monke
 
     assert app.target_csv_var.get() == 'manual-target.csv'
     assert app.offline_recording_var.get() == 'manual-recording.wav'
+
+
+# ── TASK-078: Curve preview tests ──
+
+class TestCurvePreview:
+    """Verify the curve preview canvas renders without errors."""
+
+    def test_render_curve_preview_flat_editor(self):
+        """Flat default target should render without errors."""
+        from headmatch.gui_views import _render_curve_preview
+        from headmatch.target_editor import TargetEditor
+
+        class FakeCanvas:
+            def __init__(self):
+                self.items = []
+            def delete(self, *args):
+                pass
+            def create_rectangle(self, *args, **kwargs):
+                self.items.append(('rect', args, kwargs))
+                return len(self.items)
+            def create_line(self, *args, **kwargs):
+                self.items.append(('line', args, kwargs))
+                return len(self.items)
+            def create_text(self, *args, **kwargs):
+                self.items.append(('text', args, kwargs))
+                return len(self.items)
+            def create_oval(self, *args, **kwargs):
+                self.items.append(('oval', args, kwargs))
+                return len(self.items)
+
+        canvas = FakeCanvas()
+        editor = TargetEditor()
+        _render_curve_preview(canvas, editor)
+
+        # Should have drawn grid, reference line, curve, and control points
+        line_items = [i for i in canvas.items if i[0] == 'line']
+        oval_items = [i for i in canvas.items if i[0] == 'oval']
+        assert len(line_items) > 5, "Expected grid lines + curve"
+        assert len(oval_items) == len(editor.points), "Expected one oval per control point"
+
+    def test_render_curve_preview_with_boost(self):
+        """Editor with a 1kHz boost should produce a different curve than flat."""
+        from headmatch.gui_views import _render_curve_preview
+        from headmatch.target_editor import TargetEditor
+
+        class FakeCanvas:
+            def __init__(self):
+                self.items = []
+            def delete(self, *args):
+                pass
+            def create_rectangle(self, *args, **kwargs):
+                self.items.append(('rect', args, kwargs))
+                return len(self.items)
+            def create_line(self, *args, **kwargs):
+                self.items.append(('line', args, kwargs))
+                return len(self.items)
+            def create_text(self, *args, **kwargs):
+                self.items.append(('text', args, kwargs))
+                return len(self.items)
+            def create_oval(self, *args, **kwargs):
+                self.items.append(('oval', args, kwargs))
+                return len(self.items)
+
+        # Flat
+        flat_canvas = FakeCanvas()
+        flat_editor = TargetEditor()
+        _render_curve_preview(flat_canvas, flat_editor)
+
+        # Boosted at 1kHz (move existing 1kHz point to +6 dB)
+        boost_canvas = FakeCanvas()
+        boost_editor = TargetEditor()
+        boost_editor.move_point(2, 1000.0, 6.0)  # index 2 is the 1kHz point
+        _render_curve_preview(boost_canvas, boost_editor)
+
+        # The curve line coordinates should differ
+        flat_curves = [i for i in flat_canvas.items if i[0] == 'line' and i[2].get('fill') == '#00ccaa']
+        boost_curves = [i for i in boost_canvas.items if i[0] == 'line' and i[2].get('fill') == '#00ccaa']
+        assert len(flat_curves) >= 1
+        assert len(boost_curves) >= 1
+        # The actual polyline coords should differ
+        assert flat_curves[0][1] != boost_curves[0][1], "Boosted curve should differ from flat"

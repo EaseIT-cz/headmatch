@@ -325,6 +325,84 @@ def render_history_results(ttk, frame, *, selection) -> None:
             ttk.Label(guide, text="Graph not available.", wraplength=DETAIL_WRAP, justify="left").grid(row=row, column=0, sticky="w", pady=(8, 0))
 
 
+
+
+def _render_curve_preview(canvas, editor, width=560, height=200):
+    """Draw the interpolated target curve on a tkinter Canvas.
+
+    X axis: log-frequency 20–20000 Hz
+    Y axis: linear dB, ±20 dB range
+    """
+    import math
+
+    canvas.delete("all")
+
+    pad_left, pad_right, pad_top, pad_bottom = 45, 15, 15, 25
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+
+    db_min, db_max = -20.0, 20.0
+    f_min, f_max = 20.0, 20000.0
+    log_min, log_max = math.log10(f_min), math.log10(f_max)
+
+    def freq_to_x(f):
+        return pad_left + (math.log10(max(f, f_min)) - log_min) / (log_max - log_min) * plot_w
+
+    def db_to_y(db):
+        return pad_top + (db_max - db) / (db_max - db_min) * plot_h
+
+    # Background
+    canvas.create_rectangle(pad_left, pad_top, pad_left + plot_w, pad_top + plot_h,
+                           fill="#1a1a2e", outline="#333355")
+
+    # Grid lines — octave boundaries
+    grid_color = "#2a2a4e"
+    label_color = "#888899"
+    octave_freqs = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    for f in octave_freqs:
+        x = freq_to_x(f)
+        canvas.create_line(x, pad_top, x, pad_top + plot_h, fill=grid_color, dash=(2, 4))
+        label = f"{f:.0f}" if f >= 1000 else f"{f:g}"
+        if f >= 1000:
+            label = f"{f/1000:g}k"
+        canvas.create_text(x, pad_top + plot_h + 12, text=label, fill=label_color, font=("TkDefaultFont", 7))
+
+    # Horizontal dB grid lines
+    for db in [-15, -10, -5, 0, 5, 10, 15]:
+        y = db_to_y(db)
+        color = "#444466" if db == 0 else grid_color
+        width_line = 1.5 if db == 0 else 1
+        canvas.create_line(pad_left, y, pad_left + plot_w, y, fill=color, width=width_line,
+                          dash=() if db == 0 else (2, 4))
+        canvas.create_text(pad_left - 5, y, text=f"{db:+d}", anchor="e", fill=label_color, font=("TkDefaultFont", 7))
+
+    # Evaluate and draw curve
+    import numpy as np
+    try:
+        freqs, values = editor.evaluate()
+        if len(freqs) < 2:
+            return
+
+        # Build polyline points
+        coords = []
+        for f, v in zip(freqs, values):
+            x = freq_to_x(float(f))
+            y = db_to_y(float(max(db_min, min(db_max, v))))
+            coords.extend([x, y])
+
+        if len(coords) >= 4:
+            canvas.create_line(*coords, fill="#00ccaa", width=2, smooth=True)
+
+        # Draw control points
+        for point in editor.points:
+            px = freq_to_x(point.freq_hz)
+            py = db_to_y(max(db_min, min(db_max, point.gain_db)))
+            r = 4
+            canvas.create_oval(px - r, py - r, px + r, py + r, fill="#ff6644", outline="#ffaa88", width=1)
+    except Exception:
+        pass  # Don't crash the GUI on eval errors
+
+
 def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None, on_update=None):
     """Render an interactive target curve editor with editable control points."""
     import tkinter as tk
@@ -410,9 +488,23 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
                        command=lambda i=idx: _remove_point(i), width=3).grid(
                 row=row, column=4, sticky="w", pady=2)
 
+    # Curve preview canvas
+    preview_frame = ttk.LabelFrame(frame, text="Curve preview", padding=4)
+    preview_frame.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+    canvas = tk.Canvas(preview_frame, width=560, height=200, bg="#1a1a2e", highlightthickness=0)
+    canvas.grid(row=0, column=0, sticky="ew")
+    _render_curve_preview(canvas, editor)
+
+    # Wrap _apply_changes to also update the preview
+    _original_apply = _apply_changes
+    def _apply_changes_with_preview():
+        _original_apply()
+        _render_curve_preview(canvas, editor)
+    _apply_changes = _apply_changes_with_preview
+
     # Actions
     actions = ttk.Frame(frame, padding=(0, 8, 0, 0))
-    actions.grid(row=3, column=0, sticky="w")
+    actions.grid(row=4, column=0, sticky="w")
     ttk.Button(actions, text="Apply changes", command=_apply_changes).grid(row=0, column=0, sticky="w")
     ttk.Button(actions, text="Save as CSV", command=lambda: [_apply_changes(), on_save()]).grid(row=0, column=1, sticky="w", padx=(12, 0))
     if on_load:
