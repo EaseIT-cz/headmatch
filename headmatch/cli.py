@@ -99,8 +99,8 @@ def build_parser(config) -> argparse.ArgumentParser:
         prog="headmatch",
         description="Beginner-first headphone measurement and EQ fitting.",
         epilog=(
-            "Beginner path: run 'headmatch start --out-dir out/session_01' for a guided "
-            "measure-and-fit pass, or 'headmatch prepare-offline --out-dir out/session_01' "
+            "Beginner path: run 'headmatch start --out-dir session_01' for a guided "
+            "measure-and-fit pass, or 'headmatch prepare-offline --out-dir session_01' "
             "if you want to record first and import later."
         ),
     )
@@ -232,13 +232,13 @@ def print_beginner_guide(parser: argparse.ArgumentParser) -> None:
     identity = get_app_identity()
     print(f"headmatch beginner path ({identity.version_display})")
     print("================================")
-    print("1) First try: headmatch start --out-dir out/session_01")
+    print("1) First try: headmatch start --out-dir session_01")
     print("   This runs one online measurement pass and exports Equalizer APO and CamillaDSP EQ files.")
     print()
     print("2) If your recorder is more reliable offline:")
-    print("   headmatch prepare-offline --out-dir out/session_01")
+    print("   headmatch prepare-offline --out-dir session_01")
     print("   ...record the sweep, then run:")
-    print("   headmatch fit --recording out/session_01/recording.wav --out-dir out/session_01/fit")
+    print("   headmatch fit --recording session_01/recording.wav --out-dir session_01/fit")
     print()
     print("Not sure your setup is ready? Run: headmatch doctor")
     print("Need device names? Run: headmatch list-targets")

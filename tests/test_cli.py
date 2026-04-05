@@ -28,7 +28,7 @@ def test_main_without_subcommand_shows_beginner_guide(capsys):
     out = capsys.readouterr().out
     assert "headmatch beginner path" in out
     assert "0.6.0a1" in out
-    assert "headmatch start --out-dir out/session_01" in out
+    assert "headmatch start --out-dir session_01" in out
 
 
 def test_version_flag_reports_canonical_version(capsys):

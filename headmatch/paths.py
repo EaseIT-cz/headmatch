@@ -43,3 +43,17 @@ def cache_dir() -> Path:
         d = Path(tempfile.gettempdir()) / "headmatch-cache"
         d.mkdir(parents=True, exist_ok=True)
         return d
+
+
+def documents_dir() -> Path:
+    """Return the platform-appropriate documents directory for HeadMatch output."""
+    if sys.platform == "win32":
+        # USERPROFILE\Documents is standard on Windows
+        base = os.environ.get("USERPROFILE")
+        docs = Path(base) / "Documents" if base else Path.home() / "Documents"
+    else:
+        # macOS and Linux both use ~/Documents
+        docs = Path.home() / "Documents"
+    d = docs / "HeadMatch"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
