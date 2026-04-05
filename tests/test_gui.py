@@ -353,8 +353,8 @@ def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, f
         fake_tk,
         'collect_pipewire_target_selection',
         lambda _config: PipeWireTargetSelection(
-            playback_targets=(SimpleNamespace(node_name='alsa_output.usb-dac'),),
-            capture_targets=(SimpleNamespace(node_name='alsa_input.usb-mic'),),
+            playback_targets=(SimpleNamespace(device_id='alsa_output.usb-dac'),),
+            capture_targets=(SimpleNamespace(device_id='alsa_input.usb-mic'),),
             selected_playback='alsa_output.usb-dac',
             selected_capture='alsa_input.usb-mic',
         ),

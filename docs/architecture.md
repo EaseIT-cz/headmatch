@@ -44,10 +44,20 @@ The shared backend performs the same high-level pipeline regardless of frontend:
 - smoothing helpers
 - frequency-grid helpers
 
+### `audio_backend.py`
+- abstract `AudioBackend` protocol and `AudioDevice` dataclass
+- `get_audio_backend()` factory: auto-detects platform (PipeWire on Linux, PortAudio planned for macOS/Windows)
+
+### `backend_pipewire.py`
+- PipeWire implementation of `AudioBackend`
+- device discovery via `pw-dump`, defaults via `wpctl`
+- play-and-record via `pw-play` / `pw-record` subprocesses
+
 ### `measure.py`
-- sweep rendering
-- PipeWire playback/recording coordination
-- offline measurement package generation
+- platform-agnostic measurement orchestration
+- sweep rendering, offline measurement package generation
+- backward-compatible API wrappers that delegate to the active audio backend
+- doctor checks (config validation + backend-specific device checks)
 
 ### `analysis.py`
 - recording alignment via local-maxima cross-correlation search

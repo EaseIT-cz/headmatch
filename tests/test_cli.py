@@ -227,7 +227,7 @@ def test_doctor_prints_readiness_report(monkeypatch, capsys, tmp_path):
         "headmatch.measure.collect_doctor_checks",
         lambda path, config: [
             DoctorCheck(name="config file", ok=True, detail=f"Using {path}"),
-            DoctorCheck(name="PipeWire discovery", ok=False, detail="Found 0 playback and 1 capture target(s).", action="Check your output device."),
+            DoctorCheck(name="audio discovery", ok=False, detail="Found 0 playback and 1 capture target(s).", action="Check your output device."),
         ],
     )
 
@@ -238,8 +238,8 @@ def test_doctor_prints_readiness_report(monkeypatch, capsys, tmp_path):
     assert f"Config path: {config_path}" in out
     assert "Readiness: 1/2 checks look good." in out
     assert "[OK] config file" in out
-    assert "[WARN] PipeWire discovery: Found 0 playback and 1 capture target(s)." in out
-    assert "- PipeWire discovery: Check your output device." in out
+    assert "[WARN] audio discovery: Found 0 playback and 1 capture target(s)." in out
+    assert "- audio discovery: Check your output device." in out
 
 
 def test_list_targets_prints_pipewire_guidance(monkeypatch, capsys):
@@ -250,17 +250,17 @@ def test_list_targets_prints_pipewire_guidance(monkeypatch, capsys):
         lambda: [
             PipeWireTarget(
                 kind="playback",
-                node_name="alsa_output.usb-dac",
+                device_id="alsa_output.usb-dac",
+                label="USB DAC",
                 description="USB DAC",
-                nick="",
-                media_class="Audio/Sink",
+                raw_info={"node_name": "alsa_output.usb-dac", "nick": "", "media_class": "Audio/Sink"},
             ),
             PipeWireTarget(
                 kind="capture",
-                node_name="alsa_input.usb-mic",
+                device_id="alsa_input.usb-mic",
+                label="USB Mic",
                 description="USB Mic",
-                nick="",
-                media_class="Audio/Source",
+                raw_info={"node_name": "alsa_input.usb-mic", "nick": "", "media_class": "Audio/Source"},
             ),
         ],
     )

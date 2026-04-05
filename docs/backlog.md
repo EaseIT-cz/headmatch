@@ -24,7 +24,8 @@ Key capabilities:
 ## Future work
 
 ### Now
-- (no blockers — ready for next release)
+- PortAudio audio backend for macOS support (sounddevice-based play/record, device discovery)
+- Platform-aware config/cache paths (~/Library on macOS, %APPDATA% on Windows)
 
 ### Next
 - Further target editor polish — keyboard shortcuts, undo/redo for control point edits
@@ -37,7 +38,6 @@ Key capabilities:
 - Add export formats beyond CamillaDSP and APO if demand exists
 - CamillaDSP live-update integration via WebSocket API
 - Closed-loop EQ refinement (measure → apply → re-measure; depends on CamillaDSP WebSocket)
-- Windows/macOS support (platform-aware measure.py backends)
 - Room correction / speaker measurement mode
 - Asynchronous device support and clock drift compensation
 - Automated HRTF target integration and scaling

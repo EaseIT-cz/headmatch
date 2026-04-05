@@ -184,8 +184,8 @@ class HeadMatchGuiApp:
                 pipewire_input_target=self.state.pipewire_input_target or None,
             )
         )
-        self.output_target_options = tuple(target.node_name for target in selection.playback_targets)
-        self.input_target_options = tuple(target.node_name for target in selection.capture_targets)
+        self.output_target_options = tuple(target.device_id for target in selection.playback_targets)
+        self.input_target_options = tuple(target.device_id for target in selection.capture_targets)
         self.output_target_var.set(selection.selected_playback)
         self.input_target_var.set(selection.selected_capture)
 
