@@ -327,32 +327,63 @@ def render_history_results(ttk, frame, *, selection) -> None:
 
 
 
+
+class _PlotGeometry:
+    """Coordinate mapping for the curve preview canvas."""
+    __slots__ = ('pad_left', 'pad_right', 'pad_top', 'pad_bottom',
+                 'plot_w', 'plot_h', 'db_min', 'db_max',
+                 'log_min', 'log_max', 'f_min', 'f_max')
+
+    def __init__(self, width, height):
+        import math
+        self.pad_left, self.pad_right, self.pad_top, self.pad_bottom = 45, 15, 15, 25
+        self.plot_w = width - self.pad_left - self.pad_right
+        self.plot_h = height - self.pad_top - self.pad_bottom
+        self.db_min, self.db_max = -20.0, 20.0
+        self.f_min, self.f_max = 20.0, 20000.0
+        self.log_min = math.log10(self.f_min)
+        self.log_max = math.log10(self.f_max)
+
+    def freq_to_x(self, f):
+        import math
+        return self.pad_left + (math.log10(max(f, self.f_min)) - self.log_min) / (self.log_max - self.log_min) * self.plot_w
+
+    def db_to_y(self, db):
+        return self.pad_top + (self.db_max - db) / (self.db_max - self.db_min) * self.plot_h
+
+    def x_to_freq(self, x):
+        ratio = (x - self.pad_left) / self.plot_w
+        ratio = max(0.0, min(1.0, ratio))
+        log_f = self.log_min + ratio * (self.log_max - self.log_min)
+        return max(self.f_min, min(self.f_max, 10 ** log_f))
+
+    def y_to_db(self, y):
+        ratio = (y - self.pad_top) / self.plot_h
+        ratio = max(0.0, min(1.0, ratio))
+        return self.db_max - ratio * (self.db_max - self.db_min)
+
+
+def _plot_geometry(width=560, height=200):
+    return _PlotGeometry(width, height)
+
+
 def _render_curve_preview(canvas, editor, width=560, height=200):
     """Draw the interpolated target curve on a tkinter Canvas.
 
     X axis: log-frequency 20–20000 Hz
     Y axis: linear dB, ±20 dB range
+
+    Returns a PlotGeometry namedtuple for coordinate conversion (used by drag handlers).
     """
     import math
 
     canvas.delete("all")
 
-    pad_left, pad_right, pad_top, pad_bottom = 45, 15, 15, 25
-    plot_w = width - pad_left - pad_right
-    plot_h = height - pad_top - pad_bottom
-
-    db_min, db_max = -20.0, 20.0
-    f_min, f_max = 20.0, 20000.0
-    log_min, log_max = math.log10(f_min), math.log10(f_max)
-
-    def freq_to_x(f):
-        return pad_left + (math.log10(max(f, f_min)) - log_min) / (log_max - log_min) * plot_w
-
-    def db_to_y(db):
-        return pad_top + (db_max - db) / (db_max - db_min) * plot_h
+    geom = _plot_geometry(width, height)
 
     # Background
-    canvas.create_rectangle(pad_left, pad_top, pad_left + plot_w, pad_top + plot_h,
+    canvas.create_rectangle(geom.pad_left, geom.pad_top,
+                           geom.pad_left + geom.plot_w, geom.pad_top + geom.plot_h,
                            fill="#1a1a2e", outline="#333355")
 
     # Grid lines — octave boundaries
@@ -360,47 +391,48 @@ def _render_curve_preview(canvas, editor, width=560, height=200):
     label_color = "#888899"
     octave_freqs = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
     for f in octave_freqs:
-        x = freq_to_x(f)
-        canvas.create_line(x, pad_top, x, pad_top + plot_h, fill=grid_color, dash=(2, 4))
-        label = f"{f:.0f}" if f >= 1000 else f"{f:g}"
-        if f >= 1000:
-            label = f"{f/1000:g}k"
-        canvas.create_text(x, pad_top + plot_h + 12, text=label, fill=label_color, font=("TkDefaultFont", 7))
+        x = geom.freq_to_x(f)
+        canvas.create_line(x, geom.pad_top, x, geom.pad_top + geom.plot_h, fill=grid_color, dash=(2, 4))
+        label = f"{f/1000:g}k" if f >= 1000 else f"{f:g}"
+        canvas.create_text(x, geom.pad_top + geom.plot_h + 12, text=label, fill=label_color, font=("TkDefaultFont", 7))
 
     # Horizontal dB grid lines
     for db in [-15, -10, -5, 0, 5, 10, 15]:
-        y = db_to_y(db)
+        y = geom.db_to_y(db)
         color = "#444466" if db == 0 else grid_color
         width_line = 1.5 if db == 0 else 1
-        canvas.create_line(pad_left, y, pad_left + plot_w, y, fill=color, width=width_line,
+        canvas.create_line(geom.pad_left, y, geom.pad_left + geom.plot_w, y, fill=color, width=width_line,
                           dash=() if db == 0 else (2, 4))
-        canvas.create_text(pad_left - 5, y, text=f"{db:+d}", anchor="e", fill=label_color, font=("TkDefaultFont", 7))
+        canvas.create_text(geom.pad_left - 5, y, text=f"{db:+d}", anchor="e", fill=label_color, font=("TkDefaultFont", 7))
 
     # Evaluate and draw curve
     import numpy as np
     try:
         freqs, values = editor.evaluate()
         if len(freqs) < 2:
-            return
+            return geom
 
-        # Build polyline points
         coords = []
         for f, v in zip(freqs, values):
-            x = freq_to_x(float(f))
-            y = db_to_y(float(max(db_min, min(db_max, v))))
+            x = geom.freq_to_x(float(f))
+            y = geom.db_to_y(float(max(geom.db_min, min(geom.db_max, v))))
             coords.extend([x, y])
 
         if len(coords) >= 4:
             canvas.create_line(*coords, fill="#00ccaa", width=2, smooth=True)
 
-        # Draw control points
-        for point in editor.points:
-            px = freq_to_x(point.freq_hz)
-            py = db_to_y(max(db_min, min(db_max, point.gain_db)))
-            r = 4
-            canvas.create_oval(px - r, py - r, px + r, py + r, fill="#ff6644", outline="#ffaa88", width=1)
+        # Draw control points with tags for drag binding
+        r = 5
+        for i, point in enumerate(editor.points):
+            px = geom.freq_to_x(point.freq_hz)
+            py = geom.db_to_y(max(geom.db_min, min(geom.db_max, point.gain_db)))
+            tag = f"cp_{i}"
+            canvas.create_oval(px - r, py - r, px + r, py + r,
+                              fill="#ff6644", outline="#ffaa88", width=1, tags=(tag, "control_point"))
     except Exception:
         pass  # Don't crash the GUI on eval errors
+
+    return geom
 
 
 def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None, on_update=None):
@@ -410,7 +442,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     ttk.Label(frame, text="Target curve editor", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text="Drag sliders or edit values to shape your target. The curve updates live.",
+        text="Drag points on the graph, use sliders, or type values. Everything updates live.",
         wraplength=BODY_WRAP,
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(8, 12))
@@ -420,12 +452,13 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     preview_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
     canvas = tk.Canvas(preview_frame, width=560, height=200, bg="#1a1a2e", highlightthickness=0)
     canvas.grid(row=0, column=0, sticky="ew")
-    _render_curve_preview(canvas, editor)
+    _geom = [_render_curve_preview(canvas, editor)]  # mutable box for geometry
+    _drag_idx = [None]  # index of control point being dragged
 
     # ── Live update helpers ──
 
     # Mutable container so closures always see the latest lists
-    _vars = {"freq": [], "gain": [], "gain_labels": []}
+    _vars = {"freq": [], "gain": [], "gain_labels": [], "gain_scales": []}
 
     def _sync_editor_and_redraw():
         """Read all widget values into the editor model and redraw."""
@@ -437,7 +470,8 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
                     editor.move_point(i, max(20.0, min(20000.0, freq)), max(-20.0, min(20.0, gain)))
             except (ValueError, IndexError):
                 pass
-        _render_curve_preview(canvas, editor)
+        _geom[0] = _render_curve_preview(canvas, editor)
+        _bind_drag_events()
 
     def _on_slider_change(val, gvar, glabel):
         """Called on every slider tick — update the gain var, label, and redraw."""
@@ -449,6 +483,58 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     def _on_entry_commit(_event=None):
         """Called on Return or FocusOut from any entry."""
         _sync_editor_and_redraw()
+
+    # ── Canvas drag handlers ──
+
+    def _on_drag_start(event):
+        """Find the closest control point within grab radius."""
+        geom = _geom[0]
+        if geom is None:
+            return
+        closest_idx, closest_dist = None, 12  # grab radius in pixels
+        for i, point in enumerate(editor.points):
+            px = geom.freq_to_x(point.freq_hz)
+            py = geom.db_to_y(max(geom.db_min, min(geom.db_max, point.gain_db)))
+            dist = ((event.x - px) ** 2 + (event.y - py) ** 2) ** 0.5
+            if dist < closest_dist:
+                closest_idx, closest_dist = i, dist
+        _drag_idx[0] = closest_idx
+
+    def _on_drag_motion(event):
+        """Move the dragged control point to cursor position."""
+        idx = _drag_idx[0]
+        if idx is None:
+            return
+        geom = _geom[0]
+        if geom is None:
+            return
+        freq = max(20.0, min(20000.0, geom.x_to_freq(event.x)))
+        gain = max(-20.0, min(20.0, geom.y_to_db(event.y)))
+        editor.move_point(idx, freq, gain)
+        # Update matching widgets if they exist
+        if idx < len(_vars["freq"]):
+            _vars["freq"][idx].set(f"{freq:.0f}")
+            _vars["gain"][idx].set(f"{gain:.1f}")
+        if idx < len(_vars["gain_labels"]):
+            _vars["gain_labels"][idx].config(text=f"{gain:.1f} dB")
+        if idx < len(_vars["gain_scales"]):
+            try:
+                _vars["gain_scales"][idx].set(gain)
+            except Exception:
+                pass
+        _geom[0] = _render_curve_preview(canvas, editor)
+        _bind_drag_events()
+
+    def _on_drag_end(_event):
+        _drag_idx[0] = None
+
+    def _bind_drag_events():
+        """Re-bind drag events after canvas redraw (items get recreated)."""
+        canvas.tag_bind("control_point", "<ButtonPress-1>", _on_drag_start)
+        canvas.tag_bind("control_point", "<B1-Motion>", _on_drag_motion)
+        canvas.tag_bind("control_point", "<ButtonRelease-1>", _on_drag_end)
+
+    _bind_drag_events()
 
     # ── Control points table ──
 
@@ -495,6 +581,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         except Exception:
             pass
         gain_scale.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=2)
+        _vars["gain_scales"].append(gain_scale)
 
         # Add point button
         def _add_after(i=idx):

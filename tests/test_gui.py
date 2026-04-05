@@ -780,3 +780,42 @@ class TestCurvePreview:
         assert len(boost_curves) >= 1
         # The actual polyline coords should differ
         assert flat_curves[0][1] != boost_curves[0][1], "Boosted curve should differ from flat"
+
+
+# ── TASK-086: Plot geometry coordinate round-trip tests ──
+
+class TestPlotGeometry:
+    """Verify freq/dB ↔ pixel coordinate conversions are invertible."""
+
+    def test_freq_round_trip(self):
+        from headmatch.gui_views import _PlotGeometry
+        geom = _PlotGeometry(560, 200)
+        for freq in [20.0, 100.0, 1000.0, 10000.0, 20000.0]:
+            x = geom.freq_to_x(freq)
+            recovered = geom.x_to_freq(x)
+            assert abs(recovered - freq) / freq < 0.01, f"freq round-trip failed for {freq}: got {recovered}"
+
+    def test_db_round_trip(self):
+        from headmatch.gui_views import _PlotGeometry
+        geom = _PlotGeometry(560, 200)
+        for db in [-20.0, -10.0, 0.0, 10.0, 20.0]:
+            y = geom.db_to_y(db)
+            recovered = geom.y_to_db(y)
+            assert abs(recovered - db) < 0.1, f"dB round-trip failed for {db}: got {recovered}"
+
+    def test_x_to_freq_clamps(self):
+        from headmatch.gui_views import _PlotGeometry
+        geom = _PlotGeometry(560, 200)
+        # Way outside the plot area should clamp, not crash
+        f_left = geom.x_to_freq(-100)
+        f_right = geom.x_to_freq(1000)
+        assert 20.0 <= f_left <= 20000.0
+        assert 20.0 <= f_right <= 20000.0
+
+    def test_y_to_db_clamps(self):
+        from headmatch.gui_views import _PlotGeometry
+        geom = _PlotGeometry(560, 200)
+        db_top = geom.y_to_db(-100)
+        db_bot = geom.y_to_db(500)
+        assert -20.0 <= db_top <= 20.0
+        assert -20.0 <= db_bot <= 20.0
