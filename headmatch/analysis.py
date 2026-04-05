@@ -60,15 +60,13 @@ def _align_recording_to_reference(recording: np.ndarray, reference: np.ndarray) 
     # a secondary peak that outranks the true alignment in global sorting.
     corr_abs = np.abs(corr)
     corr_threshold = 0.3 * np.max(corr_abs) if len(corr_abs) else 0.0
-    # Local maxima: points higher than both neighbours and above threshold
-    local_max_mask = np.zeros(len(corr_abs), dtype=bool)
-    for i in range(1, len(corr_abs) - 1):
-        if corr_abs[i] > corr_abs[i - 1] and corr_abs[i] > corr_abs[i + 1] and corr_abs[i] >= corr_threshold:
-            local_max_mask[i] = True
+    # Local maxima via scipy (C-backed, faster than Python loop on long arrays)
+    peaks, _ = signal.find_peaks(corr_abs, height=corr_threshold)
     # Always include the global maximum
-    if len(corr_abs):
-        local_max_mask[np.argmax(corr_abs)] = True
-    candidate_indices = np.where(local_max_mask)[0]
+    global_max = int(np.argmax(corr_abs)) if len(corr_abs) else 0
+    if global_max not in peaks:
+        peaks = np.append(peaks, global_max)
+    candidate_indices = peaks
     # Limit to top 16 by magnitude to bound computation
     if len(candidate_indices) > 16:
         top_order = np.argsort(corr_abs[candidate_indices])[-16:]
