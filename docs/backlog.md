@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.5.0 shipped. 436 deterministic tests.
+Version 0.5.1 shipped. 439 deterministic tests.
 
 Key capabilities:
 - GUI-first headphone measurement and EQ tool (CLI + TUI also supported)
@@ -27,7 +27,7 @@ Key capabilities:
 - (no blockers — ready for next release)
 
 ### Next
-- Drag-to-move control points on target editor canvas
+- Drag-to-move control points directly on target editor canvas (sliders now live-update; canvas drag is the remaining step)
 - GUI shell/view split — extract view rendering from gui.py monolith into smaller components
 - Extract repeated CLI parser setup into shared helpers
 - Cache fixed-profile basis responses for repeated GraphicEQ runs
