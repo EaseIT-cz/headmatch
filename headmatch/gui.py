@@ -184,8 +184,8 @@ class HeadMatchGuiApp:
                 pipewire_input_target=self.state.pipewire_input_target or None,
             )
         )
-        self.output_target_options = tuple(target.device_id for target in selection.playback_targets)
-        self.input_target_options = tuple(target.device_id for target in selection.capture_targets)
+        self.output_target_options = tuple(f"{target.device_id} — {target.label}" for target in selection.playback_targets)
+        self.input_target_options = tuple(f"{target.device_id} — {target.label}" for target in selection.capture_targets)
         self.output_target_var.set(selection.selected_playback)
         self.input_target_var.set(selection.selected_capture)
 
@@ -302,8 +302,8 @@ class HeadMatchGuiApp:
             FrontendConfig(
                 default_output_dir=self.output_dir_var.get().strip() or None,
                 preferred_target_csv=self.target_csv_var.get().strip() or None,
-                pipewire_output_target=self.output_target_var.get().strip() or None,
-                pipewire_input_target=self.input_target_var.get().strip() or None,
+                pipewire_output_target=self._strip_device_label(self.output_target_var.get()) or None,
+                pipewire_input_target=self._strip_device_label(self.input_target_var.get()) or None,
                 sample_rate=self.state.sample_rate,
                 duration_s=self.state.duration_s,
                 f_start_hz=self.state.f_start_hz,
@@ -589,6 +589,14 @@ class HeadMatchGuiApp:
         )
 
 
+    @staticmethod
+    def _strip_device_label(value: str) -> str:
+        """Extract device ID from 'ID — Label' combo display string."""
+        raw = value.strip()
+        if " — " in raw:
+            return raw.split(" — ", 1)[0].strip()
+        return raw
+
     def _build_sweep(self) -> SweepSpec:
         return SweepSpec(
             sample_rate=self.state.sample_rate,
@@ -680,8 +688,8 @@ class HeadMatchGuiApp:
         iterations = self._parse_positive_int(self.iterations_var.get().strip(), "Iterations")
         max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.target_csv_var.get().strip() or None
-        output_target = self.output_target_var.get().strip() or None
-        input_target = self.input_target_var.get().strip() or None
+        output_target = self._strip_device_label(self.output_target_var.get()) or None
+        input_target = self._strip_device_label(self.input_target_var.get()) or None
 
         self._run_background_task(
             task_name="measure-online",
@@ -818,8 +826,8 @@ class HeadMatchGuiApp:
             config = FrontendConfig(
                 default_output_dir=self.output_dir_var.get().strip() or None,
                 preferred_target_csv=self.target_csv_var.get().strip() or None,
-                pipewire_output_target=self.output_target_var.get().strip() or None,
-                pipewire_input_target=self.input_target_var.get().strip() or None,
+                pipewire_output_target=self._strip_device_label(self.output_target_var.get()) or None,
+                pipewire_input_target=self._strip_device_label(self.input_target_var.get()) or None,
                 sample_rate=self.state.sample_rate,
                 duration_s=self.state.duration_s,
                 f_start_hz=self.state.f_start_hz,

@@ -353,8 +353,8 @@ def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, f
         fake_tk,
         'collect_pipewire_target_selection',
         lambda _config: PipeWireTargetSelection(
-            playback_targets=(SimpleNamespace(device_id='alsa_output.usb-dac'),),
-            capture_targets=(SimpleNamespace(device_id='alsa_input.usb-mic'),),
+            playback_targets=(SimpleNamespace(device_id='alsa_output.usb-dac', label='USB DAC'),),
+            capture_targets=(SimpleNamespace(device_id='alsa_input.usb-mic', label='USB Mic'),),
             selected_playback='alsa_output.usb-dac',
             selected_capture='alsa_input.usb-mic',
         ),
@@ -376,8 +376,8 @@ def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, f
 
     assert app.output_target_var.get() == 'alsa_output.usb-dac'
     assert app.input_target_var.get() == 'alsa_input.usb-mic'
-    assert app.output_target_options == ('alsa_output.usb-dac',)
-    assert app.input_target_options == ('alsa_input.usb-mic',)
+    assert app.output_target_options == ('alsa_output.usb-dac — USB DAC',)
+    assert app.input_target_options == ('alsa_input.usb-mic — USB Mic',)
 
 
 def test_create_app_keeps_manual_target_fields_usable_when_no_devices_are_detected(tmp_path, fake_tk, monkeypatch):
