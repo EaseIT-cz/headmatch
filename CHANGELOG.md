@@ -1,8 +1,28 @@
 # HeadMatch Changelog
 
+## 0.5.1
+
+### Features
+- APO refine mode: `headmatch refine-apo --preset eq.txt --recording rec.wav --out-dir refined/` loads an existing Equalizer APO preset and re-optimises bands against a fresh measurement using joint Nelder-Mead refinement. Report includes before/after error comparison.
+- GUI refine view: the Import APO screen now includes a "Refine against a measurement" section with recording WAV picker, optional target CSV, and output folder.
+- CI coverage reporting: pytest-cov runs on main pushes with coverage.xml artifact upload.
+
+### Performance
+- Python 3.10–3.13 CI matrix (unit tests across all four, integration on bookends).
+
+### Reliability
+- PipeWire capture pipe hardening: pw-record stdout→DEVNULL, stderr persisted to `pw-record-stderr.log` for post-mortem diagnosis.
+
+### Removed
+- `fit-offline` CLI alias removed (was identical to `fit`, no reported usage).
+
+### Tests
+- 432 → 436 deterministic tests (+4 refine mode tests).
+
 ## 0.5.0
 
 ### Features
+
 - Real headphone database search: `headmatch search-headphone "HD 650"` queries AutoEQ via GitHub API, returns matching models with copy-paste fetch commands. Results cached locally for 24 hours.
 - GUI search: new search field in Fetch Curve view with listbox results; selecting a model populates the URL for one-click download.
 - Live curve preview in target editor: Canvas widget renders the PCHIP-interpolated target curve in real time with log-frequency axis, dB grid, octave lines, and control point markers.
