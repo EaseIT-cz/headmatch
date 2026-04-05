@@ -4,6 +4,7 @@
 
 ### Fixes
 - Headphone search now matches model numbers without spaces ("HD650" finds "HD 650").
+- Fetch curve URLs with spaces now percent-encoded (fixes "can't contain control characters" error).
 - Fetch curve "Save to" field updates on every selection, not just the first.
 - APO refine GUI crash: `self.config_path` → `self.state.config_path`.
 - Target editor no longer resets all values to flat when adding a control point.
@@ -17,7 +18,7 @@
 - `_PlotGeometry` class for bidirectional freq↔pixel, dB↔pixel coordinate mapping.
 
 ### Tests
-- 436 → 446 deterministic tests (+10).
+- 436 → 447 deterministic tests (+11).
 
 ## 0.5.1
 
