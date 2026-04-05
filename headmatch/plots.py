@@ -90,7 +90,7 @@ def _write_svg(path: Path, width: int, height: int, title: str, body: list[str])
     lines = _svg_header(width, height, title)
     lines.extend(body)
     lines.append('</svg>')
-    path.write_text('\n'.join(lines) + '\n')
+    path.write_text('\n'.join(lines) + '\n', encoding="utf-8")
 
 
 def render_fit_graphs(

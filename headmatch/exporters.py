@@ -102,7 +102,7 @@ def export_camilladsp_filters_yaml(path: str | Path, bands_left: List[PEQBand], 
             },
         },
     }
-    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
 
 
@@ -124,7 +124,7 @@ def export_camilladsp_filter_snippet_yaml(path: str | Path, bands_left: List[PEQ
             {'channel': 1, 'names': right_names},
         ],
     }
-    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     return path
 
 
@@ -156,7 +156,7 @@ def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBa
         *_format_apo_channel('R', bands_right),
         '',
     ]
-    path.write_text('\n'.join(lines))
+    path.write_text('\n'.join(lines), encoding="utf-8")
     return path
 
 
@@ -191,5 +191,5 @@ def export_equalizer_apo_graphiceq_txt(
         _format_graphiceq_series(freqs_hz, gains_right_db),
         '',
     ]
-    path.write_text('\n'.join(lines))
+    path.write_text('\n'.join(lines), encoding="utf-8")
     return path

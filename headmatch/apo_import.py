@@ -90,4 +90,4 @@ def parse_apo_parametric(text: str) -> Tuple[List[PEQBand], List[PEQBand]]:
 
 def load_apo_preset(path: str | Path) -> Tuple[List[PEQBand], List[PEQBand]]:
     """Load an Equalizer APO .txt preset file."""
-    return parse_apo_parametric(Path(path).read_text())
+    return parse_apo_parametric(Path(path).read_text(encoding="utf-8"))

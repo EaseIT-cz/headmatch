@@ -21,3 +21,7 @@ headmatch-gui = "headmatch.gui:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "headmatch.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["headmatch*"]
+exclude = ["tests*"]

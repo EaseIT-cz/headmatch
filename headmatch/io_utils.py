@@ -26,7 +26,7 @@ def read_wav(path: str | Path) -> Tuple[np.ndarray, int]:
 def save_fr_csv(path: str | Path, freqs_hz: np.ndarray, values_db: np.ndarray, column_name: str = 'response_db') -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('w', newline='') as f:
+    with path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['frequency_hz', column_name])
         for f_hz, v in zip(freqs_hz, values_db):
@@ -149,4 +149,4 @@ def load_fr_csv(path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
 def save_json(path: str | Path, data: Dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2))
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")

@@ -50,7 +50,7 @@ def load_recent_runs(root: str | Path, *, limit: int = 10) -> list[RunHistoryEnt
     entries: list[RunHistoryEntry] = []
     for summary_path in sorted(_iter_summary_files(root_path), key=lambda p: p.stat().st_mtime, reverse=True):
         try:
-            payload = json.loads(summary_path.read_text())
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
             summary = FrontendRunSummary.from_dict(payload)
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             continue
@@ -104,7 +104,7 @@ def read_results_guide(path: str | Path) -> str:
     guide_path = Path(path).expanduser()
     if not guide_path.exists():
         return 'Results guide not found. Open run_summary.json in the same folder for the machine-readable overview.'
-    return guide_path.read_text()
+    return guide_path.read_text(encoding="utf-8")
 
 
 def build_history_selection(search_root: str | Path, config_root: str | Path | None = None, *, limit: int = 10) -> HistorySelection:

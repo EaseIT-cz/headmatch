@@ -116,7 +116,7 @@ def _fetch_and_cache_index() -> list[dict]:
         "entries": entries,
     }
     cache_path = _index_cache_path()
-    cache_path.write_text(json.dumps(cache, indent=1))
+    cache_path.write_text(json.dumps(cache, indent=1), encoding="utf-8")
     return entries
 
 
@@ -126,7 +126,7 @@ def _load_cached_index() -> list[dict] | None:
     if not cache_path.exists():
         return None
     try:
-        data = json.loads(cache_path.read_text())
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
         fetched_at = data.get("fetched_at", 0)
         if time.time() - fetched_at > INDEX_CACHE_TTL_SECONDS:
             return None

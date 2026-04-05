@@ -46,7 +46,7 @@ def load_config(path: str | Path | None = None) -> FrontendConfig:
 def save_config(config: FrontendConfig, path: str | Path | None = None) -> Path:
     config_path = Path(path).expanduser() if path is not None else default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(config.to_dict(), indent=2) + "\n")
+    config_path.write_text(json.dumps(config.to_dict(), indent=2) + "\n", encoding="utf-8")
     return config_path
 
 

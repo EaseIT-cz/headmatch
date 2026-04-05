@@ -55,7 +55,7 @@ def create_shortcut(gui_path: str | None = None) -> Path:
         )
     DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
     path = desktop_shortcut_path()
-    path.write_text(DESKTOP_ENTRY_TEMPLATE.format(gui_path=gui_path))
+    path.write_text(DESKTOP_ENTRY_TEMPLATE.format(gui_path=gui_path), encoding="utf-8")
     path.chmod(0o755)
     return path
 

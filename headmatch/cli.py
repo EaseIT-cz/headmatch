@@ -289,7 +289,7 @@ def print_run_confidence(cmd: str, args) -> None:
         return
 
     try:
-        summary = FrontendRunSummary.from_dict(json.loads(summary_path.read_text()))
+        summary = FrontendRunSummary.from_dict(json.loads(summary_path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
         return
 

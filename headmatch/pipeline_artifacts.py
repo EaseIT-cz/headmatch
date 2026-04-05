@@ -180,7 +180,7 @@ def write_results_guide(out_dir: Path, kind: str, trust_summary: ConfidenceSumma
     for step in next_steps:
         lines.append(f'- {step}')
     path = out_dir / RESULTS_GUIDE_NAME
-    path.write_text('\n'.join(lines) + '\n')
+    path.write_text('\n'.join(lines) + '\n', encoding="utf-8")
     return path
 
 
@@ -222,7 +222,7 @@ def write_fit_artifacts(
         lines = ['frequency_hz,left_target_db,right_target_db']
         for freq, left, right in zip(result.freqs_hz, left_target, right_target):
             lines.append(f'{float(freq)},{float(left)},{float(right)}')
-        (out_dir / 'target_curve.csv').write_text('\n'.join(lines) + '\n')
+        (out_dir / 'target_curve.csv').write_text('\n'.join(lines) + '\n', encoding="utf-8")
     render_fit_graphs(out_dir, result, target, sample_rate, left_bands, right_bands)
     summary = _run_summary(kind, out_dir, result, target, left_bands, right_bands, report, sample_rate, filter_budget)
     save_json(out_dir / 'fit_report.json', report)

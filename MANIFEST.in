@@ -1,0 +1,8 @@
+include LICENSE
+include LEGAL.md
+include README.md
+include CHANGELOG.md
+include pytest.ini
+include requirements-test.txt
+recursive-include tests *.py
+recursive-include docs *.md

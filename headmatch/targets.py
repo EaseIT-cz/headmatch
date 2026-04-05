@@ -103,7 +103,7 @@ def clone_target_from_source_target(source_curve_path: str | Path, target_curve_
     curve = TargetCurve(freqs_hz=grid, values_db=diff, name=f'clone_{source_path.stem}_to_{target_path.stem}', semantics='relative')
     if out_file:
         out_file.parent.mkdir(parents=True, exist_ok=True)
-        out_file.write_text('# headmatch_target_semantics=relative\n')
+        out_file.write_text('# headmatch_target_semantics=relative\n', encoding="utf-8")
         with out_file.open('a', encoding='utf-8', newline='') as handle:
             import csv
             writer = csv.writer(handle)
