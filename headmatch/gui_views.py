@@ -419,7 +419,7 @@ def _render_curve_preview(canvas, editor, width=560, height=200):
             coords.extend([x, y])
 
         if len(coords) >= 4:
-            canvas.create_line(*coords, fill="#00ccaa", width=2, smooth=True)
+            canvas.create_line(*coords, fill="#00ccaa", width=2, smooth=True, tags="curve_line")
 
         # Draw control points with tags for drag binding
         r = 5
@@ -488,13 +488,14 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         _sync_editor_and_redraw()
 
     # ── Canvas drag handlers ──
+    # Bound to the canvas itself (not individual items) so drag survives redraws.
 
     def _on_drag_start(event):
         """Find the closest control point within grab radius."""
         geom = _geom[0]
         if geom is None:
             return
-        closest_idx, closest_dist = None, 12  # grab radius in pixels
+        closest_idx, closest_dist = None, 14  # grab radius in pixels
         for i, point in enumerate(editor.points):
             px = geom.freq_to_x(point.freq_hz)
             py = geom.db_to_y(max(geom.db_min, min(geom.db_max, point.gain_db)))
@@ -504,7 +505,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         _drag_idx[0] = closest_idx
 
     def _on_drag_motion(event):
-        """Move the dragged control point to cursor position."""
+        """Move the dragged control point to cursor position (lightweight redraw)."""
         idx = _drag_idx[0]
         if idx is None:
             return
@@ -513,31 +514,69 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
             return
         freq = max(20.0, min(20000.0, geom.x_to_freq(event.x)))
         gain = max(-20.0, min(20.0, geom.y_to_db(event.y)))
-        editor.move_point(idx, freq, gain)
-        # Update matching widgets if they exist
-        if idx < len(_vars["freq"]):
-            _vars["freq"][idx].set(f"{freq:.0f}")
-            _vars["gain"][idx].set(f"{gain:.1f}")
-        if idx < len(_vars["gain_labels"]):
-            _vars["gain_labels"][idx].config(text=f"{gain:.1f} dB")
-        if idx < len(_vars["gain_scales"]):
-            try:
-                _vars["gain_scales"][idx].set(gain)
-            except Exception:
-                pass
-        _geom[0] = _render_curve_preview(canvas, editor)
-        _bind_drag_events()
+
+        # Update the editor model — but move_point re-sorts, so track by identity
+        old_point = editor.points[idx]
+        editor.points[idx] = type(old_point)(freq, gain)
+        editor.points.sort(key=lambda p: p.freq_hz)
+        # Find the new index after sort
+        new_idx = next(i for i, p in enumerate(editor.points)
+                       if p.freq_hz == freq and p.gain_db == gain)
+        _drag_idx[0] = new_idx
+
+        # Lightweight canvas update: delete curve + points, redraw them
+        canvas.delete("curve_line")
+        canvas.delete("control_point")
+
+        import numpy as np
+        try:
+            freqs, values = editor.evaluate()
+            if len(freqs) >= 2:
+                coords = []
+                for f, v in zip(freqs, values):
+                    x = geom.freq_to_x(float(f))
+                    y = geom.db_to_y(float(max(geom.db_min, min(geom.db_max, v))))
+                    coords.extend([x, y])
+                if len(coords) >= 4:
+                    canvas.create_line(*coords, fill="#00ccaa", width=2, smooth=True, tags="curve_line")
+        except Exception:
+            pass
+
+        r = 5
+        for i, point in enumerate(editor.points):
+            px = geom.freq_to_x(point.freq_hz)
+            py = geom.db_to_y(max(geom.db_min, min(geom.db_max, point.gain_db)))
+            fill = "#ffcc00" if i == new_idx else "#ff6644"
+            canvas.create_oval(px - r, py - r, px + r, py + r,
+                              fill=fill, outline="#ffaa88", width=1, tags="control_point")
 
     def _on_drag_end(_event):
+        """Finalize drag: do a full redraw and sync widgets."""
+        idx = _drag_idx[0]
         _drag_idx[0] = None
+        if idx is None:
+            return
+        # Full redraw to get clean state
+        _geom[0] = _render_curve_preview(canvas, editor)
+        # Sync widgets to match final editor state
+        if _vars["setup_done"]:
+            for i, point in enumerate(editor.points):
+                if i < len(_vars["freq"]):
+                    _vars["freq"][i].set(f"{point.freq_hz:.0f}")
+                    _vars["gain"][i].set(f"{point.gain_db:.1f}")
+                if i < len(_vars["gain_labels"]):
+                    _vars["gain_labels"][i].config(text=f"{point.gain_db:.1f} dB")
+                if i < len(_vars["gain_scales"]):
+                    try:
+                        _vars["setup_done"] = False  # suppress sync during set()
+                        _vars["gain_scales"][i].set(point.gain_db)
+                        _vars["setup_done"] = True
+                    except Exception:
+                        _vars["setup_done"] = True
 
-    def _bind_drag_events():
-        """Re-bind drag events after canvas redraw (items get recreated)."""
-        canvas.tag_bind("control_point", "<ButtonPress-1>", _on_drag_start)
-        canvas.tag_bind("control_point", "<B1-Motion>", _on_drag_motion)
-        canvas.tag_bind("control_point", "<ButtonRelease-1>", _on_drag_end)
-
-    _bind_drag_events()
+    canvas.bind("<ButtonPress-1>", _on_drag_start)
+    canvas.bind("<B1-Motion>", _on_drag_motion)
+    canvas.bind("<ButtonRelease-1>", _on_drag_end)
 
     # ── Control points table ──
 
