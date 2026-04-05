@@ -37,7 +37,7 @@ jobs:
           pip install pyinstaller
 
       - name: Verify tkinter is available
-        run: python -c "import tkinter; print(f'tkinter OK: Tcl {tkinter.TclVersion}, Tk {tkinter.TkVersion}')"
+        run: python -c "import tkinter; print('tkinter OK')"
 
       - name: Build binary
         run: python scripts/build.py --clean
