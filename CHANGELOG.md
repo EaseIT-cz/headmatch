@@ -1,5 +1,33 @@
 # HeadMatch Changelog
 
+## 0.6.0
+
+### macOS support
+- PortAudio audio backend via `sounddevice`: device discovery, play/record, doctor checks.
+- Platform-aware config/cache paths (~/Library on macOS, %APPDATA% on Windows).
+- Install with `pip install headmatch[portaudio]`.
+
+### Architecture
+- AudioBackend protocol with pluggable backends (PipeWire, PortAudio).
+- measure.py split into audio_backend.py + backend_pipewire.py + backend_portaudio.py.
+- Backward-compatible API wrappers preserved.
+
+### GUI
+- Device dropdowns show ID + label.
+- Default output directory: ~/Documents/HeadMatch/session_01.
+- Config auto-saved after every successful run.
+- Desktop shortcut button hidden on non-Linux.
+
+### Config
+- New field names: output_target / input_target (old names still accepted).
+- Legacy out/session_01 default auto-replaced.
+
+### Text
+- GUI and CLI use platform-neutral audio terminology.
+
+### Tests
+- 436 → 507 deterministic tests (+71).
+
 ## 0.5.2
 
 ### Fixes

@@ -113,8 +113,9 @@ def render_setup_check(ttk, frame, *, report: str, on_refresh, on_measure) -> No
     ttk.Button(actions, text="Go to Measure", command=on_measure).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
     # Desktop shortcut button
+    import sys
     from .desktop import shortcut_exists, create_shortcut, find_gui_binary
-    gui = find_gui_binary()
+    gui = find_gui_binary() if sys.platform == "linux" else None
     if gui:
         def _toggle_shortcut():
             try:
