@@ -22,7 +22,7 @@ if os.path.isdir(targets_dir):
             )
 
 a = Analysis(
-    ['headmatch/gui.py'],
+    ['scripts/entry_gui.py'],
     pathex=['.'],
     binaries=[],
     datas=example_targets,
@@ -95,7 +95,7 @@ exe = EXE(
 # ── CLI binary ──
 
 cli_a = Analysis(
-    ['headmatch/cli.py'],
+    ['scripts/entry_cli.py'],
     pathex=['.'],
     binaries=[],
     datas=example_targets,
