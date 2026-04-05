@@ -176,9 +176,16 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--url", required=True, help="URL to a raw CSV frequency response file.")
     p.add_argument("--out", required=True, help="Local path to save the downloaded curve.")
 
-    p = sub.add_parser("import-apo", help="Import an Equalizer APO parametric preset and re-optimise against a measurement.")
+    p = sub.add_parser("import-apo", help="Import an Equalizer APO parametric preset and convert to other formats.")
     p.add_argument("--preset", required=True, help="Path to an Equalizer APO .txt parametric preset.")
     p.add_argument("--out-dir", required=True, help="Output directory for converted preset files.")
+
+    p = sub.add_parser("refine-apo", help="Refine an imported APO preset against a new measurement.")
+    p.add_argument("--preset", required=True, help="Path to an Equalizer APO .txt parametric preset to refine.")
+    p.add_argument("--recording", required=True, help="Path to a recording WAV to fit against.")
+    p.add_argument("--out-dir", required=True, help="Output directory for refined results.")
+    p.add_argument("--target-csv", default=None, help="Target curve CSV (flat if omitted).")
+    add_common_sweep_args(p, config)
 
     p = sub.add_parser("clone-target", help="Create a clone target curve from source and target FR CSVs.")
     p.add_argument("--source-csv", required=True)
@@ -500,6 +507,20 @@ def main(argv: list[str] | None = None) -> None:
             export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands)
             export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
             print(f"Exported to {out_dir}: equalizer_apo.txt, camilladsp_full.yaml, camilladsp_filters_only.yaml")
+        elif args.cmd == "refine-apo":
+            from .apo_refine import refine_apo_preset
+            report = refine_apo_preset(
+                preset_path=args.preset,
+                recording_wav=args.recording,
+                sweep_spec=spec_from_args(args),
+                out_dir=args.out_dir,
+                target_path=args.target_csv,
+            )
+            orig = report.get('original_error', {})
+            print(f"Refined preset from {args.preset}")
+            print(f"  Before: L {orig.get('left_rms', 0):.2f} dB RMS, R {orig.get('right_rms', 0):.2f} dB RMS")
+            print(f"  After:  L {report['predicted_left_rms_error_db']:.2f} dB RMS, R {report['predicted_right_rms_error_db']:.2f} dB RMS")
+            print(f"  Output: {args.out_dir}")
         elif args.cmd == "clone-target":
             build_clone_curve(args.source_csv, args.target_csv, args.out)
         elif args.cmd == "iterate":
