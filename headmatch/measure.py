@@ -466,7 +466,11 @@ def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: P
     if device.output_target:
         play_cmd.extend(["--target", device.output_target])
 
-    rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # Write pw-record stderr to a file for post-mortem diagnostics.
+    # stdout is unused — DEVNULL prevents pipe-buffer deadlocks on long recordings.
+    stderr_path = paths.recording_wav.parent / 'pw-record-stderr.log'
+    stderr_file = open(stderr_path, 'w', encoding='utf-8')
+    rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.DEVNULL, stderr=stderr_file)
     try:
         time.sleep(max(0.35, spec.pre_silence_s * 0.75))
         play_result = subprocess.run(play_cmd, capture_output=True, text=True, check=False)
@@ -487,11 +491,12 @@ def run_pipewire_measurement(spec: SweepSpec, paths: MeasurementPaths, device: P
         except subprocess.TimeoutExpired:
             rec_proc.kill()
             rec_proc.wait(timeout=2)
+        stderr_file.close()
 
     if not paths.recording_wav.exists() or paths.recording_wav.stat().st_size == 0:
         stderr = ''
-        if rec_proc.stderr is not None:
-            stderr = rec_proc.stderr.read().strip()
+        if stderr_path.exists():
+            stderr = stderr_path.read_text(encoding='utf-8').strip()
         raise RuntimeError(
             'PipeWire capture did not produce a usable WAV file. '
             "Confirm the playback/capture targets, run 'headmatch list-targets' if needed, and try again."
