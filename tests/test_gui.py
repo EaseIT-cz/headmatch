@@ -165,7 +165,7 @@ def test_load_gui_state_preloads_saved_config_values(tmp_path):
 def test_load_gui_state_uses_safe_defaults_when_config_is_empty(tmp_path):
     state = load_gui_state(config_loader=lambda _path=None: (FrontendConfig(), tmp_path / "config.json", True))
 
-    assert state.default_output_dir == "out/session_01"
+    assert "Documents/HeadMatch/session_01" in state.default_output_dir
     assert state.preferred_target_csv == ""
     assert state.pipewire_output_target == ""
     assert state.pipewire_input_target == ""
