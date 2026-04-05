@@ -592,8 +592,7 @@ class HeadMatchGuiApp:
         if idx < len(self._search_results_data):
             entry = self._search_results_data[idx]
             self.fetch_url_var.set(entry.raw_csv_url)
-            if not self.fetch_output_var.get().strip():
-                self.fetch_output_var.set(f"{entry.name}.csv")
+            self.fetch_output_var.set(f"{entry.name}.csv")
             self._show_status(f"Selected: {entry.name} — click 'Fetch and save' to download.")
 
     def _choose_fetch_output(self) -> None:
