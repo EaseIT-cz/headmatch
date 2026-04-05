@@ -374,8 +374,8 @@ def test_create_app_loads_pipewire_target_dropdowns_with_saved_first(tmp_path, f
         ),
     )
 
-    assert app.output_target_var.get() == 'alsa_output.usb-dac'
-    assert app.input_target_var.get() == 'alsa_input.usb-mic'
+    assert app.output_target_var.get() == 'alsa_output.usb-dac — USB DAC'
+    assert app.input_target_var.get() == 'alsa_input.usb-mic — USB Mic'
     assert app.output_target_options == ('alsa_output.usb-dac — USB DAC',)
     assert app.input_target_options == ('alsa_input.usb-mic — USB Mic',)
 

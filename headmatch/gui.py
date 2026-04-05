@@ -186,8 +186,9 @@ class HeadMatchGuiApp:
         )
         self.output_target_options = tuple(f"{target.device_id} — {target.label}" for target in selection.playback_targets)
         self.input_target_options = tuple(f"{target.device_id} — {target.label}" for target in selection.capture_targets)
-        self.output_target_var.set(selection.selected_playback)
-        self.input_target_var.set(selection.selected_capture)
+        # Resolve bare device IDs to display strings
+        self.output_target_var.set(self._resolve_device_display(selection.selected_playback, self.output_target_options))
+        self.input_target_var.set(self._resolve_device_display(selection.selected_capture, self.input_target_options))
 
     def _configure_theme_defaults(self) -> None:
         style_factory = getattr(self._ttk, "Style", None)
@@ -588,6 +589,15 @@ class HeadMatchGuiApp:
             on_refresh=lambda: self.show_view("history"),
         )
 
+
+    @staticmethod
+    def _resolve_device_display(device_id: str, options: tuple[str, ...]) -> str:
+        """Find the 'ID — Label' display string matching a bare device ID."""
+        device_id = device_id.strip()
+        for opt in options:
+            if opt.startswith(device_id + " — "):
+                return opt
+        return device_id  # fallback to raw ID if no match
 
     @staticmethod
     def _strip_device_label(value: str) -> str:
