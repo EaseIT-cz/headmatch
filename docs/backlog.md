@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.5.1 shipped. 439 deterministic tests.
+Version 0.5.1 shipped. 443 deterministic tests.
 
 Key capabilities:
 - GUI-first headphone measurement and EQ tool (CLI + TUI also supported)
@@ -27,8 +27,8 @@ Key capabilities:
 - (no blockers — ready for next release)
 
 ### Next
-- Drag-to-move control points directly on target editor canvas (sliders now live-update; canvas drag is the remaining step)
-- GUI shell/view split — extract view rendering from gui.py monolith into smaller components
+- Further target editor polish — keyboard shortcuts, undo/redo for control point edits
+- GUI shell/view split — gui.py is 865 lines; further extraction possible (online wizard handlers, background task machinery)
 - Extract repeated CLI parser setup into shared helpers
 - Cache fixed-profile basis responses for repeated GraphicEQ runs
 - Add richer PipeWire error diagnostics (device not found, permission denied, timeout)
