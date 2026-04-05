@@ -2,31 +2,17 @@
 
 ## Current status
 
-The shipped product includes:
-- CLI with one-line confidence verdict, positive-int validation, user-friendly error messages
-- GUI with confidence badges, graph display, scrollable diagnostics, target editor with live curve preview (load/save/edit), APO import, headphone database search, curve fetch, iteration mode selector, desktop shortcut management
-- TUI backup workflow (maintenance-only)
-- APO AutoEQ preset import and re-export
-- Real headphone database search via GitHub API with local 24h cache
-- HTTPS-only community curve fetching with 5 MB cap and UTF-8 validation
+Version 0.5.0 shipped. 432 deterministic tests.
+
+Key capabilities:
+- GUI-first headphone measurement and EQ tool (CLI + TUI also supported)
+- Real headphone database search via GitHub API with local cache
+- Live curve preview in target editor
+- Conservative PEQ fitting with Nelder-Mead refinement
+- Equalizer APO (parametric + GraphicEQ) and CamillaDSP export
+- Clone-target headphone-to-headphone workflow
 - Multi-pass averaging iteration mode
-- Conservative PEQ fitting with joint Nelder-Mead refinement
-- Wiener-regularised frequency response estimation
-- Local-maxima alignment search via scipy.signal.find_peaks (robust to room echoes)
-- Raw residual bandwidth estimation for accurate narrow-feature Q
-- O(N) fractional-octave smoothing via scipy gaussian_filter1d
-- Direct biquad evaluation with explicit shelf slope/Q semantics
-- Equalizer APO parametric and GraphicEQ preset export
-- CamillaDSP export with correct shelf Q/S conversion
-- Fixed-band GraphicEQ fitting (10-band and 31-band profiles)
-- Clone-target support with explicit relative/absolute semantics
-- Mono and duplicated-channel capture rejection (all channel counts)
-- Confidence scoring with named threshold constants and injectable weights
-- Type-safe PEQBand.kind (Literal) with explicit slope field for shelf bands
-- Desktop shortcut management (CLI + GUI)
-- CI with explicit least-privilege permissions and auto-discovery of test files
-- Pipeline split into orchestration / artifacts / confidence modules
-- 432 deterministic tests including 241 RBJ biquad coefficient reference tests
+- Confidence scoring with plain-language interpretation
 
 ## Active
 
@@ -35,25 +21,26 @@ The shipped product includes:
 
 ## Future work
 
-### Next
-- Fix CHANGELOG header (still says "0.2.2 in development", should reflect 0.4.5)
-- Add pytest.ini with pythonpath config
-- Verify MANIFEST.in / setuptools include rules for sdist
-- Add Python 3.10–3.13 CI matrix
-- Use encoding="utf-8" consistently across all file I/O
-- PipeWire capture pipe hardening (stdout→DEVNULL, stderr to file)
-- Add CI coverage reporting as artifact
-- APO import "refine" mode (re-optimise imported preset against a fresh measurement)
+### Now (next release candidates)
+- APO import "refine" mode — load an existing parametric preset and re-optimise against a fresh measurement (partially scaffolded in import-apo, needs fit integration)
+- Python 3.10–3.13 CI matrix — validate compatibility beyond the current 3.13-only CI
+- PipeWire capture pipe hardening — stdout→DEVNULL for pw-record, persist stderr to file for diagnosis
 
-### Later
-- Extract repeated CLI parser setup into shared helpers
-- Cache fixed-profile basis responses for repeated runs
-- Add richer PipeWire error diagnostics
-- Add export formats beyond CamillaDSP and APO if demand exists
+### Next (medium-term improvements)
 - Drag-to-move control points on target editor canvas
-- Asynchronous device support and clock drift compensation
-- Automated HRTF target integration and scaling
+- GUI shell/view split — extract view rendering from gui.py monolith into smaller components (flagged in architecture.md)
+- Extract repeated CLI parser setup into shared helpers
+- Cache fixed-profile basis responses for repeated GraphicEQ runs
+- Add CI coverage reporting as artifact
+- Add richer PipeWire error diagnostics (device not found, permission denied, timeout)
+- Deprecate fit-offline alias (keep code path, warn on use)
+
+### Later (strategic / larger scope)
+- Add export formats beyond CamillaDSP and APO if demand exists
 - CamillaDSP live-update integration via WebSocket API
-- Closed-loop EQ refinement (depends on CamillaDSP WebSocket)
+- Closed-loop EQ refinement (measure → apply → re-measure; depends on CamillaDSP WebSocket)
 - Windows/macOS support (platform-aware measure.py backends)
 - Room correction / speaker measurement mode
+- Asynchronous device support and clock drift compensation
+- Automated HRTF target integration and scaling
+- Safe mode vs advanced mode UI split (if product accumulates too many knobs)
