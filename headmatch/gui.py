@@ -82,6 +82,16 @@ def build_doctor_report(config_path: Path, config: FrontendConfig) -> str:
 
 
 
+_LEGACY_OUTPUT_DIRS = {"out/session_01", "out\\session_01"}
+
+
+def _resolve_default_output_dir(saved: str | None) -> str:
+    """Return a sensible default output dir, ignoring legacy defaults."""
+    if saved and saved.strip() not in _LEGACY_OUTPUT_DIRS:
+        return saved
+    return str(Path.home() / "Documents" / "HeadMatch" / "session_01")
+
+
 def load_gui_state(
     config_path: str | Path | None = None,
     *,
@@ -94,9 +104,7 @@ def load_gui_state(
         config_path=Path(resolved_path),
         config_created=created,
         current_view="measure-online",
-        default_output_dir=config.default_output_dir or str(
-            Path.home() / "Documents" / "HeadMatch" / "session_01"
-        ),
+        default_output_dir=_resolve_default_output_dir(config.default_output_dir),
         preferred_target_csv=config.preferred_target_csv or "",
         pipewire_output_target=config.pipewire_output_target or "",
         pipewire_input_target=config.pipewire_input_target or "",
