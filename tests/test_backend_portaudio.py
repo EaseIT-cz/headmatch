@@ -153,9 +153,11 @@ def test_resolve_device_selection(mock_sd_factory):
 @patch("headmatch.backend_portaudio._import_sd")
 def test_play_and_record(mock_sd_factory, tmp_path):
     mock_sd = MagicMock()
-    # playrec returns a 2-channel numpy array
     fake_recording = np.random.randn(48000, 2).astype(np.float64)
     mock_sd.playrec.return_value = fake_recording
+    mock_sd.query_devices.side_effect = lambda dev, kind=None: {
+        "max_output_channels": 2, "max_input_channels": 2, "default_samplerate": 48000.0,
+    }
     mock_sd_factory.return_value = mock_sd
 
     from headmatch.signals import SweepSpec
@@ -180,6 +182,9 @@ def test_play_and_record_with_name_targets(mock_sd_factory, tmp_path):
     mock_sd = MagicMock()
     fake_recording = np.random.randn(48000, 2).astype(np.float64)
     mock_sd.playrec.return_value = fake_recording
+    mock_sd.query_devices.side_effect = lambda dev, kind=None: {
+        "max_output_channels": 2, "max_input_channels": 2, "default_samplerate": 48000.0,
+    }
     mock_sd_factory.return_value = mock_sd
 
     from headmatch.signals import SweepSpec
@@ -204,6 +209,9 @@ def test_play_and_record_with_name_targets(mock_sd_factory, tmp_path):
 def test_play_and_record_failure(mock_sd_factory, tmp_path):
     mock_sd = MagicMock()
     mock_sd.playrec.side_effect = Exception("Device not available")
+    mock_sd.query_devices.side_effect = lambda dev, kind=None: {
+        "max_output_channels": 2, "max_input_channels": 2,
+    }
     mock_sd_factory.return_value = mock_sd
 
     from headmatch.signals import SweepSpec

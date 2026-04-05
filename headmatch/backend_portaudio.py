@@ -199,13 +199,28 @@ class PortAudioBackend:
             except ValueError:
                 input_device = device.input_target
 
+        # Query device capabilities to avoid channel/samplerate mismatches
+        try:
+            out_info = sd.query_devices(output_device, kind='output')
+            in_info = sd.query_devices(input_device, kind='input')
+        except Exception:
+            out_info, in_info = {}, {}
+
+        out_channels = min(2, out_info.get('max_output_channels', 2))
+        in_channels = min(2, in_info.get('max_input_channels', 2))
+
+        # If output is mono, downmix the stereo sweep
+        if out_channels == 1 and sweep_data.ndim == 2 and sweep_data.shape[1] >= 2:
+            play_data = sweep_data.mean(axis=1, keepdims=True)
+        else:
+            play_data = sweep_data
+
         # Simultaneous play and record
         try:
             recording = sd.playrec(
-                sweep_data,
+                play_data,
                 samplerate=spec.sample_rate,
-                channels=2,
-                input_mapping=[1, 2],
+                channels=in_channels,
                 device=(input_device, output_device),
                 blocking=True,
             )
