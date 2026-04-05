@@ -1,5 +1,24 @@
 # HeadMatch Changelog
 
+## 0.5.2
+
+### Fixes
+- Headphone search now matches model numbers without spaces ("HD650" finds "HD 650").
+- Fetch curve "Save to" field updates on every selection, not just the first.
+- APO refine GUI crash: `self.config_path` → `self.state.config_path`.
+- Target editor no longer resets all values to flat when adding a control point.
+- Canvas drag-to-move works smoothly (events bound to canvas, not destroyed items).
+
+### Improvements
+- Target editor: live-updating sliders, real-time curve preview, no "Apply changes" button.
+- Canvas drag-to-move with log-freq/dB coordinate mapping and yellow highlight during drag.
+- Curve preview moved above control points table; scrollable table for >8 points.
+- GUI view extraction: Import APO, Fetch Curve, History views moved to gui_views.py.
+- `_PlotGeometry` class for bidirectional freq↔pixel, dB↔pixel coordinate mapping.
+
+### Tests
+- 436 → 446 deterministic tests (+10).
+
 ## 0.5.1
 
 ### Features

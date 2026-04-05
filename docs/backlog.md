@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.5.1 shipped. 443 deterministic tests.
+Version 0.5.2 shipped. 446 deterministic tests.
 
 Key capabilities:
 - GUI-first headphone measurement and EQ tool (CLI + TUI also supported)
