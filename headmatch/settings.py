@@ -12,10 +12,8 @@ CONFIG_FILENAME = "config.json"
 
 
 def default_config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    if xdg:
-        return Path(xdg).expanduser() / "headmatch"
-    return Path.home() / ".config" / "headmatch"
+    from .paths import config_dir
+    return config_dir()
 
 
 def default_config_path() -> Path:

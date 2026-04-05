@@ -29,18 +29,8 @@ _USER_AGENT = "headmatch/0.4.6"
 
 def _cache_dir() -> Path:
     """Return the headmatch cache directory, creating it if needed."""
-    xdg = os.environ.get("XDG_CACHE_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".cache"
-    d = base / "headmatch"
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-    except OSError:
-        # Fallback to temp directory if home/xdg is not writable
-        import tempfile
-        d = Path(tempfile.gettempdir()) / "headmatch-cache"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+    from .paths import cache_dir
+    return cache_dir()
 
 
 def _index_cache_path() -> Path:
