@@ -201,10 +201,10 @@ def test_export_equalizer_apo_graphiceq_txt_uses_official_graphiceq_syntax(tmp_p
 
     assert '; headmatch Equalizer APO GraphicEQ preset' in text
     assert 'Channel: L' in text
-    assert 'Preamp: -3.50 dB' in text
+    assert 'Preamp: -5.00 dB' in text
     assert 'GraphicEQ: 20.00 3.50; 1000.00 -1.25; 20000.00 0.00' in text
     assert 'Channel: R' in text
-    assert 'Preamp: -1.00 dB' in text
+    assert 'Preamp: -2.50 dB' in text
     assert 'GraphicEQ: 20.00 0.00; 1000.00 1.00; 20000.00 -2.50' in text
 
 
