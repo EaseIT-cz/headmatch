@@ -2,224 +2,132 @@
 
 ## 0.6.1
 
-### Platform fixes
-- macOS test suite now passes with platform-specific skips for PipeWire tests.
-- XDG config path test skipped on non-Linux platforms (XDG is Linux-only).
+### Platform stability
+- macOS test suite passes with platform-specific skips for PipeWire-only tests.
+- XDG config path test skipped on non-Linux (XDG is Linux-specific).
 - PortAudio backend test skipped on macOS (requires hardware).
+- 520+ deterministic tests across platforms.
 
-### Binary builds
-- Linux x64 standalone binary with OpenBLAS ELF alignment fix (numpy<2, scipy<1.14).
-- macOS ARM64 standalone binary with sounddevice bundled for PortAudio support.
-- scipy.interpolate added to PyInstaller hiddenimports (fixes target editor crash).
+### Standalone binaries
+- Linux x64 one-file PyInstaller executable.
+- macOS ARM64 native build with sounddevice bundled.
+- Intel macOS build removed (all modern Macs are ARM64).
 
 ### EQ clipping prediction
-- New `headmatch/eq_clipping.py` module with `EQClippingAssessment` dataclass.
-- `assess_eq_clipping()` forecasts whether fitted EQ profile will cause digital clipping.
-- Computes required preamp gain to prevent clipping (preamp = -max_positive_boost).
-- Quality concern warnings for moderate (>6 dB) and severe (>12 dB) headroom loss.
-- Integrated into `pipeline.fit_from_measurement()` — automatically included in fit report.
-- 13 new tests in `tests/test_eq_clipping.py`.
+- `assess_eq_clipping()` forecasts digital clipping risk.
+- Computes preamp gain to prevent clipping.
+- Quality warnings for headroom loss.
+- 13 new tests.
 
-### Documentation
-- Standalone binaries section in README with macOS quarantine bypass.
-- Test count: 507 → 520+ (+13).
+### Fixes
+- OpenBLAS ELF alignment: numpy<2, scipy<1.14.
+- Target editor crash: scipy.interpolate in hiddenimports.
 
 ## 0.6.0
 
 ### macOS support
-- PortAudio audio backend via `sounddevice`: device discovery, play/record, doctor checks.
-- Platform-aware config/cache paths (~/Library on macOS, %APPDATA% on Windows).
+- PortAudio audio backend via `sounddevice`.
+- Platform-aware config/cache paths.
 - Install with `pip install headmatch[portaudio]`.
 
 ### Architecture
-- AudioBackend protocol with pluggable backends (PipeWire, PortAudio).
-- measure.py split into audio_backend.py + backend_pipewire.py + backend_portaudio.py.
-- Backward-compatible API wrappers preserved.
+- AudioBackend protocol with pluggable backends.
+- measure.py split into backend_pipewire.py + backend_portaudio.py.
 
 ### GUI
 - Device dropdowns show ID + label.
-- Default output directory: ~/Documents/HeadMatch/session_01.
-- Config auto-saved after every successful run.
-- Desktop shortcut button hidden on non-Linux.
-
-### Config
-- New field names: output_target / input_target (old names still accepted).
-- Legacy out/session_01 default auto-replaced.
-
-### Text
-- GUI and CLI use platform-neutral audio terminology.
+- Config auto-saved after every run.
 
 ### Tests
-- 436 → 507 deterministic tests (+71).
+- 436 → 507 tests (+71).
 
 ## 0.5.2
 
 ### Fixes
-- Headphone search now matches model numbers without spaces ("HD650" finds "HD 650").
-- Fetch curve URLs with spaces now percent-encoded (fixes "can't contain control characters" error).
-- Fetch curve "Save to" field updates on every selection, not just the first.
-- APO refine GUI crash: `self.config_path` → `self.state.config_path`.
-- Target editor no longer resets all values to flat when adding a control point.
-- Canvas drag-to-move works smoothly (events bound to canvas, not destroyed items).
-
-### Improvements
-- Target editor: live-updating sliders, real-time curve preview, no "Apply changes" button.
-- Canvas drag-to-move with log-freq/dB coordinate mapping and yellow highlight during drag.
-- Curve preview moved above control points table; scrollable table for >8 points.
-- GUI view extraction: Import APO, Fetch Curve, History views moved to gui_views.py.
-- `_PlotGeometry` class for bidirectional freq↔pixel, dB↔pixel coordinate mapping.
+- Headphone search matches without spaces ("HD650" finds "HD 650").
+- Fetch curve URLs percent-encoded.
+- Target editor canvas drag-to-move.
 
 ### Tests
-- 436 → 447 deterministic tests (+11).
+- 436 → 447 tests (+11).
 
 ## 0.5.1
 
 ### Features
-- APO refine mode: `headmatch refine-apo --preset eq.txt --recording rec.wav --out-dir refined/` loads an existing Equalizer APO preset and re-optimises bands against a fresh measurement using joint Nelder-Mead refinement. Report includes before/after error comparison.
-- GUI refine view: the Import APO screen now includes a "Refine against a measurement" section with recording WAV picker, optional target CSV, and output folder.
-- CI coverage reporting: pytest-cov runs on main pushes with coverage.xml artifact upload.
-
-### Performance
-- Python 3.10–3.13 CI matrix (unit tests across all four, integration on bookends).
-
-### Reliability
-- PipeWire capture pipe hardening: pw-record stdout→DEVNULL, stderr persisted to `pw-record-stderr.log` for post-mortem diagnosis.
-
-### Removed
-- `fit-offline` CLI alias removed (was identical to `fit`, no reported usage).
+- APO refine mode: re-optimise presets against fresh measurement.
+- CI coverage reporting.
 
 ### Tests
-- 432 → 436 deterministic tests (+4 refine mode tests).
+- 432 → 436 tests.
 
 ## 0.5.0
 
 ### Features
-
-- Real headphone database search: `headmatch search-headphone "HD 650"` queries AutoEQ via GitHub API, returns matching models with copy-paste fetch commands. Results cached locally for 24 hours.
-- GUI search: new search field in Fetch Curve view with listbox results; selecting a model populates the URL for one-click download.
-- Live curve preview in target editor: Canvas widget renders the PCHIP-interpolated target curve in real time with log-frequency axis, dB grid, octave lines, and control point markers.
+- Real headphone database search via AutoEQ GitHub API.
+- Live curve preview in target editor.
 
 ### Performance
-- O(N) fractional-octave smoothing replaces O(N²) matrix approach. Default grid: identical output (<0.001 dB). Dense 10k-point curves: ~4ms instead of quadratic blowup.
-- Alignment peak detection uses `scipy.signal.find_peaks` (C-backed) instead of Python loop.
-
-### Architecture
-- Explicit shelf parameter semantics: `PEQBand.slope` field distinguishes shelf slope S from peaking Q. Backward compatible — existing code that sets `q` for shelves still works.
-- Pipeline split: `pipeline.py` (547→267 lines) extracted into `pipeline_confidence.py` and `pipeline_artifacts.py`. Public API unchanged.
-
-### Fixes
-- UTF-8 encoding specified on all file I/O (prevents locale-dependent failures on Windows).
-- `fetch_curve_from_url` raises `ValueError` on non-UTF-8 downloads instead of `UnicodeDecodeError`.
-- Cache directory falls back to temp dir when home is read-only.
-
-### Packaging
-- Added `pytest.ini` with `pythonpath` config (tests runnable without editable install).
-- Added `MANIFEST.in` for complete sdist (LICENSE, docs, tests, changelog).
-- Added `[tool.setuptools.packages.find]` to exclude `tests/` from wheel.
+- O(N) fractional-octave smoothing.
+- C-backed alignment peak detection.
 
 ### Tests
-- 401 → 432 deterministic tests (+31).
-- New coverage: smoothing regression/scalability, shelf semantics, alignment robustness, headphone DB search/caching/fallback, curve preview rendering.
+- 401 → 432 tests (+31).
 
 ## 0.4.5
 
-### Fixes
-- Target editor `from_csv` now loads all points from small CSVs and intelligently downsamples dense grids to ~24 control points (was hardcoded to 8).
+- Target editor CSV loading for small files.
 
 ## 0.4.4
 
-### Fixes
-- Dense GraphicEQ export now writes the PEQ-fitted response instead of the raw correction target, reducing clipping risk. (Note: further GraphicEQ clipping investigation tracked in TASK-077.)
-
-### Features
-- Target editor: per-row "+" add button inserts points between neighbours instead of a single confusing "Add point" button.
-- Target editor: "Load CSV" button to load existing target curves for editing.
-- History view: "Browse…" button for the search folder.
-- Desktop shortcut management: `headmatch create-shortcut` / `remove-shortcut` CLI commands, GUI toggle button in Setup Check, and `headmatch doctor` integration.
+- Dense GraphicEQ export uses PEQ-fitted response.
+- Desktop shortcut management.
 
 ## 0.4.1
 
 ### Fixes
-- `--iteration-mode` now passed through CLI to pipeline (was silently ignored).
-- `import-apo` re-exports imported bands to APO + CamillaDSP formats (was ignoring them).
-- Windows graph opener uses `os.startfile()` instead of `shell=True` (security fix).
-- `fetch-curve` restricted to HTTPS-only with 5 MB response cap.
-- Added `tests/__init__.py` for sdist test suite compatibility.
-- Merged duplicate `fit`/`fit-offline` CLI branches.
-- `search-headphone` now honestly states it is a placeholder.
-- Config JSON parse errors produce user-friendly messages.
-- `--iterations` and `--max-filters` reject negative/zero values.
+- `--iteration-mode` passed through CLI.
+- Windows security fix for graph opener.
 
 ### Features
-- GUI: Target Editor, Import APO, Fetch Curve, and iteration mode views added (full CLI parity).
+- GUI parity with CLI.
 
 ## 0.4.0
 
 ### Performance
-- Vectorised fractional-octave smoothing (~50× faster).
-- Direct biquad transfer function evaluation replacing `scipy.signal.freqz` (3-5× faster).
+- Vectorised smoothing (~50× faster).
+- Direct biquad evaluation (3-5× faster).
 
 ### Features
-- APO AutoEQ preset import (`headmatch import-apo`).
-- Community headphone database integration (`headmatch search-headphone`, `headmatch fetch-curve`).
-- GUI target curve editor with PCHIP interpolation.
+- APO preset import.
+- Community headphone database.
+- GUI target curve editor.
 
 ## 0.3.0
 
-### DSP accuracy
-- Wiener-regularised transfer function estimation (noise suppression at frequency extremes).
-- Raw residual bandwidth estimation for narrower Q accuracy on presence-region features.
-- Local-maxima alignment search replacing top-8 global sort (robust to room echoes).
-- Joint Nelder-Mead PEQ refinement after greedy placement.
+### DSP
+- Wiener-regularised transfer function estimation.
+- Joint Nelder-Mead PEQ refinement.
 
 ### Features
-- Multi-pass averaging iteration mode (`--iteration-mode average`).
-- CLI one-line colored confidence verdict.
-- GUI confidence badges (✓/⚠/✗), graph display button, scrollable setup diagnostics.
+- Multi-pass averaging.
+- Confidence verdicts and badges.
 
-### Code quality
-- 241 RBJ biquad coefficient reference tests across dense parameter grid.
-- Extreme parameter stability tests (all finite and bounded).
-- Smoke tests for `plots.py`, unit tests for `signals.py`.
-- Type-narrowed `PEQBand.kind` to `Literal`.
-- Confidence scoring thresholds extracted to named constants.
-- Injectable `FitObjective.weights`.
-
-### Fixes
-- `_metrics` dead mask (was always-true, inflating confidence penalties).
-- `alignment_peak_ratio` returning 0.0 for negative offsets.
-- Shelf Q/S inconsistency in CamillaDSP export.
-- Removed dead code (`validate_stereo_audio`, `inverse_sweep`).
+### Tests
+- 241 RBJ biquad coefficient tests.
 
 ## 0.2.3
 
-### Fixes
-- Mono captures rejected with clear error message.
-- Duplicated-channel captures detected and rejected (all channel counts).
-- Tests refactored to use `pytest.raises`.
+- Mono and duplicated-channel capture rejection.
 
 ## 0.2.2
 
-### Features
-- Fixed-band GraphicEQ export (10-band and 31-band profiles).
-- Fixed-band GraphicEQ fitting on shared objective/residual layer.
-- Exact-count PEQ mode (`exact_n` fill policy).
-- Expanded synthetic regression test coverage.
+- Fixed-band GraphicEQ export and fitting.
 
 ## 0.2.1
 
-### Fixes
-- Clone-target semantics corrected (relative targets resolved before fitting).
-- PEQ filter-budget enforcement fixed.
-- PEQ fitter no longer wastes search budget on rejected candidates.
+- Clone-target semantics fix.
+- PEQ filter-budget enforcement.
 
 ## 0.2.0
 
 Initial public release.
-- Beginner-first CLI, GUI, and TUI workflows.
-- PipeWire online measurement and offline recorder-first path.
-- Conservative PEQ fitting with edge-shelf detection.
-- Equalizer APO and CamillaDSP export.
-- Clone-target headphone-to-headphone workflow.
-- Confidence/trust summaries with plain-language interpretation.
-- Measured-vs-target SVG review graphs.
