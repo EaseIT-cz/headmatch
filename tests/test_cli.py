@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from headmatch import cli
+from headmatch import __version__, cli
 from headmatch.contracts import FrontendConfig
 
 
@@ -27,7 +27,7 @@ def test_main_without_subcommand_shows_beginner_guide(capsys):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "headmatch beginner path" in out
-    assert "0.6.1rc1" in out
+    assert __version__ in out
     assert "headmatch start --out-dir session_01" in out
 
 
@@ -36,7 +36,7 @@ def test_version_flag_reports_canonical_version(capsys):
         cli.main(["--version"])
     assert exc.value.code == 0
     out = capsys.readouterr().out.strip()
-    assert out == "headmatch 0.6.1rc1"
+    assert out == f"headmatch {__version__}"
 
 
 def test_start_dispatches_guided_online_workflow(monkeypatch, capsys, tmp_path):
