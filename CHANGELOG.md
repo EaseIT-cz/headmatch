@@ -2,8 +2,6 @@
 
 ## 0.6.1
 
-Final release. All rc2 changes plus:
-
 ### Platform fixes
 - macOS test suite now passes with platform-specific skips for PipeWire tests.
 - XDG config path test skipped on non-Linux platforms (XDG is Linux-only).
@@ -14,13 +12,6 @@ Final release. All rc2 changes plus:
 - macOS ARM64 standalone binary with sounddevice bundled for PortAudio support.
 - scipy.interpolate added to PyInstaller hiddenimports (fixes target editor crash).
 
-### Documentation
-- Product pages placeholder for headmatch.github.io.
-- Standalone binaries section in README with macOS quarantine bypass.
-
-
-## 0.6.1rc2
-
 ### EQ clipping prediction
 - New `headmatch/eq_clipping.py` module with `EQClippingAssessment` dataclass.
 - `assess_eq_clipping()` forecasts whether fitted EQ profile will cause digital clipping.
@@ -29,51 +20,9 @@ Final release. All rc2 changes plus:
 - Integrated into `pipeline.fit_from_measurement()` — automatically included in fit report.
 - 13 new tests in `tests/test_eq_clipping.py`.
 
-### Other changes
-- GitHub issue templates for bug reports and feature requests.
-- MANIFEST.in updated for sdist completeness.
-- Test count: 507 → 520 (+13).
-
-## 0.6.1rc1
-
-Initial release candidate for 0.6.1.
-
-### PEQ fitting
-- Conservative Nelder-Mead refinement for PEQ fitting (replaces discrete grid search).
-- FilterBudget configuration for PEQ vs GraphicEQ, filter count, fill policy.
-- Confidence scoring with plain-language interpretation.
-
-### APO workflow
-- APO refine mode: import parametric EQ preset → fit to measured response.
-- Real-time preview in GUI with before/after curves.
-
-### Export
-- Equalizer APO export: parametric EQ and GraphicEQ formats.
-- CamillaDSP export with configurable sample rate.
-
-### Clone-target workflow
-- Headphone-to-headphone EQ: measure source, load target curve, generate EQ for destination.
-- `clone_target_from_source_target()` for automated target generation.
-
-### Multi-pass averaging
-- Iteration mode for multi-measurement averaging.
-- Improved measurement reliability through statistical filtering.
-
-### Architecture
-- Pluggable audio backend: PipeWire (Linux), PortAudio (macOS), extensible to others.
-- AudioBackend protocol with device discovery, play/record, health checks.
-- Platform-aware paths (~/.config on Linux, ~/Library on macOS, %APPDATA% on Windows).
-
-### GUI
-- Device dropdowns with ID + label.
-- Default output: ~/Documents/HeadMatch/session_01.
-- Config auto-save after successful runs.
-- Desktop shortcut button (Linux only).
-- Target editor with canvas drag-to-move control points.
-
-### Tests
-- 507 deterministic tests.
-- CI matrix: Python 3.10–3.13.
+### Documentation
+- Standalone binaries section in README with macOS quarantine bypass.
+- Test count: 507 → 520+ (+13).
 
 ## 0.6.0
 
@@ -123,8 +72,6 @@ Initial release candidate for 0.6.1.
 ### Tests
 - 436 → 447 deterministic tests (+11).
 
-
-[152 more lines - unchanged from original]
 ## 0.5.1
 
 ### Features
