@@ -460,3 +460,4 @@ Current project docs live in:
 - `docs/architecture.md`
 - `docs/backlog.md`
 - `docs/examples/`
+- `docs/product_pages.md` (placeholder)

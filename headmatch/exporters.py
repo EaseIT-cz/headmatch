@@ -10,6 +10,15 @@ from .peq import PEQBand
 
 
 FILTER_TYPE_NAMES = {'peaking': 'Peaking', 'lowshelf': 'Lowshelf', 'highshelf': 'Highshelf'}
+GRAPHICEQ_INTERPOLATION_HEADROOM_DB = 1.5
+"""Safety margin for Equalizer APO GraphicEQ interpolation overshoot.
+
+Equalizer APO interpolates between GraphicEQ frequency/gain points using
+overlapping parametric bands. Adjacent positive-gain bands can "stack up"
+in the interpolation region, producing cumulative gain higher than any
+single specified point. This constant adds headroom to prevent clipping.
+"""
+
 APO_FILTER_TYPE_NAMES = {'peaking': 'PK', 'lowshelf': 'LS', 'highshelf': 'HS'}
 
 
@@ -183,11 +192,11 @@ def export_equalizer_apo_graphiceq_txt(
         comment,
         '',
         'Channel: L',
-        f'Preamp: {round(-max(0.0, max(gains_left_db, default=0.0)), 2):.2f} dB',
+        f'Preamp: {round(-max(0.0, max(gains_left_db, default=0.0)) - GRAPHICEQ_INTERPOLATION_HEADROOM_DB, 2):.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_left_db),
         '',
         'Channel: R',
-        f'Preamp: {round(-max(0.0, max(gains_right_db, default=0.0)), 2):.2f} dB',
+        f'Preamp: {round(-max(0.0, max(gains_right_db, default=0.0)) - GRAPHICEQ_INTERPOLATION_HEADROOM_DB, 2):.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_right_db),
         '',
     ]
