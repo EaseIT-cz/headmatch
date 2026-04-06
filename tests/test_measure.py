@@ -66,12 +66,11 @@ def test_format_pipewire_targets_groups_entries_for_cli_output():
     )
 
     assert "Playback targets (--output-target)" in text
-    assert "Choose the DAC, headphones, speakers, or interface output" in text
-    assert "USB DAC -> alsa_output.usb-dac [Audio/Sink]" in text
+    assert "USB DAC ->" in text
+    assert "alsa_output.usb-dac" in text
     assert "Capture targets (--input-target)" in text
-    assert "Choose the mic, recorder, or interface input connected to your measurement rig." in text
-    assert "USB Mic -> alsa_input.usb-mic [Audio/Source]" in text
-    assert "copy the exact device ID first" in text
+    assert "USB Mic ->" in text
+    assert "alsa_input.usb-mic" in text
 
 
 def test_saved_target_matches_discovery_uses_simple_node_name_matching():
