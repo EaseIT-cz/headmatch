@@ -282,16 +282,18 @@ Confidence scoring and plain-language interpretation are part of the product.
 
 ## Current state
 
-Version 0.6.0a1 (pre-release). 507 deterministic tests.
+Version 0.6.1. 520+ deterministic tests, passing on Linux and macOS.
 
 The shipped product includes:
 - Cross-platform audio backend (PipeWire on Linux, PortAudio on macOS/Windows)
 - Platform-aware config/cache paths
+- Standalone binaries: Linux x64, macOS ARM64
 - GUI with live-updating target editor, canvas drag-to-move, confidence badges
 - Beginner-first CLI with single-line confidence verdict
 - Real headphone database search with space-insensitive matching
 - APO import with Nelder-Mead refine mode
 - Equalizer APO (parametric + GraphicEQ) and CamillaDSP export
+- EQ clipping prediction with preamp recommendations
 - Clone-target headphone-to-headphone workflow
 - Multi-pass averaging iteration mode
 - SVG review graphs in fit output folders
@@ -303,11 +305,16 @@ The shipped product includes:
 ## Likely future work
 
 ### Next
+- GUI display for EQ clipping assessment
+- CLI output for clipping summary
 - GUI shell/view split — further extraction from gui.py
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
 ### Later
+- macOS .app bundle (currently distributed as raw binary)
+- Windows .exe binary via PyInstaller
+- AppImage wrapper for Linux
 - Additional export formats beyond APO and CamillaDSP
 - CamillaDSP live-update integration via WebSocket API
 - Closed-loop EQ refinement (measure → apply → re-measure)
