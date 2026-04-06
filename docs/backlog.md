@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.6.1rc1 released. 520 tests.
+Version 0.6.1rc2 released. 520 tests.
 
 Key capabilities:
 - Cross-platform: Linux (PipeWire), macOS (PortAudio), Windows (experimental)
