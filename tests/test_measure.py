@@ -1,4 +1,5 @@
 from __future__ import annotations
+import pytest
 import sys
 
 from headmatch.contracts import FrontendConfig
@@ -102,6 +103,7 @@ def test_collect_doctor_checks_reports_missing_tools_and_targets(tmp_path, monke
     assert by_name["starter sweep settings"].ok is True
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="PipeWire-only test")
 def test_collect_doctor_checks_validates_saved_targets_against_discovery(tmp_path, monkeypatch):
     _mock_devices = [
             PipeWireTarget(kind="playback", device_id="alsa_output.usb-dac", label='USB DAC', description="USB DAC", raw_info={'node_name': "alsa_output.usb-dac", 'nick': "", 'media_class': "Audio/Sink"}),
