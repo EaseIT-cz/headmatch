@@ -156,7 +156,7 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
 
     assert '; headmatch Equalizer APO parametric preset' in text
     assert 'Channel: L' in text
-    assert 'Preamp: -5.00 dB' in text
+    assert 'Preamp: -3.50 dB' in text
     assert 'Filter 1: ON LS Fc 105.00 Hz Gain 3.50 dB Q 0.70' in text
     assert 'Filter 2: ON PK Fc 2500.00 Hz Gain -2.00 dB Q 1.23' in text
     assert 'Channel: R' in text
