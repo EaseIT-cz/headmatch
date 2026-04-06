@@ -1,5 +1,24 @@
 # HeadMatch Changelog
 
+## 0.6.1
+
+Final release. All rc2 changes plus:
+
+### Platform fixes
+- macOS test suite now passes with platform-specific skips for PipeWire tests.
+- XDG config path test skipped on non-Linux platforms (XDG is Linux-only).
+- PortAudio backend test skipped on macOS (requires hardware).
+
+### Binary builds
+- Linux x64 standalone binary with OpenBLAS ELF alignment fix (numpy<2, scipy<1.14).
+- macOS ARM64 standalone binary with sounddevice bundled for PortAudio support.
+- scipy.interpolate added to PyInstaller hiddenimports (fixes target editor crash).
+
+### Documentation
+- Product pages placeholder for headmatch.github.io.
+- Standalone binaries section in README with macOS quarantine bypass.
+
+
 ## 0.6.1rc2
 
 ### EQ clipping prediction
