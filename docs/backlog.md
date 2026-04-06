@@ -53,3 +53,15 @@ Key capabilities:
 - Asynchronous device support and clock drift compensation
 - Automated HRTF target integration and scaling
 - Safe mode vs advanced mode UI split
+
+### Bugs
+- TASK-096: Target editor broken in stand‑alone Linux binary (high priority)
+
+### Documentation
+- TASK-093: Product pages placeholder
+
+### Housekeeping
+- TASK-094: GitHub issue templates
+
+### Features
+- TASK-095: Clipping assessment (add to backlog)
