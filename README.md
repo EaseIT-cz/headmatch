@@ -461,3 +461,23 @@ Current project docs live in:
 - `docs/backlog.md`
 - `docs/examples/`
 - `docs/product_pages.md` (placeholder)
+
+---
+
+## Standalone binaries
+
+Prebuilt binaries are available on the [GitHub Releases](https://github.com/EaseIT-cz/headmatch/releases) page for:
+
+- **Linux x64** — `headmatch-linux-x64`, `headmatch-gui-linux-x64`
+- **macOS Intel** — `headmatch-macos-x64`, `headmatch-gui-macos-x64`
+- **macOS Apple Silicon (M1/M2/M3)** — `headmatch-macos-arm64`, `headmatch-gui-macos-arm64`
+
+### macOS: bypass "app not signed" error
+
+On macOS, unsigned binaries will be blocked by Gatekeeper. To bypass:
+
+```bash
+xattr -dr com.apple.quarantine /path/to/headmatch-macos-arm64
+```
+
+Run this once on the extracted binary or the containing folder. After that, the binary will launch normally.
