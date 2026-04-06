@@ -187,6 +187,7 @@ def test_resolve_preferred_pipewire_target_prefers_saved_then_default_then_first
     assert _resolve_preferred_pipewire_target('capture', None, targets, None) == ''
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="tests specific to PipeWire backend")
 def test_collect_pipewire_target_selection_uses_discovery_and_defaults(monkeypatch):
     _mock_devices = [
         PipeWireTarget(kind='playback', device_id='alsa_output.hdmi', label='HDMI', description='HDMI', raw_info={'node_name': 'alsa_output.hdmi', 'nick': '', 'media_class': 'Audio/Sink'}),
