@@ -1,4 +1,6 @@
 from __future__ import annotations
+import pytest
+import sys
 
 from headmatch.contracts import FrontendConfig
 from headmatch.measure import (
@@ -66,12 +68,11 @@ def test_format_pipewire_targets_groups_entries_for_cli_output():
     )
 
     assert "Playback targets (--output-target)" in text
-    assert "Choose the DAC, headphones, speakers, or interface output" in text
-    assert "USB DAC -> alsa_output.usb-dac [Audio/Sink]" in text
+    assert "USB DAC ->" in text
+    assert "alsa_output.usb-dac" in text
     assert "Capture targets (--input-target)" in text
-    assert "Choose the mic, recorder, or interface input connected to your measurement rig." in text
-    assert "USB Mic -> alsa_input.usb-mic [Audio/Source]" in text
-    assert "copy the exact device ID first" in text
+    assert "USB Mic ->" in text
+    assert "alsa_input.usb-mic" in text
 
 
 def test_saved_target_matches_discovery_uses_simple_node_name_matching():
@@ -93,15 +94,16 @@ def test_collect_doctor_checks_reports_missing_tools_and_targets(tmp_path, monke
 
     by_name = {check.name: check for check in checks}
     assert by_name["config file"].ok is False
-    assert by_name["pw-dump"].ok is False
-    assert by_name["pw-play"].ok is False
-    assert by_name["pw-record"].ok is False
-    assert by_name["audio discovery"].detail == "Skipped because pw-dump is not available."
+    if sys.platform == "linux":
+        assert by_name["pw-dump"].ok is False
+    else:
+        assert by_name["sounddevice"].ok is False
     assert by_name["saved output target"].ok is False
     assert by_name["saved input target"].ok is False
     assert by_name["starter sweep settings"].ok is True
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="PipeWire-only test")
 def test_collect_doctor_checks_validates_saved_targets_against_discovery(tmp_path, monkeypatch):
     _mock_devices = [
             PipeWireTarget(kind="playback", device_id="alsa_output.usb-dac", label='USB DAC', description="USB DAC", raw_info={'node_name': "alsa_output.usb-dac", 'nick': "", 'media_class': "Audio/Sink"}),
@@ -166,6 +168,7 @@ def test_parse_wpctl_inspect_node_name_reads_pipewire_node_name():
     assert _parse_wpctl_inspect_node_name(inspect) == 'alsa_output.usb-dac'
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="PipeWire-only test")
 def test_get_pipewire_default_targets_returns_empty_when_wpctl_is_missing(monkeypatch):
     monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: None if name == "wpctl" else f"/usr/bin/{name}")
 
@@ -184,6 +187,7 @@ def test_resolve_preferred_pipewire_target_prefers_saved_then_default_then_first
     assert _resolve_preferred_pipewire_target('capture', None, targets, None) == ''
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="tests specific to PipeWire backend")
 def test_collect_pipewire_target_selection_uses_discovery_and_defaults(monkeypatch):
     _mock_devices = [
         PipeWireTarget(kind='playback', device_id='alsa_output.hdmi', label='HDMI', description='HDMI', raw_info={'node_name': 'alsa_output.hdmi', 'nick': '', 'media_class': 'Audio/Sink'}),

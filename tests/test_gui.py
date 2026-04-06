@@ -136,6 +136,11 @@ def fake_tk(monkeypatch):
     monkeypatch.setitem(sys.modules, 'tkinter', SimpleNamespace(StringVar=DummyVar, ttk=DummyTtk, Canvas=DummyWidget))
     monkeypatch.setitem(sys.modules, 'tkinter.ttk', DummyTtk)
     monkeypatch.setattr(gui, 'filedialog', DummyFileDialog())
+    # Mock audio device selection to avoid sounddevice import
+    monkeypatch.setattr(
+        gui, 'collect_pipewire_target_selection',
+        lambda *a, **kw: type('PipeWireTargetSelection', (), {'playback_targets': (), 'capture_targets': (), 'selected_playback': '', 'selected_capture': ''})()
+    )
     return gui
 
 

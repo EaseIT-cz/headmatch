@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import sys
+
+import pytest
+
 from argparse import Namespace
 
 from headmatch.contracts import FrontendConfig
@@ -13,6 +17,7 @@ from headmatch.settings import (
 )
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="XDG is Linux-only")
 def test_default_config_path_prefers_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     assert default_config_path() == tmp_path / "xdg" / "headmatch" / "config.json"
