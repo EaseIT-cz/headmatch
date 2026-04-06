@@ -1,4 +1,5 @@
 """Tests for EQ clipping prediction module."""
+import math
 
 import numpy as np
 import pytest

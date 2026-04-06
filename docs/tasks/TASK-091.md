@@ -1,106 +1,79 @@
-# TASK-091: PyInstaller spec and build script for Linux x64
+# TASK-091: Linux binary distribution (PyInstaller)
 
-## Summary
-Create a working PyInstaller spec and build script for building Linux x64 binaries.
+**Status**: ⚠️ Blocked — runtime OpenBLAS issue
+
+**Assignee**: dev1
+
+**Summary**: Produce a Linux x86_64 single-file executable for HeadMatch.
 
 ## Context
-The current spec (`headmatch.spec`) is a good starting point, but the build fails locally because the sandbox Python doesn't have a shared library (`libpython3.11.so.1.0`). The GitHub Actions workflow installs `python3-tk` via apt before building, which provides a Python with shared library.
 
-**Status: Blocked — waiting for human to prepare host environment.**
-
-## Blockers
-
-The host/sandbox needs these system packages to build a working PyInstaller binary:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-    python3-tk \
-    python3-dev \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxrender1 \
-    libxext6
-```
-
-> 💡 `python3-tk` is critical — it provides `libpython3.11.so.1.0` (or equivalent for your distro), which is required for PyInstaller to embed Python.
-
-## Human requirements (after blocker is resolved)
-
-### Step 1: Set up the build venv
-
-```bash
-python3 -m venv .venv-build
-. .venv-build/bin/activate
-
-pip install --upgrade pip
-pip install pyinstaller numpy scipy
-```
-
-### Step 2: Identify missing resources
-
-From the GUI, copy the following to the repo and update `.spec`:
-
-| Resource type | Search for | Example |
-|---------------|------------|---------|
-| Icons | `PhotoImage`, `bitmap`, `icon` | `audio-headphones` (system theme) |
-| View templates | `.json`, `.yaml`, `.csv` | `docs/examples/targets/flat.csv` |
-| Data files | `open(...)`, `load(...)`, `read_csv` | `example_targets/*.csv` |
-
-### Step 3: Update `headmatch.spec`
-
-Add missing data files to the `datas=` list in the spec:
-
-```python
-# Example: add all CSV and JSON in docs/examples
-datas=[
-    (os.path.join('docs', 'examples'), os.path.join('docs', 'examples')),
-    # Add any GUI templates/data files here
-],
-```
-
-### Step 4: Test the build
-
-```bash
-cd /shared/headmatch
-. .venv-build/bin/activate
-python scripts/build.py --clean
-```
-
-### Step 5: Validate the binary
-
-```bash
-# Test CLI entry point
-./dist/headmatch --help
-
-# Test GUI (should show main window)
-./dist/headmatch-gui
-```
+Users without Python need a standalone binary. PyInstaller bundles Python, dependencies, and the app into a single executable.
 
 ## Scope
 
-- ✅ Create/Update `headmatch.spec` with complete `datas=` list
-- ✅ Create `scripts/build.py` flag (`--binary`) that uses spec
-- ✅ Verify binary runs on a clean Linux VM (same distro/version as CI runners)
+- [x] Validate spec file exists (`headmatch.spec`)
+- [x] Confirm tkinter is available (python3-tk)
+- [x] Confirm python3-dev is available
+- [x] Install PyInstaller in sandbox
+- [x] Build both CLI and GUI binaries
+- [ ] Fix runtime OpenBLAS ELF alignment issue
+- [ ] Test binary on clean system
+- [ ] Upload to GitHub releases
 
-## Out-of-scope
+## Implementation
 
-- Building macOS `.app` or Windows `.exe` — those are separate tasks
-- AppImage or Flatpak — not part of this release
+### Build Command
 
-## Acceptance criteria
+```bash
+cd /shared/headmatch
+XDG_CACHE_HOME=/tmp/cache HOME=/tmp \
+  PYTHONPATH=/tmp/pylibs \
+  /shared/headmatch/.venv/bin/python -m PyInstaller headmatch.spec \
+  --noconfirm --workpath=/tmp/build --distpath=/tmp/dist
+```
 
-1. `python scripts/build.py --clean --binary` succeeds without errors
-2. Built binary runs on a clean Linux environment:
-   - CLI (`headmatch --help`) works
-   - GUI (`headmatch-gui`) shows main window without import errors
-3. No missing file/resource errors in terminal output
-4. Binary size < 100 MB (reasonable for one-file PyInstaller)
+### Current Results
 
-## Suggested files/components
+| Binary | Size | Status |
+|--------|------|--------|
+| `headmatch` | 56 MB | Build OK, runtime fails |
+| `headmatch-gui` | 61 MB | Build OK, runtime fails |
 
-- `headmatch.spec`
-- `scripts/build.py`
-- `headmatch/gui.py`
-- `docs/examples/` (CSV, JSON, desktop files)
+### Runtime Error
+
+```
+ImportError: libscipy_openblas64_-32a4b2a6.so: ELF load command address/offset not page-aligned
+```
+
+**Cause**: NumPy 2.4.4 wheel bundles an OpenBLAS with page-alignment incompatibility on older kernels/loaders.
+
+**Resolution Options**:
+1. Pin numpy<2.4 in requirements
+2. Use `--exclude-module` and system OpenBLAS
+3. Build in manylinux Docker container
+4. Use conda-forge numpy
+
+## Acceptance Criteria
+
+- [ ] Binary builds without errors
+- [ ] Binary runs `--version` successfully
+- [ ] Binary runs `headmatch doctor` successfully
+- [ ] Binary size < 80 MB
+- [ ] Works on Ubuntu 22.04+ and Fedora 38+
+
+## Out of Scope
+
+- macOS universal binary (TASK-092)
+- Windows build
+- Auto-update mechanism
+- Code signing
+
+## Files
+
+- `headmatch.spec` — PyInstaller spec file
+- `scripts/build.py` — Build orchestration (optional)
+
+## Related
+
+- TASK-092: macOS binary (depends on this)

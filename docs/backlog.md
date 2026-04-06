@@ -1,81 +1,65 @@
-# HeadMatch backlog
+# HeadMatch Backlog
 
-## Current status
+**Version**: 0.6.1rc2 (dev branch)
+**Branch protection**: main requires PR; work on dev
 
-Version 0.6.1rc2 released. 520 tests.
+---
 
-Key capabilities:
-- Cross-platform: Linux (PipeWire), macOS (PortAudio), Windows (experimental)
-- GUI-first headphone measurement and EQ tool (CLI + TUI also supported)
-- Pluggable audio backend architecture
-- Real-time frequency response measurement
-- Live curve preview in target editor with canvas drag-to-move
-- Conservative PEQ fitting with Nelder-Mead refinement
-- APO import with refine mode (CLI + GUI)
-- Equalizer APO (parametric + GraphicEQ) and CamillaDSP export
-- Clone-target headphone-to-headphone workflow
-- Multi-pass averaging iteration mode
-- Confidence scoring with plain-language interpretation
-- **EQ clipping prediction with preamp recommendations** (new in TASK-095)
-- CI matrix across Python 3.10–3.13 with coverage reporting
-- Config auto-save with field name migration
+## Blocked
 
-## Active
+### TASK-091: Linux binary distribution
+**Status**: ⚠️ Blocked — OpenBLAS runtime issue  
+**Priority**: High  
+**Assignee**: dev1
 
-### Released — 0.6.1rc1
-- TASK-095: EQ clipping assessment — **completed** (predictive clipping, preamp calculation, quality concerns)
-- TASK-097: Fix docstring drift in measure.py and audio_backend.py (new)
-- TASK-098: Add release-gate job to verify sdist packaging (new)
+PyInstaller build completes but runtime fails with ELF page-alignment error from bundled OpenBLAS.
 
-### On hold
-- TASK-077: Research and fix dense GraphicEQ clipping (awaiting user testing)
-- TASK-090: macOS end-to-end measurement testing with real hardware
+**Resolution options**:
+- Pin numpy<2.4 in requirements
+- Build in manylinux container
+- Use conda-forge numpy with system BLAS
 
-### Blocked — waiting for human host setup
-- **TASK-091**: PyInstaller spec and build script for Linux x64 — requires host packages (`python3-tk`, `python3-dev`, mesa libs); see `docs/tasks/TASK-091.md`
-- **TASK-092**: GitHub Actions workflow for Linux binary release — blocked by TASK-091
+---
 
-### In progress
-- TASK-096: Target editor broken in stand‑alone Linux binary (reproduce and fix)
+## Ready
 
-## Future work
+### TASK-077: GraphicEQ clipping research
+**Status**: 📋 Ready  
+**Priority**: Medium
 
-### Now
-- TASK-091: PyInstaller spec + build script (prepare host per TASK-091.md)
-- TASK-092: GitHub Actions release workflow (blocked until 091 ready)
+Dense GraphicEQ export still clips despite 0.4.4 fix. Investigate PEQ-fitted response at high PPO.
 
-### Next
-- GUI display for EQ clipping assessment
-- CLI output for clipping summary
-- GUI shell/view split — gui.py is ~880 lines
-- Extract repeated CLI parser setup into shared helpers
-- Richer per-backend error diagnostics
+**Scope**: Research, may become multiple implementation tasks.
 
-### Later
-- macOS .app bundle via PyInstaller (build on macos-14 runner in CI)
-- Windows .exe binary via PyInstaller (build on windows-latest runner in CI)
-- AppImage wrapper for Linux (alternative to single binary)
-- Further target editor polish — keyboard shortcuts, undo/redo
-- Cache fixed-profile basis responses for repeated GraphicEQ runs
-- Add export formats beyond CamillaDSP and APO if demand exists
-- CamillaDSP live-update integration via WebSocket API
-- Closed-loop EQ refinement (measure → apply → re-measure)
-- Room correction / speaker measurement mode
-- Asynchronous device support and clock drift compensation
-- Automated HRTF target integration and scaling
-- Safe mode vs advanced mode UI split
+### TASK-090: macOS integration testing
+**Status**: 📋 Ready  
+**Priority**: Medium
 
-### Documentation
-- TASK-093: Product pages placeholder for headmatch.github.io (requires repo GitHub Pages configuration)
-- `docs/feature_eq_clipping.md` — document EQ clipping prediction feature
+End-to-end testing on macOS with real hardware. Requires macOS machine access.
 
-### Features
-- EQ clipping assessment — completed; GUI/CLI display pending
+### TASK-092: macOS binary distribution
+**Status**: 📋 Ready (after TASK-091)  
+**Priority**: High
 
-## Process improvements
+Blocked by TASK-091 binary infrastructure.
 
-### Completed
-- TASK-094: GitHub issue templates — **completed** (`.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`)
-- TASK-095: EQ clipping prediction — **completed** (`headmatch/eq_clipping.py`, integrated into `pipeline.py`, 13 tests)
-- MANIFEST.in updated to include `docs/examples/*.csv *.json *.desktop` and `tests/fixtures/*`
-- Tests verified against built sdist (520 tests pass)
+### TASK-093: Product pages placeholder
+**Status**: 📋 Ready  
+**Priority**: Low
+
+Add `docs/product_pages.md` placeholder file.
+
+### TASK-096: Target editor binary bug
+**Status**: 📋 Ready  
+**Priority**: High
+
+Target editor broken in 0.6.1rc1 Linux binary. Likely missing resources in PyInstaller spec.
+
+---
+
+## Completed (2026-04-06)
+
+- TASK-094: GitHub issue templates
+- TASK-095: EQ clipping prediction
+- TASK-097: Docstring drift fix
+- TASK-098: Release-gate CI workflow

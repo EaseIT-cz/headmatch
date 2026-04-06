@@ -1,0 +1,46 @@
+# Release Gate: Build sdist, install, run tests.
+# Runs on v* tag push or manual dispatch before release.
+# Catches packaging issues like missing MANIFEST.in entries.
+
+name: Release Gate
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: pip install build pytest
+
+      - name: Build sdist
+        run: python -m build --sdist
+
+      - name: Create fresh venv and install from sdist
+        run: |
+          python -m venv /tmp/test-env
+          source /tmp/test-env/bin/activate
+          pip install dist/*.tar.gz
+          pip install pytest
+
+      - name: Run tests against installed package
+        run: |
+          source /tmp/test-env/bin/activate
+          pytest tests/ -x -q
+
+      - name: Verify CLI entry point
+        run: |
+          source /tmp/test-env/bin/activate
+          headmatch --version
+          headmatch doctor --help
