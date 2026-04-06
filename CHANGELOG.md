@@ -1,5 +1,61 @@
 # HeadMatch Changelog
 
+## 0.6.1rc2
+
+### EQ clipping prediction
+- New `headmatch/eq_clipping.py` module with `EQClippingAssessment` dataclass.
+- `assess_eq_clipping()` forecasts whether fitted EQ profile will cause digital clipping.
+- Computes required preamp gain to prevent clipping (preamp = -max_positive_boost).
+- Quality concern warnings for moderate (>6 dB) and severe (>12 dB) headroom loss.
+- Integrated into `pipeline.fit_from_measurement()` — automatically included in fit report.
+- 13 new tests in `tests/test_eq_clipping.py`.
+
+### Other changes
+- GitHub issue templates for bug reports and feature requests.
+- MANIFEST.in updated for sdist completeness.
+- Test count: 507 → 520 (+13).
+
+## 0.6.1rc1
+
+Initial release candidate for 0.6.1.
+
+### PEQ fitting
+- Conservative Nelder-Mead refinement for PEQ fitting (replaces discrete grid search).
+- FilterBudget configuration for PEQ vs GraphicEQ, filter count, fill policy.
+- Confidence scoring with plain-language interpretation.
+
+### APO workflow
+- APO refine mode: import parametric EQ preset → fit to measured response.
+- Real-time preview in GUI with before/after curves.
+
+### Export
+- Equalizer APO export: parametric EQ and GraphicEQ formats.
+- CamillaDSP export with configurable sample rate.
+
+### Clone-target workflow
+- Headphone-to-headphone EQ: measure source, load target curve, generate EQ for destination.
+- `clone_target_from_source_target()` for automated target generation.
+
+### Multi-pass averaging
+- Iteration mode for multi-measurement averaging.
+- Improved measurement reliability through statistical filtering.
+
+### Architecture
+- Pluggable audio backend: PipeWire (Linux), PortAudio (macOS), extensible to others.
+- AudioBackend protocol with device discovery, play/record, health checks.
+- Platform-aware paths (~/.config on Linux, ~/Library on macOS, %APPDATA% on Windows).
+
+### GUI
+- Device dropdowns with ID + label.
+- Default output: ~/Documents/HeadMatch/session_01.
+- Config auto-save after successful runs.
+- Desktop shortcut button (Linux only).
+- Target editor with canvas drag-to-move control points.
+
+### Tests
+- 507 deterministic tests.
+- CI matrix: Python 3.10–3.13.
+
 ## 0.6.0
 
 ### macOS support
@@ -48,6 +104,8 @@
 ### Tests
 - 436 → 447 deterministic tests (+11).
 
+
+[152 more lines - unchanged from original]
 ## 0.5.1
 
 ### Features

@@ -206,3 +206,4 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 HANDOVER.md
+docs/subagent_writing.md

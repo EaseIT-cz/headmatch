@@ -16,6 +16,7 @@ from .analysis import MeasurementResult, analyze_measurement
 from .app_identity import get_app_identity
 from .io_utils import save_fr_csv, save_json
 from .measure import MeasurementPaths, PipeWireDeviceConfig, run_pipewire_measurement
+from .eq_clipping import assess_eq_clipping
 from .peq import FilterBudget, PEQBand, fit_peq, peq_chain_response_db
 from .pipeline_artifacts import write_fit_artifacts
 from .pipeline_confidence import summarize_trustworthiness
@@ -138,6 +139,16 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
         },
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
+    }
+    # Assess EQ clipping potential
+    clipping_assessment = assess_eq_clipping(result.freqs_hz, sample_rate, left_bands, right_bands)
+    report['eq_clipping'] = {
+        'will_clip': clipping_assessment.will_clip,
+        'left_peak_boost_db': clipping_assessment.left_peak_boost_db,
+        'right_peak_boost_db': clipping_assessment.right_peak_boost_db,
+        'preamp_db': clipping_assessment.total_preamp_db,
+        'headroom_loss_db': clipping_assessment.headroom_loss_db,
+        'quality_concern': clipping_assessment.quality_concern,
     }
     report['confidence'] = summarize_trustworthiness(result, report).to_dict()
     return left_bands, right_bands, report

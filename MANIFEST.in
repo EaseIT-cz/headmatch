@@ -5,4 +5,7 @@ include CHANGELOG.md
 include pytest.ini
 include requirements-test.txt
 recursive-include tests *.py
+recursive-include tests/fixtures *
 recursive-include docs *.md
+recursive-include docs/examples *.csv *.json *.desktop
+recursive-include headmatch *.py

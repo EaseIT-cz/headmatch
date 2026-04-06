@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+from headmatch import __version__
 from headmatch.contracts import FrontendConfig
 from tests.config_fixtures import varied_config
 from headmatch.gui import NAV_ITEMS, build_arg_parser, build_doctor_report, load_gui_state, main
@@ -150,7 +151,7 @@ def test_load_gui_state_preloads_saved_config_values(tmp_path):
 
     state = load_gui_state(config_loader=lambda _path=None: (config, tmp_path / "config.json", False))
 
-    assert state.version_display == "0.6.1rc1"
+    assert state.version_display == __version__
     assert state.current_view == "measure-online"
     assert state.default_output_dir == "saved/session"
     assert state.preferred_target_csv == "targets/custom.csv"
@@ -321,7 +322,7 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
 
     nav_labels = [button.kwargs.get('text') for button in created_buttons[:len(NAV_ITEMS)]]
 
-    assert root.title_value == 'HeadMatch 0.6.1rc1'
+    assert root.title_value == f'HeadMatch {__version__}'
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
