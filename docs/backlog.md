@@ -2,7 +2,7 @@
 
 ## Current status
 
-Version 0.6.1rc1 released. 507 deterministic tests.
+Version 0.6.1rc1 released. 520 tests.
 
 Key capabilities:
 - Cross-platform: Linux (PipeWire), macOS (PortAudio), Windows (experimental)
@@ -16,12 +16,14 @@ Key capabilities:
 - Clone-target headphone-to-headphone workflow
 - Multi-pass averaging iteration mode
 - Confidence scoring with plain-language interpretation
+- **EQ clipping prediction with preamp recommendations** (new in TASK-095)
 - CI matrix across Python 3.10–3.13 with coverage reporting
 - Config auto-save with field name migration
 
 ## Active
 
 ### Released — 0.6.1rc1
+- TASK-095: EQ clipping assessment — **completed** (predictive clipping, preamp calculation, quality concerns)
 - TASK-097: Fix docstring drift in measure.py and audio_backend.py (new)
 - TASK-098: Add release-gate job to verify sdist packaging (new)
 
@@ -34,7 +36,6 @@ Key capabilities:
 - **TASK-092**: GitHub Actions workflow for Linux binary release — blocked by TASK-091
 
 ### In progress
-- TASK-095: Clipping assessment (add logic to detect clipping during measurement)
 - TASK-096: Target editor broken in stand‑alone Linux binary (reproduce and fix)
 
 ## Future work
@@ -44,6 +45,8 @@ Key capabilities:
 - TASK-092: GitHub Actions release workflow (blocked until 091 ready)
 
 ### Next
+- GUI display for EQ clipping assessment
+- CLI output for clipping summary
 - GUI shell/view split — gui.py is ~880 lines
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
@@ -64,13 +67,15 @@ Key capabilities:
 
 ### Documentation
 - TASK-093: Product pages placeholder for headmatch.github.io (requires repo GitHub Pages configuration)
+- `docs/feature_eq_clipping.md` — document EQ clipping prediction feature
 
 ### Features
-- Clipping assessment — move here after TASK-095 is approved
+- EQ clipping assessment — completed; GUI/CLI display pending
 
 ## Process improvements
 
 ### Completed
 - TASK-094: GitHub issue templates — **completed** (`.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`)
+- TASK-095: EQ clipping prediction — **completed** (`headmatch/eq_clipping.py`, integrated into `pipeline.py`, 13 tests)
 - MANIFEST.in updated to include `docs/examples/*.csv *.json *.desktop` and `tests/fixtures/*`
-- Tests verified against built sdist (all 507 tests pass)
+- Tests verified against built sdist (520 tests pass)
