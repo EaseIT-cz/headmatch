@@ -168,6 +168,7 @@ def test_parse_wpctl_inspect_node_name_reads_pipewire_node_name():
     assert _parse_wpctl_inspect_node_name(inspect) == 'alsa_output.usb-dac'
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="PipeWire-only test")
 def test_get_pipewire_default_targets_returns_empty_when_wpctl_is_missing(monkeypatch):
     monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: None if name == "wpctl" else f"/usr/bin/{name}")
 
