@@ -2,7 +2,7 @@
 
 Keeps the public API that cli.py, gui.py, pipeline.py, and tests import.
 Audio I/O is delegated to the active AudioBackend (PipeWire on Linux,
-PortAudio on macOS/Windows in a future release).
+PortAudio on macOS/Windows).
 """
 from __future__ import annotations
 
