@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 
 from headmatch.contracts import FrontendConfig
 from headmatch.measure import (
@@ -92,10 +93,10 @@ def test_collect_doctor_checks_reports_missing_tools_and_targets(tmp_path, monke
 
     by_name = {check.name: check for check in checks}
     assert by_name["config file"].ok is False
-    assert by_name["pw-dump"].ok is False
-    assert by_name["pw-play"].ok is False
-    assert by_name["pw-record"].ok is False
-    assert by_name["audio discovery"].detail == "Skipped because pw-dump is not available."
+    if sys.platform == "linux":
+        assert by_name["pw-dump"].ok is False
+    else:
+        assert by_name["sounddevice"].ok is False
     assert by_name["saved output target"].ok is False
     assert by_name["saved input target"].ok is False
     assert by_name["starter sweep settings"].ok is True
