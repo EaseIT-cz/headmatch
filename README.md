@@ -469,7 +469,6 @@ Current project docs live in:
 Prebuilt binaries are available on the [GitHub Releases](https://github.com/EaseIT-cz/headmatch/releases) page for:
 
 - **Linux x64** — `headmatch-linux-x64`, `headmatch-gui-linux-x64`
-- **macOS Intel** — `headmatch-macos-x64`, `headmatch-gui-macos-x64`
 - **macOS Apple Silicon (M1/M2/M3)** — `headmatch-macos-arm64`, `headmatch-gui-macos-arm64`
 
 ### macOS: bypass "app not signed" error
