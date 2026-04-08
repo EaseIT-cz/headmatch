@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from ..apo_import import load_apo_preset
 from ..apo_refine import refine_apo_preset
