@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import pytest
 
 from headmatch import __version__, cli
@@ -320,6 +321,79 @@ def test_fit_next_steps_prints_confidence_summary(capsys, tmp_path):
     assert "Troubleshooting:" in out
     assert "Open the fit graphs before using the preset" in out
 
+def test_fit_next_steps_prints_clipping_summary(capsys, tmp_path):
+    summary_dir = tmp_path / "fit"
+    summary_dir.mkdir()
+    (summary_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "fit",
+  "out_dir": "/tmp/demo",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {
+    "score": 82,
+    "label": "medium",
+    "headline": "This run looks usable, but review it before trusting it fully.",
+    "interpretation": "Some signals are only fair.",
+    "reasons": [],
+    "warnings": ["Check the graphs."],
+    "metrics": {}
+  },
+  "eq_clipping_assessment": {
+    "will_clip": true,
+    "left_peak_boost_db": 7.25,
+    "right_peak_boost_db": 4.0,
+    "left_preamp_db": -7.25,
+    "right_preamp_db": -4.0,
+    "preamp_db": -7.25,
+    "headroom_loss_db": 7.25,
+    "quality_concern": "Moderate headroom loss (7.3 dB)."
+  },
+  "plots": {},
+  "results_guide": "/tmp/demo/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("fit", type("Args", (), {"out_dir": str(summary_dir)})())
+
+    out = capsys.readouterr().out
+    assert "Preamp recommendation: -7.2 dB" in out
+    assert "Max boost level: 7.2 dB" in out
+    assert "moderate headroom loss" in out
+
+
+def test_fit_next_steps_show_clipping_details(capsys, tmp_path):
+    summary_dir = tmp_path / "fit"
+    summary_dir.mkdir()
+    (summary_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "fit",
+  "out_dir": "/tmp/demo",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {"score": 82, "label": "medium", "headline": "x", "interpretation": "y", "reasons": [], "warnings": [], "metrics": {}},
+  "eq_clipping_assessment": {"will_clip": true, "left_peak_boost_db": 7.25, "right_peak_boost_db": 4.0, "left_preamp_db": -7.25, "right_preamp_db": -4.0, "preamp_db": -7.25, "headroom_loss_db": 7.25, "quality_concern": "Moderate headroom loss (7.3 dB)."},
+  "plots": {},
+  "results_guide": "/tmp/demo/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("fit", type("Args", (), {"out_dir": str(summary_dir), "show_clipping": True})())
+
+    out = capsys.readouterr().out
+    assert "Detailed clipping breakdown:" in out
+    assert "Left peak boost" in out
+
 
 def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):
     iter_dir = tmp_path / "iter_02"
@@ -354,3 +428,150 @@ def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):
     out = capsys.readouterr().out
     assert "Confidence: High (91/100)" in out
     assert "The main stability signals look clean." in out
+
+
+def test_fit_json_output_includes_clipping_assessment(monkeypatch, capsys, tmp_path):
+    summary = {
+        "schema_version": 1,
+        "kind": "fit",
+        "out_dir": str(tmp_path / "fit"),
+        "sample_rate": 48000,
+        "frequency_points": 2048,
+        "target": "flat_target",
+        "filters": {"left": 4, "right": 4},
+        "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+        "generated_by": {"name": "headmatch"},
+        "confidence": {"score": 82, "label": "medium", "headline": "x", "interpretation": "y", "reasons": [], "warnings": [], "metrics": {}},
+        "eq_clipping_assessment": {"will_clip": True, "preamp_db": -7.25},
+        "plots": {},
+        "results_guide": "/tmp/demo/README.txt",
+    }
+
+    def fake_process_single_measurement(*_args, **_kwargs):
+        out_dir = tmp_path / "fit"
+        out_dir.mkdir()
+        (out_dir / "run_summary.json").write_text(__import__("json").dumps(summary))
+
+    monkeypatch.setattr("headmatch.pipeline.process_single_measurement", fake_process_single_measurement)
+    monkeypatch.setattr("headmatch.cli.save_config", lambda *_args, **_kwargs: None)
+
+    cli.main(["fit", "--recording", str(tmp_path / "recording.wav"), "--out-dir", str(tmp_path / "fit"), "--json"])
+
+    out = capsys.readouterr().out
+    assert '"eq_clipping_assessment"' in out
+    assert '"preamp_db": -7.25' in out
+
+
+def test_parse_seconds_accepts_suffix_and_rejects_invalid():
+    assert cli.parse_seconds("1.5s") == 1.5
+    assert cli.parse_seconds("2") == 2.0
+    with pytest.raises(Exception):
+        cli.parse_seconds("0")
+    with pytest.raises(Exception):
+        cli.parse_seconds("abc")
+
+
+def test_positive_int_rejects_non_positive_and_non_integer():
+    assert cli.positive_int("3") == 3
+    with pytest.raises(Exception):
+        cli.positive_int("0")
+    with pytest.raises(Exception):
+        cli.positive_int("x")
+
+
+def test_filter_budget_and_spec_from_args(monkeypatch):
+    parser = cli.build_parser(FrontendConfig())
+    args = parser.parse_args(["fit", "--recording", "r.wav", "--out-dir", "out", "--filter-family", "graphic_eq", "--graphic-eq-profile", "geq_31_band", "--fill-policy", "exact_n", "--max-filters", "7"])
+    budget = cli.filter_budget_from_args(args)
+    spec = cli.spec_from_args(args)
+    assert budget.family == "graphic_eq"
+    assert budget.profile == "geq_31_band"
+    assert budget.fill_policy == "exact_n"
+    assert budget.max_filters == 7
+    assert spec.sample_rate == 48000
+
+
+def test_run_summary_path_handles_average_and_independent():
+    args = type("Args", (), {"out_dir": "/tmp/out", "iteration_mode": "average", "iterations": 3})()
+    assert cli._run_summary_path("start", args) == Path("/tmp/out/run_summary.json")
+    args = type("Args", (), {"out_dir": "/tmp/out", "iteration_mode": "independent", "iterations": 3})()
+    assert cli._run_summary_path("iterate", args) == Path("/tmp/out/iter_03/run_summary.json")
+    args = type("Args", (), {"out_dir": None})()
+    assert cli._run_summary_path("fit", args) is None
+
+
+def test_verdict_and_clipping_lines_cover_branches(monkeypatch):
+    conf = type("C", (), {"label": "high"})()
+    assert "trustworthy" in cli._verdict_line(conf)
+    conf.label = "medium"
+    assert "Moderate confidence" in cli._verdict_line(conf)
+    conf.label = "low"
+    assert "Low confidence" in cli._verdict_line(conf)
+    assert "No clipping assessment" in cli._clipping_verdict_line(None)
+    assert "No EQ clipping" in cli._clipping_verdict_line({"will_clip": False})
+    assert "preamp reduction" in cli._clipping_verdict_line({"will_clip": True})
+
+
+def test_print_clipping_summary_detailed(capsys):
+    summary = type("S", (), {"eq_clipping_assessment": {"will_clip": True, "preamp_db": -6.0, "left_peak_boost_db": 7.0, "right_peak_boost_db": 5.0, "headroom_loss_db": 13.0, "left_preamp_db": -6.0, "right_preamp_db": -5.0, "quality_concern": "watch gain"}})()
+    cli.print_clipping_summary(summary, detailed=True)
+    out = capsys.readouterr().out
+    assert "EQ clipping detected" in out
+    assert "Preamp recommendation: -6.0 dB" in out
+    assert "Detailed clipping breakdown" in out
+    assert "watch gain" in out
+
+
+def test_print_run_confidence_ignores_bad_summary(tmp_path, capsys):
+    out_dir = tmp_path / "fit"
+    out_dir.mkdir()
+    (out_dir / "run_summary.json").write_text("not json", encoding="utf-8")
+    cli.print_run_confidence("fit", type("Args", (), {"out_dir": str(out_dir)})())
+    assert capsys.readouterr().out == ""
+
+
+def test_search_headphone_and_fetch_curve_commands(monkeypatch, capsys, tmp_path):
+    from headmatch.headphone_db import HeadphoneEntry
+    monkeypatch.setattr("headmatch.headphone_db.search_headphone", lambda q: [HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv")])
+    cli.main(["search-headphone", "HD650"])
+    out = capsys.readouterr().out
+    assert "Found 1 match" in out
+    assert "fetch-curve" in out
+
+    monkeypatch.setattr("headmatch.headphone_db.fetch_curve_from_url", lambda url, out: Path(out))
+    cli.main(["fetch-curve", "--url", "https://example.com/a.csv", "--out", str(tmp_path / "a.csv")])
+    out = capsys.readouterr().out
+    assert "Saved to" in out
+
+
+def test_import_apo_and_refine_apo_commands(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr("headmatch.apo_import.load_apo_preset", lambda _p: ([1, 2], [3]))
+    monkeypatch.setattr("headmatch.exporters.export_equalizer_apo_parametric_txt", lambda *a, **k: None)
+    monkeypatch.setattr("headmatch.exporters.export_camilladsp_filters_yaml", lambda *a, **k: None)
+    monkeypatch.setattr("headmatch.exporters.export_camilladsp_filter_snippet_yaml", lambda *a, **k: None)
+    cli.main(["import-apo", "--preset", "preset.txt", "--out-dir", str(tmp_path / "imported")])
+    out = capsys.readouterr().out
+    assert "Imported 2 left + 1 right filters" in out
+
+    monkeypatch.setattr("headmatch.apo_refine.refine_apo_preset", lambda **_k: {"original_error": {"left_rms": 4.0, "right_rms": 5.0}, "predicted_left_rms_error_db": 1.5, "predicted_right_rms_error_db": 2.5})
+    cli.main(["refine-apo", "--preset", "preset.txt", "--recording", "recording.wav", "--out-dir", str(tmp_path / "refined")])
+    out = capsys.readouterr().out
+    assert "Refined preset from preset.txt" in out
+    assert "After:  L 1.50 dB RMS, R 2.50 dB RMS" in out
+
+
+def test_clone_target_and_offline_commands(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr("headmatch.pipeline.build_clone_curve", lambda s, t, o: Path(o))
+    cli.main(["clone-target", "--source-csv", "a.csv", "--target-csv", "b.csv", "--out", str(tmp_path / "clone.csv")])
+    out = capsys.readouterr().out
+    assert "Clone target written" in out
+
+    monkeypatch.setattr("headmatch.measure.prepare_offline_measurement", lambda *a, **k: None)
+    cli.main(["prepare-offline", "--out-dir", str(tmp_path / "offline")])
+    out = capsys.readouterr().out
+    assert "Offline package saved" in out
+
+    monkeypatch.setattr("headmatch.analysis.analyze_measurement", lambda *a, **k: None)
+    cli.main(["analyze", "--recording", "r.wav", "--out-dir", str(tmp_path / "analysis")])
+    out = capsys.readouterr().out
+    assert "Analysis written" in out

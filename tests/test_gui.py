@@ -95,6 +95,13 @@ class DummyRoot(DummyWidget):
         return None
 
 
+class RecordingWidget(DummyWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.text = kwargs.get("text")
+        self.textvariable = kwargs.get("textvariable")
+
+
 class DummyTtk:
     Frame = DummyWidget
     Label = DummyWidget
@@ -103,6 +110,26 @@ class DummyTtk:
     Entry = DummyWidget
     Scrollbar = DummyWidget
     Combobox = DummyWidget
+
+
+class RecordingTtk:
+    def __init__(self):
+        self.created = []
+        self.Label = self._factory("Label")
+        self.Button = self._factory("Button")
+        self.LabelFrame = self._factory("LabelFrame")
+        self.Entry = self._factory("Entry")
+        self.Scrollbar = self._factory("Scrollbar")
+        self.Combobox = self._factory("Combobox")
+        self.Frame = self._factory("Frame")
+
+    def _factory(self, kind):
+        def ctor(*args, **kwargs):
+            widget = RecordingWidget(*args, **kwargs)
+            widget.kind = kind
+            self.created.append(widget)
+            return widget
+        return ctor
 
 
 class DummyStyle:
@@ -196,6 +223,123 @@ def test_navigation_items_cover_shell_sections():
 
 
 
+def _basic_vars(mode="flat"):
+    return SimpleNamespace(
+        basic_step_var=DummyVar(value="target"),
+        basic_target_mode_var=DummyVar(value=mode),
+        basic_target_csv_var=DummyVar(value="/tmp/target.csv"),
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
+        choose_target_csv=lambda: None,
+        choose_basic_search_match=lambda _i: None,
+    )
+
+
+def test_basic_mode_shows_database_match_choices():
+    from headmatch.gui.views.basic import render_basic_mode
+    from headmatch.headphone_db import HeadphoneEntry
+
+    ttk = RecordingTtk()
+    frame = DummyWidget()
+    vars = _basic_vars("database")
+    vars.basic_search_matches = [
+        HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="a"),
+        HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="b"),
+    ]
+    render_basic_mode(ttk, frame, variables=vars, on_next=lambda: None, on_back=lambda: None, on_measure=lambda: None, on_export=lambda: None, on_search=lambda: None)
+    buttons = [w.text for w in ttk.created if getattr(w, "kind", None) == "Button" and w.text]
+    assert any("oratory1990" in text for text in buttons)
+    assert any("crinacle" in text for text in buttons)
+
+
+def test_basic_mode_hides_irrelevant_controls_by_source_selection():
+    from headmatch.gui.views.basic import render_basic_mode
+
+    for mode, expected in [("flat", set()), ("csv", {"Target CSV"}), ("database", {"Search database"})]:
+        ttk = RecordingTtk()
+        frame = DummyWidget()
+        render_basic_mode(ttk, frame, variables=_basic_vars(mode), on_next=lambda: None, on_back=lambda: None, on_measure=lambda: None, on_export=lambda: None, on_search=lambda: None)
+        labels = {w.text for w in ttk.created if getattr(w, "kind", None) == "Label" and w.text}
+        assert expected.issubset(labels)
+        assert ("Target CSV" in labels) == (mode == "csv")
+        assert ("Search database" in labels) == (mode == "database")
+
+
+def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
+    from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.headphone_db import HeadphoneEntry
+
+    monkeypatch.setattr("headmatch.gui.shell.search_headphone", lambda _q: [
+        HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv"),
+        HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="results/crinacle/over-ear/HD 650/HD 650.csv"),
+    ])
+
+    refreshed = {"count": 0}
+    app = SimpleNamespace(
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
+        basic_target_mode_var=DummyVar(value="database"),
+        basic_target_csv_var=DummyVar(value=""),
+        basic_target_path_var=DummyVar(value=""),
+        refresh_basic_mode_target_step=lambda: refreshed.__setitem__("count", refreshed["count"] + 1),
+        choose_basic_search_match=lambda _i: None,
+    )
+
+    HeadMatchGuiApp.basic_search_target(app)
+
+    assert len(app.basic_search_matches) == 2
+    assert app.basic_target_csv_var.get() == ""
+    assert "Choose one below" in app.basic_search_results_var.get()
+    assert refreshed["count"] == 1
+
+
+def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_path):
+    from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.headphone_db import HeadphoneEntry
+
+    calls = {}
+
+    def fake_search(query):
+        calls["query"] = query
+        return [HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv")]
+
+    def fake_fetch(url, out_path):
+        calls["url"] = url
+        calls["out_path"] = Path(out_path)
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text("frequency_hz,response_db\n20,0\n")
+        return Path(out_path)
+
+    monkeypatch.setattr("headmatch.gui.shell.search_headphone", fake_search)
+    monkeypatch.setattr("headmatch.gui.shell.fetch_curve_from_url", fake_fetch)
+    monkeypatch.setattr("headmatch.paths.documents_dir", lambda: tmp_path)
+
+    app = SimpleNamespace(
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
+        basic_target_mode_var=DummyVar(value="flat"),
+        basic_target_csv_var=DummyVar(value=""),
+        basic_target_path_var=DummyVar(value=""),
+        refresh_basic_mode_target_step=lambda: None,
+    )
+    app.choose_basic_search_match = lambda i: HeadMatchGuiApp.choose_basic_search_match(app, i)
+
+    HeadMatchGuiApp.basic_search_target(app)
+
+    assert calls["query"] == "HD 650"
+    assert calls["url"].startswith("https://")
+    assert app.basic_target_mode_var.get() == "database"
+    assert app.basic_target_csv_var.get() == str(tmp_path / "HD 650 - oratory1990.csv")
+    assert app.basic_target_path_var.get() == str(tmp_path / "HD 650 - oratory1990.csv")
+    assert "Selected HD 650" in app.basic_search_results_var.get()
+
+
 def test_online_steps_explain_playback_vs_capture_targets():
     from headmatch import gui_views
 
@@ -218,11 +362,25 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
 
 
 def test_gui_copy_mentions_setup_helpers():
-    from headmatch import gui_views
+    from headmatch.gui.views import _legacy
 
-    source = Path(gui_views.__file__).read_text()
+    source = Path(_legacy.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
+
+
+def test_per_view_modules_import_cleanly():
+    from headmatch.gui.views import basic, completion, fetch_curve, history, import_apo, offline, online, setup, target_editor
+
+    assert hasattr(basic, "render_basic_mode")
+    assert hasattr(completion, "render_completion")
+    assert hasattr(fetch_curve, "render_fetch_curve")
+    assert hasattr(history, "render_history_page")
+    assert hasattr(import_apo, "render_import_apo")
+    assert hasattr(offline, "render_offline_wizard")
+    assert hasattr(online, "render_online_wizard")
+    assert hasattr(setup, "render_setup_check")
+    assert hasattr(target_editor, "render_target_editor")
 
 
 
@@ -518,6 +676,76 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
 
 
 
+
+
+def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_path, fake_tk, monkeypatch):
+    calls = {}
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    app.set_mode('basic')
+    assert [item.key for item in app._nav_items_for_mode()] == ['basic-mode', 'basic-clone-target', 'history']
+
+    app.show_view('basic-clone-target')
+    app.basic_clone_source_var.set(str(tmp_path / 'source.csv'))
+    app.basic_clone_target_var.set(str(tmp_path / 'target.csv'))
+    app.basic_clone_output_var.set(str(tmp_path / 'clone.csv'))
+
+    monkeypatch.setattr('headmatch.gui.shell.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
+
+    app.start_basic_clone_target()
+
+    assert calls == {'source': str(tmp_path / 'source.csv'), 'target': str(tmp_path / 'target.csv'), 'out_path': str(tmp_path / 'clone.csv')}
+    assert app.completion_title_var.get() == 'Clone target ready'
+    assert app._last_completion_steps[0].startswith('Use the clone target CSV')
+
+
+def test_basic_mode_measurement_uses_average_iteration_runner(tmp_path, fake_tk, monkeypatch):
+    calls = {}
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    def fake_online_runner(**kwargs):
+        calls.update(kwargs)
+        return [{'ok': True}]
+
+    app._online_runner = fake_online_runner
+    app.set_mode('basic')
+    app.start_basic_measurement()
+
+    assert calls['iterations'] == 3
+    assert calls['iteration_mode'] == 'average'
+    assert calls['output_target'] is None
+    assert calls['input_target'] is None
+    assert app.completion_title_var.get() == 'Basic mode complete'
+
+
 def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     suffix, original = varied_config()
     config_path = tmp_path / f"gui-{suffix}.json"
@@ -621,9 +849,9 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
 
 
 def test_gui_views_include_browse_buttons_for_major_path_fields():
-    from headmatch import gui_views
+    from headmatch.gui.views import _legacy
 
-    source = Path(gui_views.__file__).read_text()
+    source = Path(_legacy.__file__).read_text()
     assert source.count('button_text="Browse…"') >= 5
 
 

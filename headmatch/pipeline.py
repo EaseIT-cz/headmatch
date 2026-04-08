@@ -223,7 +223,6 @@ def iterative_measure_and_fit(
     summaries = []
     all_results: list[MeasurementResult] = []
 
-    # Phase 1: measure all iterations
     for i in range(1, iterations + 1):
         iter_dir = output_dir / f'iter_{i:02d}'
         iter_dir.mkdir(exist_ok=True)

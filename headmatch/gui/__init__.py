@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-__path__ = [str(Path(__file__).with_name('gui'))]
-
-from .shell import (  # noqa: E402
+from .shell import (
+    collect_doctor_checks,
+    collect_pipewire_target_selection,
+    threading,
+    filedialog,
+    format_doctor_report,
     ConfigLoader,
     DoctorReportRunner,
     GuiState,
     HeadMatchGuiApp,
     NavigationItem,
+    NAV_ITEMS,
     OfflineFitRunner,
     OfflinePrepareRunner,
     OnlineRunner,
@@ -21,11 +23,17 @@ from .shell import (  # noqa: E402
 )
 
 __all__ = [
+    'collect_doctor_checks',
+    'collect_pipewire_target_selection',
+    'threading',
+    'filedialog',
+    'format_doctor_report',
     'ConfigLoader',
     'DoctorReportRunner',
     'GuiState',
     'HeadMatchGuiApp',
     'NavigationItem',
+    'NAV_ITEMS',
     'OfflineFitRunner',
     'OfflinePrepareRunner',
     'OnlineRunner',

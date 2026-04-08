@@ -1,7 +1,7 @@
 # HeadMatch Backlog
 
-**Version**: 0.6.1  
-**Tests**: 520+ passing across Linux/macOS
+**Version**: 0.7.0  
+**Tests**: 531 passing across Linux/macOS
 
 ---
 
@@ -19,6 +19,9 @@
 - Multi-pass averaging iteration mode
 - Confidence scoring with plain-language interpretation
 - EQ clipping prediction with preamp recommendations
+- **Basic Mode wizard** — guided 3-step workflow for beginners
+- **GUI clipping display** — preamp recommendations in completion panel
+- **CLI clipping output** — `--show-clipping` and `--json` flags
 - CI matrix across Python 3.10–3.13 with coverage reporting
 - Config auto-save with field name migration
 - Standalone binaries: Linux x64, macOS ARM64
@@ -34,15 +37,35 @@
 
 ## Now
 
-Nothing in progress. Awaiting next priorities.
+Release candidate preparation complete. Awaiting final testing and release decision.
+
+---
+
+## Done (v0.6.2)
+
+- **TASK-101: GUI Basic Mode Wizard** — Guided 3-step workflow for beginners. Flat target default, 3 iterations, max 10 PEQ filters, no exposed complexity.
+- **TASK-102: GUI Shell/View Refactoring** — Extracted shell into `gui/shell.py`, views remain in `gui_views.py`. gui.py reduced to 37-line re-export.
+- **TASK-103: Clone-Target Calibration Docs** — Documented clone-target workflow as mic calibration technique.
+- **TASK-104: EQ Clipping GUI Display** — Preamp recommendations in GUI completion panel with warning indicator.
+- **TASK-105: EQ Clipping CLI Output** — Clipping summary in `headmatch fit` with `--show-clipping` and `--json` flags.
 
 ---
 
 ## Next
 
-- GUI display for EQ clipping assessment
-- CLI output for clipping summary
-- GUI shell/view split — gui.py is ~880 lines
+### Priority 1: Mic calibration roadmap
+
+- **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
+  - Which published measurement databases are reliable
+  - How to handle ear canal resonance variation
+  - Whether per-user calibration is tractable
+
+### Priority 2: GUI refactoring backlog
+
+- **TASK-106: Split gui_views.py into real per-view modules**
+- **TASK-107: Extract GUI workflow controllers from HeadMatchGuiApp**
+- **TASK-108: Centralize GUI file-picking and background task helpers**
+- **TASK-109: Replace shell view dispatch with registry-based routing**
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
@@ -60,5 +83,3 @@ Nothing in progress. Awaiting next priorities.
 - Closed-loop EQ refinement (measure → apply → re-measure)
 - Room correction / speaker measurement mode
 - Asynchronous device support / clock drift compensation
-- Automated HRTF target integration
-- Safe mode vs advanced mode UI split

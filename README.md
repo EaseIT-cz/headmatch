@@ -45,6 +45,11 @@ Create a target curve that moves one headphone toward the tonal balance of anoth
 ### 6. Result interpretation
 Each run can include a plain-language trust summary so users can tell whether the measurement looks believable.
 
+### 7. EQ clipping prediction
+Each fit automatically checks whether the generated EQ profile could cause digital clipping. If boosts are too aggressive, HeadMatch recommends a preamp reduction and flags potential quality concerns.
+
+The CLI `headmatch fit` command shows a clipping summary after each fit. Use `--show-clipping` for a detailed breakdown (which bands are boosted, how much headroom is lost) or `--json` to get the full run summary including `eq_clipping_assessment` as structured output.
+
 ---
 
 ## Interaction modes
@@ -56,7 +61,12 @@ Best for most users.
 headmatch-gui
 ```
 
-If you want HeadMatch to appear in your Linux desktop launcher, copy the example desktop entry from `docs/examples/headmatch.desktop` into `~/.local/share/applications/` and point `Exec=` at your installed `headmatch-gui` path.
+The GUI offers two modes:
+
+- **Basic Mode** — A guided 3-step wizard for beginners. Pick a target, run 3 measurement iterations, review and export. No exposed device selection, sweep parameters, or filter limits.
+- **Advanced Mode** — Full control over devices, iterations, filter limits, and export options.
+
+If you want HeadMatch to appear
 
 ### CLI
 Best for explicit control, scripting, and repeatable workflows.
@@ -338,6 +348,16 @@ headmatch fit \
 ```
 
 This is different from the lightweight example workflow in `docs/examples/clone-targets/`: those shipped CSVs are small published-style examples for learning the command shape. They are useful for demos and experimentation, but the preferred path for serious personal cloning is to measure both headphones on your own rig and generate the difference target from those matching measurements.
+
+### Mic calibration via clone target
+
+If you use a binaural rig, you can also use clone targets as a practical mic calibration step.
+
+The idea is simple: measure a reference headphone with published measurements, save that run as a clone target, then use it as your calibration baseline for other headphones measured on the same rig.
+
+This does **not** remove all rig effects globally. It makes your subsequent measurements more comparable within the same head/rig/setup combination, which is often the useful part.
+
+See `docs/examples/clone-target-calibration.md` for the step-by-step workflow and limitations.
 
 ---
 

@@ -155,12 +155,14 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
 
-    p = sub.add_parser("fit", help="Analyze a recording and build Equalizer APO and CamillaDSP EQ exports.")
+    p = sub.add_parser("fit", help="Analyze a recording and build Equalizer APO and CamillaDSP EQ exports.", description="Analyze a recording, fit EQ, and export presets. The fit output includes a trust summary and clipping guidance when available.")
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--target-csv", default=config.preferred_target_csv)
     add_filter_budget_args(p, config)
+    p.add_argument("--json", action="store_true", help="Print the run summary as JSON instead of the human-readable terminal summary.")
+    p.add_argument("--show-clipping", action="store_true", help="Show detailed clipping assessment information in the terminal output.")
 
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
@@ -310,6 +312,42 @@ def print_run_confidence(cmd: str, args) -> None:
             print(f"- {step}")
 
 
+def _clipping_verdict_line(assessment) -> str:
+    if assessment is None:
+        return "No clipping assessment available."
+    if assessment.get("will_clip"):
+        return "⚠ EQ clipping detected — preamp reduction is recommended."
+    return "✓ No EQ clipping detected."
+
+
+def print_clipping_summary(summary: FrontendRunSummary, *, detailed: bool = False) -> None:
+    assessment = summary.eq_clipping_assessment
+    if not isinstance(assessment, dict):
+        return
+
+    print()
+    print(_clipping_verdict_line(assessment))
+    preamp_db = assessment.get("preamp_db")
+    if preamp_db is None:
+        preamp_db = assessment.get("total_preamp_db")
+    print(f"Preamp recommendation: {float(preamp_db):.1f} dB")
+    peak_boost = max(float(assessment.get("left_peak_boost_db", 0.0)), float(assessment.get("right_peak_boost_db", 0.0)))
+    print(f"Max boost level: {peak_boost:.1f} dB")
+    headroom = float(assessment.get("headroom_loss_db", 0.0))
+    if headroom > 12:
+        print(f"Warning: severe headroom loss ({headroom:.1f} dB).")
+    elif headroom > 6:
+        print(f"Warning: moderate headroom loss ({headroom:.1f} dB).")
+    if detailed:
+        print("Detailed clipping breakdown:")
+        print(f"- Left peak boost: {float(assessment.get('left_peak_boost_db', 0.0)):+.1f} dB")
+        print(f"- Right peak boost: {float(assessment.get('right_peak_boost_db', 0.0)):+.1f} dB")
+        print(f"- Left preamp: {float(assessment.get('left_preamp_db', preamp_db)):.1f} dB")
+        print(f"- Right preamp: {float(assessment.get('right_preamp_db', preamp_db)):.1f} dB")
+        if assessment.get("quality_concern"):
+            print(f"- Note: {assessment['quality_concern']}")
+
+
 def print_next_steps(cmd: str, args) -> None:
     out_dir = getattr(args, "out_dir", None)
     if cmd == "start":
@@ -332,6 +370,14 @@ def print_next_steps(cmd: str, args) -> None:
         print("Review the CSVs, or run fit to build EQ.")
     elif cmd in {"fit", "fit", "iterate"}:
         print_run_confidence(cmd, args)
+        summary_path = _run_summary_path(cmd, args)
+        if summary_path is not None and summary_path.exists():
+            try:
+                summary = FrontendRunSummary.from_dict(json.loads(summary_path.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+                summary = None
+            if summary is not None:
+                print_clipping_summary(summary, detailed=getattr(args, "show_clipping", False))
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
@@ -467,6 +513,13 @@ def main(argv: list[str] | None = None) -> None:
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
         elif args.cmd == "fit":
             process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
+            if getattr(args, "json", False):
+                summary_path = Path(args.out_dir) / "run_summary.json"
+                try:
+                    summary = FrontendRunSummary.from_dict(json.loads(summary_path.read_text(encoding="utf-8")))
+                    print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
+                except Exception:
+                    pass
         elif args.cmd == "search-headphone":
             from .headphone_db import search_headphone
             results = search_headphone(args.query)
@@ -531,11 +584,13 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
-    if args.cmd not in {'doctor', 'tui', 'list-targets'}:
+    if args.cmd not in {'doctor', 'tui', 'list-targets'} and not (args.cmd == "fit" and getattr(args, "json", False)):
         try:
             save_config(update_config_from_args(args, existing=config), config_path)
         except OSError:
             pass
+    if args.cmd == "fit" and getattr(args, "json", False):
+        return
     print_next_steps(args.cmd, args)
 
 

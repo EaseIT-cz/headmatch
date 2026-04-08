@@ -168,17 +168,23 @@ Audio I/O is abstracted behind a pluggable backend system:
 - explicit workflow surface
 - platform-neutral help text
 
-### `gui.py` (~865 lines)
-- primary desktop workflow shell
-- view rendering delegated to `gui_views.py`
-- guided measurement flow with iteration mode selection
-- auto-saves config after every successful run
+### `gui.py` (37 lines)
+- re-exports from gui/shell.py and gui_views.py for backward compatibility
 
-### `gui_views.py` (~756 lines)
-- all view rendering functions (online wizard, offline wizard, setup check, target editor, import APO, fetch curve, history, progress, completion)
-- target editor with live-updating sliders, canvas drag-to-move, scrollable control points
-- `_PlotGeometry` for bidirectional freq↔pixel coordinate mapping
-- curve preview renderer shared by target editor and drag handlers
+### `gui/shell.py` (~1100 lines, transitional)
+- primary desktop workflow shell and composition root
+- currently still owns navigation, picker orchestration, and several workflow entry points
+- planned follow-up: extract workflow controllers and route via a registry
+
+### `gui/views/` (transitional)
+- target structure for per-view modules
+- current intent is one module per view family plus shared form helpers
+- ongoing refactor should move rendering out of the legacy compatibility module
+
+### `gui_views.py` (legacy compatibility layer, transitional)
+- currently still contains most renderers and shared view helpers
+- should be reduced to a thin compatibility module or removed after per-view extraction
+- contains target editor rendering and plot geometry that should migrate into dedicated view modules
 
 ### `tui.py`
 - maintenance-mode terminal workflow
@@ -282,7 +288,7 @@ Confidence scoring and plain-language interpretation are part of the product.
 
 ## Current state
 
-Version 0.6.1. 520+ deterministic tests, passing on Linux and macOS.
+Version 0.7.0 release candidate. 531 deterministic tests passing; current measured coverage 75.53% in Linux CI-style validation.
 
 The shipped product includes:
 - Cross-platform audio backend (PipeWire on Linux, PortAudio on macOS/Windows)
@@ -305,9 +311,11 @@ The shipped product includes:
 ## Likely future work
 
 ### Next
-- GUI display for EQ clipping assessment
-- CLI output for clipping summary
-- GUI shell/view split — further extraction from gui.py
+
+- **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
+  - Which published measurement databases are reliable
+  - How to handle ear canal resonance variation
+  - Whether per-user calibration is tractable
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
