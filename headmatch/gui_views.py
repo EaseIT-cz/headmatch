@@ -25,6 +25,13 @@ OFFLINE_STEPS = (
 )
 
 
+CLONE_TARGET_STEPS = (
+    "Pick the source sweep recording measurement artifact you want to clone from.",
+    "Pick the target sweep recording measurement artifact you want to match.",
+    "Write the clone target CSV and reuse it in the measurement/fitting workflow.",
+)
+
+
 
 SECTION_PAD = 12
 FIELD_PAD_Y = 3
@@ -256,6 +263,32 @@ def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on
         ttk.Label(card, textvariable=variables.basic_export_path_var, wraplength=DETAIL_WRAP, justify="left").grid(row=2, column=0, sticky="w")
         ttk.Button(card, text="Export", command=on_export).grid(row=3, column=0, sticky="w", pady=(8, 0))
         ttk.Button(card, text="Back", command=on_back).grid(row=3, column=1, sticky="w", pady=(8, 0))
+
+
+def render_clone_target_workflow(ttk, frame, *, variables, on_create, on_back) -> None:
+    ttk.Label(frame, text="Clone Target", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Create a relative target curve from two sweep recording measurement artifacts. This is the basic-mode path for headphone cloning and mic coloration nulling.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+    steps = ttk.LabelFrame(frame, text="What happens", padding=SECTION_PAD)
+    steps.grid(row=2, column=0, sticky="ew")
+    for idx, step in enumerate(CLONE_TARGET_STEPS):
+        ttk.Label(steps, text=f"{idx + 1}. {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
+
+    form = ttk.LabelFrame(frame, text="Inputs", padding=SECTION_PAD)
+    form.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    form.columnconfigure(1, weight=1)
+    add_picker_row(ttk, form, 0, "Source measurement CSV", variables.basic_clone_source_var, button_text="Browse…", command=variables.choose_basic_clone_source)
+    add_picker_row(ttk, form, 1, "Target measurement CSV", variables.basic_clone_target_var, button_text="Browse…", command=variables.choose_basic_clone_target)
+    add_picker_row(ttk, form, 2, "Output clone target CSV", variables.basic_clone_output_var, button_text="Browse…", command=variables.choose_basic_clone_output)
+
+    actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
+    actions.grid(row=4, column=0, sticky="w")
+    ttk.Button(actions, text="Create clone target", command=on_create).grid(row=0, column=0, sticky="w")
+    ttk.Button(actions, text="Back to Basic Mode", command=on_back).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
 
 def render_history(ttk, frame, *, history_root_var, config_path: Path):

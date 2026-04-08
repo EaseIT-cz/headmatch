@@ -27,7 +27,7 @@ from ..measure import (
     format_doctor_report,
     prepare_offline_measurement,
 )
-from ..pipeline import iterative_measure_and_fit, process_single_measurement
+from ..pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
 from ..history import build_history_selection
 from ..target_editor import TargetEditor
 from ..apo_import import load_apo_preset
@@ -35,6 +35,7 @@ from ..apo_refine import refine_apo_preset
 from ..headphone_db import fetch_curve_from_url, search_headphone
 from .views import (
     render_basic_mode,
+    render_clone_target_workflow,
     render_completion,
     render_fetch_curve,
     render_history_page,
@@ -86,6 +87,7 @@ DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 
 BASIC_NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("basic-mode", "Basic Workflow"),
+    NavigationItem("basic-clone-target", "Clone Target"),
     NavigationItem("history", "Results"),
 )
 
@@ -206,6 +208,9 @@ class HeadMatchGuiApp:
         self.basic_search_results_var = tk.StringVar(master=root, value="")
         self.basic_target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
         self.basic_target_path_var = tk.StringVar(master=root, value="")
+        self.basic_clone_source_var = tk.StringVar(master=root, value="")
+        self.basic_clone_target_var = tk.StringVar(master=root, value="")
+        self.basic_clone_output_var = tk.StringVar(master=root, value="")
         self.basic_progress_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
@@ -306,6 +311,9 @@ class HeadMatchGuiApp:
         if key == "basic-mode":
             self._render_basic_mode()
             return
+        if key == "basic-clone-target":
+            self._render_basic_clone_target()
+            return
         if key == "measure-online":
             self._render_online_wizard()
             return
@@ -342,6 +350,15 @@ class HeadMatchGuiApp:
             on_measure=self.start_basic_measurement,
             on_export=self.basic_export_results,
             on_search=self.basic_search_target,
+        )
+
+    def _render_basic_clone_target(self) -> None:
+        render_clone_target_workflow(
+            self._ttk,
+            self.content,
+            variables=self,
+            on_create=self.start_basic_clone_target,
+            on_back=lambda: self.show_view("basic-mode"),
         )
 
     def _render_setup_check(self) -> None:
@@ -757,6 +774,54 @@ class HeadMatchGuiApp:
         )
         if selected:
             variable.set(selected)
+
+
+    def choose_basic_clone_source(self) -> None:
+        self._choose_file(
+            self.basic_clone_source_var,
+            title="Choose source measurement CSV",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            fallback=self.state.config_path.parent,
+        )
+
+    def choose_basic_clone_target(self) -> None:
+        self._choose_file(
+            self.basic_clone_target_var,
+            title="Choose target measurement CSV",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            fallback=self.state.config_path.parent,
+        )
+
+    def choose_basic_clone_output(self) -> None:
+        self._choose_file(
+            self.basic_clone_output_var,
+            title="Choose clone target CSV",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            fallback=self.state.config_path.parent,
+        )
+
+    def start_basic_clone_target(self) -> None:
+        source = self.basic_clone_source_var.get().strip()
+        target = self.basic_clone_target_var.get().strip()
+        out_path = self.basic_clone_output_var.get().strip()
+        if not source or not target or not out_path:
+            raise ValueError("Source, target, and output CSV paths are required.")
+        self._run_background_task(
+            task_name="basic-clone-target",
+            progress_title="Creating clone target",
+            progress_body="HeadMatch is building a relative clone target from the chosen measurement artifacts.",
+            worker=lambda: build_clone_curve(source, target, out_path),
+            on_success=lambda result: self._set_completion(
+                title="Clone target ready",
+                summary=f"Saved clone target to {out_path}.",
+                result=None,
+                steps=(
+                    "Use the clone target CSV in the target selector for a follow-up fit.",
+                    "Re-run the basic or advanced measurement flow against the generated target.",
+                    "Keep the source and target measurement artifacts around for traceability.",
+                ),
+            ),
+        )
 
     def choose_output_dir(self) -> None:
         self._choose_directory(self.output_dir_var, title="Choose output folder", fallback=self.state.default_output_dir)

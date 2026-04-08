@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .basic import render_basic_mode
+from .basic import render_basic_mode, render_clone_target_workflow
 from .completion import render_completion, render_progress
 from .fetch_curve import render_fetch_curve
 from .history import render_history_page
@@ -12,6 +12,7 @@ from .target_editor import render_target_editor
 
 __all__ = [
     'render_basic_mode',
+    'render_clone_target_workflow',
     'render_completion',
     'render_fetch_curve',
     'render_history_page',

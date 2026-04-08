@@ -518,6 +518,43 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
 
 
 
+
+
+def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_path, fake_tk, monkeypatch):
+    calls = {}
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    app.set_mode('basic')
+    assert [item.key for item in app._nav_items_for_mode()] == ['basic-mode', 'basic-clone-target', 'history']
+
+    app.show_view('basic-clone-target')
+    app.basic_clone_source_var.set(str(tmp_path / 'source.csv'))
+    app.basic_clone_target_var.set(str(tmp_path / 'target.csv'))
+    app.basic_clone_output_var.set(str(tmp_path / 'clone.csv'))
+
+    monkeypatch.setattr('headmatch.gui.shell.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
+
+    app.start_basic_clone_target()
+
+    assert calls == {'source': str(tmp_path / 'source.csv'), 'target': str(tmp_path / 'target.csv'), 'out_path': str(tmp_path / 'clone.csv')}
+    assert app.completion_title_var.get() == 'Clone target ready'
+    assert app._last_completion_steps[0].startswith('Use the clone target CSV')
+
+
 def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     suffix, original = varied_config()
     config_path = tmp_path / f"gui-{suffix}.json"
