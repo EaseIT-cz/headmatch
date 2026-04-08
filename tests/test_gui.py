@@ -659,6 +659,39 @@ def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_p
     assert app._last_completion_steps[0].startswith('Use the clone target CSV')
 
 
+def test_basic_mode_measurement_uses_average_iteration_runner(tmp_path, fake_tk, monkeypatch):
+    calls = {}
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
+
+    root = DummyRoot()
+    app = fake_tk.create_app(
+        root=root,
+        config_loader=lambda _path=None: (FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')), tmp_path / 'config.json', False),
+    )
+
+    def fake_online_runner(**kwargs):
+        calls.update(kwargs)
+        return [{'ok': True}]
+
+    app._online_runner = fake_online_runner
+    app.set_mode('basic')
+    app.start_basic_measurement()
+
+    assert calls['iterations'] == 3
+    assert calls['iteration_mode'] == 'average'
+    assert calls['output_target'] is None
+    assert calls['input_target'] is None
+    assert app.completion_title_var.get() == 'Basic mode complete'
+
+
 def test_load_gui_state_reads_config_file_from_explicit_path(tmp_path):
     suffix, original = varied_config()
     config_path = tmp_path / f"gui-{suffix}.json"

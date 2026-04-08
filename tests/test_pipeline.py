@@ -238,6 +238,65 @@ def test_iterative_measurement_writes_per_iteration_readme(monkeypatch, tmp_path
 
 
 
+def test_average_iteration_mode_runs_passes_consecutively_before_averaging(monkeypatch, tmp_path: Path):
+    spec = SweepSpec(sample_rate=48000, duration_s=1.0, pre_silence_s=0.1, post_silence_s=0.1, amplitude=0.2)
+    call_order: list[tuple[str, int]] = []
+    freqs = np.array([20.0, 1000.0, 20000.0])
+
+    def fake_run_pipewire_measurement(_spec, paths, _device):
+        index = len([name for name, _ in call_order if name == 'measure']) + 1
+        call_order.append(('measure', index))
+        paths.sweep_wav.write_bytes(b'sweep')
+        paths.recording_wav.write_bytes(b'recording')
+        return paths.recording_wav
+
+    def fake_analyze_measurement(_recording, _spec, _out_dir):
+        index = len([name for name, _ in call_order if name == 'analyze']) + 1
+        call_order.append(('analyze', index))
+        return MeasurementResult(
+            freqs_hz=freqs,
+            left_db=np.array([index, index, index], dtype=float),
+            right_db=np.array([index, index, index], dtype=float),
+            left_raw_db=np.array([index, index, index], dtype=float),
+            right_raw_db=np.array([index, index, index], dtype=float),
+            diagnostics={'alignment_score': float(index)},
+        )
+
+    def fake_fit_from_measurement(result, target, sample_rate, *, max_filters, filter_budget):
+        call_order.append(('fit', int(result.left_db[0])))
+        return [], [], {'predicted_error_db': {'left_rms': 0.1, 'right_rms': 0.1, 'left_max': 0.2, 'right_max': 0.2}}
+
+    def fake_write_fit_artifacts(*_args, **_kwargs):
+        return {'predicted_error_db': {'left_rms': 0.1, 'right_rms': 0.1, 'left_max': 0.2, 'right_max': 0.2}}
+
+    monkeypatch.setattr('headmatch.pipeline.run_pipewire_measurement', fake_run_pipewire_measurement)
+    monkeypatch.setattr('headmatch.pipeline.analyze_measurement', fake_analyze_measurement)
+    monkeypatch.setattr('headmatch.pipeline.fit_from_measurement', fake_fit_from_measurement)
+    monkeypatch.setattr('headmatch.pipeline.write_fit_artifacts', fake_write_fit_artifacts)
+
+    summaries = iterative_measure_and_fit(
+        output_dir=tmp_path / 'iterative',
+        sweep_spec=spec,
+        target_path=None,
+        output_target=None,
+        input_target=None,
+        iterations=3,
+        max_filters=4,
+        iteration_mode='average',
+    )
+
+    assert summaries == [{'iteration': 0, 'left_rms_error_db': 0.1, 'right_rms_error_db': 0.1, 'left_max_error_db': 0.2, 'right_max_error_db': 0.2}]
+    assert call_order == [
+        ('measure', 1),
+        ('analyze', 1),
+        ('measure', 2),
+        ('analyze', 2),
+        ('measure', 3),
+        ('analyze', 3),
+        ('fit', 2),
+    ]
+
+
 def test_analyze_rejects_mono_recording(tmp_path: Path):
     recording, spec = simulate_headphone_recording(tmp_path)
     original, _sr = sf.read(str(recording), always_2d=True)
