@@ -683,10 +683,15 @@ class HeadMatchGuiApp:
             ),
         )
 
+    def refresh_basic_mode_target_step(self) -> None:
+        if self.current_view.get() == "basic-mode" and self.basic_step_var.get() == "target":
+            self.show_view("basic-mode")
+
     def choose_output_dir(self) -> None:
         self._choose_directory(self.output_dir_var, title="Choose output folder", fallback=self.state.default_output_dir)
 
     def choose_target_csv(self) -> None:
+        self.basic_search_results_var.set("")
         self._choose_file(
             self.target_csv_var,
             title="Choose target CSV",
@@ -694,7 +699,9 @@ class HeadMatchGuiApp:
             fallback=self.state.config_path.parent,
         )
         self.basic_target_csv_var.set(self.target_csv_var.get())
+        self.basic_target_path_var.set(self.target_csv_var.get())
         self.basic_target_mode_var.set("csv")
+        self.refresh_basic_mode_target_step()
 
     def choose_offline_recording(self) -> None:
         self._choose_file(

@@ -18,13 +18,17 @@ def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on
     card.columnconfigure(1, weight=1)
 
     if current == 'target':
-        add_combobox_row(ttk, card, 0, "Target source", variables.basic_target_mode_var, ("flat", "csv", "database"), empty_label="")
-        target_mode = variables.basic_target_mode_var.get().strip()
+        ttk.Label(card, text="Target source").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=3)
+        combo = ttk.Combobox(card, textvariable=variables.basic_target_mode_var, values=("flat", "csv", "database"), state="readonly")
+        combo.grid(row=0, column=1, sticky="ew", pady=3)
+        if hasattr(combo, 'bind') and hasattr(variables, 'refresh_basic_mode_target_step'):
+            combo.bind("<<ComboboxSelected>>", lambda _evt: variables.refresh_basic_mode_target_step())
+        target_mode = (variables.basic_target_mode_var.get().strip() or 'flat')
         row = 1
         if target_mode == 'csv':
             add_picker_row(ttk, card, row, "Target CSV", variables.basic_target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
             row += 1
-        if target_mode == 'database':
+        elif target_mode == 'database':
             add_entry_row(ttk, card, row, "Search database", variables.basic_search_query_var)
             ttk.Button(card, text="Search", command=on_search).grid(row=row + 1, column=0, sticky="w", pady=(6, 0))
             ttk.Label(card, textvariable=variables.basic_search_results_var, wraplength=DETAIL_WRAP, justify="left").grid(row=row + 1, column=1, sticky="w", pady=(6, 0))
