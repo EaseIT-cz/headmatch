@@ -48,7 +48,11 @@ def _iter_summary_files(root: Path) -> Iterable[Path]:
 def load_recent_runs(root: str | Path, *, limit: int = 10) -> list[RunHistoryEntry]:
     root_path = Path(root).expanduser()
     entries: list[RunHistoryEntry] = []
-    for summary_path in sorted(_iter_summary_files(root_path), key=lambda p: p.stat().st_mtime, reverse=True):
+    for summary_path in sorted(
+        _iter_summary_files(root_path),
+        key=lambda p: (p.stat().st_mtime_ns, str(p.parent), str(p)),
+        reverse=True,
+    ):
         try:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
             summary = FrontendRunSummary.from_dict(payload)
