@@ -12,7 +12,6 @@ from ..pipeline import build_clone_curve, iterative_measure_and_fit
 from ..headphone_db import fetch_curve_from_url, search_headphone
 from ..signals import SweepSpec
 from ..settings import load_or_create_config, save_config
-from ..target_editor import TargetEditor
 
 
 @dataclass
