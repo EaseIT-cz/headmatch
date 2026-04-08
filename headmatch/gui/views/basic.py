@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .common import BODY_WRAP, CLONE_TARGET_STEPS, DETAIL_WRAP, SECTION_PAD, add_combobox_row, add_entry_row, add_picker_row
+from .common import BODY_WRAP, CLONE_TARGET_STEPS, DETAIL_WRAP, SECTION_PAD, add_entry_row, add_picker_row
 
 
 def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on_export, on_search) -> None:
