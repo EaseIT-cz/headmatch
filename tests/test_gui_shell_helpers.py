@@ -100,3 +100,92 @@ def test_nav_items_for_mode_switches_between_basic_and_advanced():
     app.mode_var.set("advanced")
     items = HeadMatchGuiApp._nav_items_for_mode(app)
     assert items[0].key == "measure-online"
+
+
+def test_run_background_task_sets_progress_and_enqueues_success():
+    class BG:
+        def start(self, worker):
+            self.payload = worker()
+    app = SimpleNamespace(
+        _active_task_name=None,
+        progress_title_var=DummyVar(value=""),
+        progress_body_var=DummyVar(value=""),
+        show_view_progress=lambda: setattr(app, "showed", True),
+        _background_tasks=BG(),
+        _schedule_task_poll=lambda: setattr(app, "scheduled", True),
+    )
+
+    HeadMatchGuiApp._run_background_task(app, task_name="x", progress_title="Title", progress_body="Body", worker=lambda: 123, on_success=lambda result: result)
+
+    assert app._active_task_name == "x"
+    assert app.progress_title_var.get() == "Title"
+    assert app.progress_body_var.get() == "Body"
+    assert app.showed is True
+    assert app.scheduled is True
+    assert app._background_tasks.payload[1] == 123
+
+
+def test_run_background_task_rejects_parallel_work():
+    app = SimpleNamespace(_active_task_name="busy")
+    with pytest.raises(RuntimeError, match="already running"):
+        HeadMatchGuiApp._run_background_task(app, task_name="x", progress_title="t", progress_body="b", worker=lambda: None, on_success=lambda r: None)
+
+
+def test_poll_task_queue_handles_error_and_success():
+    class Q:
+        def __init__(self, items):
+            self.items = items
+        def get_nowait(self):
+            if not self.items:
+                import queue
+                raise queue.Empty
+            return self.items.pop(0)
+    completions = []
+    app = SimpleNamespace(
+        _task_queue=Q([("error", RuntimeError("boom"))]),
+        _active_task_name="x",
+        _set_completion=lambda **kwargs: completions.append(kwargs),
+        root=SimpleNamespace(after=lambda *_a, **_k: None),
+    )
+    HeadMatchGuiApp._poll_task_queue(app)
+    assert app._active_task_name is None
+    assert completions[0]["title"] == "Workflow could not finish"
+
+    done = []
+    app = SimpleNamespace(
+        _task_queue=Q([("success", (lambda result: done.append(result), 42))]),
+        _active_task_name="x",
+    )
+    HeadMatchGuiApp._poll_task_queue(app)
+    assert done == [42]
+
+
+def test_poll_task_queue_reschedules_when_empty():
+    import queue
+    class Q:
+        def get_nowait(self):
+            raise queue.Empty
+    called = []
+    app = SimpleNamespace(_task_queue=Q(), _active_task_name="x")
+    app.root = SimpleNamespace(after=lambda delay, cb: called.append((delay, cb)))
+    app._poll_task_queue = lambda: None
+    HeadMatchGuiApp._poll_task_queue(app)
+    assert called and called[0][0] == 100
+
+
+def test_set_completion_updates_state_and_renders():
+    destroyed = []
+    app = SimpleNamespace(
+        _last_completion_steps=(),
+        _completion_clipping_assessment=None,
+        completion_title_var=DummyVar(value=""),
+        completion_body_var=DummyVar(value=""),
+        _save_current_config=lambda: destroyed.append("saved"),
+        content=SimpleNamespace(winfo_children=lambda: [SimpleNamespace(destroy=lambda: destroyed.append("destroyed"))]),
+        _render_completion=lambda: destroyed.append("rendered"),
+    )
+    HeadMatchGuiApp._set_completion(app, title="Done", summary="ok", steps=("a",), result={"eq_clipping": {"risk": "high"}})
+    assert app.completion_title_var.get() == "Done"
+    assert app.completion_body_var.get() == "ok"
+    assert app._completion_clipping_assessment == {"risk": "high"}
+    assert destroyed == ["saved", "destroyed", "rendered"]
