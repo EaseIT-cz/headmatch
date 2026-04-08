@@ -8,7 +8,7 @@ from ..apo_refine import refine_apo_preset
 from ..contracts import FrontendConfig
 from ..history import build_history_selection
 from ..measure import OfflineMeasurementPlan, prepare_offline_measurement
-from ..pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
+from ..pipeline import build_clone_curve, iterative_measure_and_fit
 from ..headphone_db import fetch_curve_from_url, search_headphone
 from ..signals import SweepSpec
 from ..settings import load_or_create_config, save_config
