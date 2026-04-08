@@ -48,6 +48,8 @@ Each run can include a plain-language trust summary so users can tell whether th
 ### 7. EQ clipping prediction
 Each fit automatically checks whether the generated EQ profile could cause digital clipping. If boosts are too aggressive, HeadMatch recommends a preamp reduction and flags potential quality concerns.
 
+The CLI `headmatch fit` command shows a clipping summary after each fit. Use `--show-clipping` for a detailed breakdown (which bands are boosted, how much headroom is lost) or `--json` to get the full run summary including `eq_clipping_assessment` as structured output.
+
 ---
 
 ## Interaction modes
@@ -59,7 +61,12 @@ Best for most users.
 headmatch-gui
 ```
 
-If you want HeadMatch to appear in your Linux desktop launcher, copy the example desktop entry from `docs/examples/headmatch.desktop` into `~/.local/share/applications/` and point `Exec=` at your installed `headmatch-gui` path.
+The GUI offers two modes:
+
+- **Basic Mode** — A guided 3-step wizard for beginners. Pick a target, run 3 measurement iterations, review and export. No exposed device selection, sweep parameters, or filter limits.
+- **Advanced Mode** — Full control over devices, iterations, filter limits, and export options.
+
+If you want HeadMatch to appear
 
 ### CLI
 Best for explicit control, scripting, and repeatable workflows.

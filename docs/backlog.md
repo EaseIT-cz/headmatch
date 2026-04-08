@@ -1,7 +1,7 @@
 # HeadMatch Backlog
 
-**Version**: 0.6.1  
-**Tests**: 520+ passing across Linux/macOS
+**Version**: 0.6.2  
+**Tests**: 523 passing across Linux/macOS
 
 ---
 
@@ -19,6 +19,9 @@
 - Multi-pass averaging iteration mode
 - Confidence scoring with plain-language interpretation
 - EQ clipping prediction with preamp recommendations
+- **Basic Mode wizard** — guided 3-step workflow for beginners
+- **GUI clipping display** — preamp recommendations in completion panel
+- **CLI clipping output** — `--show-clipping` and `--json` flags
 - CI matrix across Python 3.10–3.13 with coverage reporting
 - Config auto-save with field name migration
 - Standalone binaries: Linux x64, macOS ARM64
@@ -38,29 +41,27 @@ Nothing in progress. Awaiting next priorities.
 
 ---
 
-## Next
-
-### Priority 1: User onboarding (v0.7.0 focus)
+## Done (v0.6.2)
 
 - **TASK-101: GUI Basic Mode Wizard** — Guided 3-step workflow for beginners. Flat target default, 3 iterations, max 10 PEQ filters, no exposed complexity.
-- **TASK-102: GUI Shell/View Refactoring** — Extract views from 920-line gui.py into gui/views/. Enables parallel work on Basic Mode.
-- **TASK-103: Clone-Target Calibration Docs** — Document clone-target workflow as mic calibration technique.
+- **TASK-102: GUI Shell/View Refactoring** — Extracted shell into `gui/shell.py`, views remain in `gui_views.py`. gui.py reduced to 37-line re-export.
+- **TASK-103: Clone-Target Calibration Docs** — Documented clone-target workflow as mic calibration technique.
+- **TASK-104: EQ Clipping GUI Display** — Preamp recommendations in GUI completion panel with warning indicator.
+- **TASK-105: EQ Clipping CLI Output** — Clipping summary in `headmatch fit` with `--show-clipping` and `--json` flags.
 
-### Priority 2: Clipping visibility
+---
 
-- **TASK-104: EQ Clipping GUI Display** — Show preamp recommendations in completion panel.
-- **TASK-105: EQ Clipping CLI Output** — Add clipping summary to fit command output.
+## Next
 
-### Priority 3: Mic calibration roadmap
+### Priority 1: Mic calibration roadmap
 
 - **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
   - Which published measurement databases are reliable
   - How to handle ear canal resonance variation
   - Whether per-user calibration is tractable
 
-### Priority 4: Code health
+### Priority 2: Code health
 
-- GUI shell/view split — gui.py is ~880 lines (covered by TASK-102)
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
@@ -78,5 +79,3 @@ Nothing in progress. Awaiting next priorities.
 - Closed-loop EQ refinement (measure → apply → re-measure)
 - Room correction / speaker measurement mode
 - Asynchronous device support / clock drift compensation
-- Automated HRTF target integration
-- Safe mode vs advanced mode UI split (covered by TASK-101)

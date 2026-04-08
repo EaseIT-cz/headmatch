@@ -168,7 +168,16 @@ Audio I/O is abstracted behind a pluggable backend system:
 - explicit workflow surface
 - platform-neutral help text
 
-### `gui.py` (~865 lines)
+### `gui.py` (37 lines)
+- re-exports from gui/shell.py and gui_views.py for backward compatibility
+
+### `gui/shell.py` (~1045 lines)
+- primary desktop workflow shell
+- mode switcher (Basic/Advanced)
+- guided measurement flow with iteration mode selection
+- auto-saves config after every successful run
+
+### `gui_views.py` (~875 lines)
 - primary desktop workflow shell
 - view rendering delegated to `gui_views.py`
 - guided measurement flow with iteration mode selection
@@ -305,10 +314,11 @@ The shipped product includes:
 ## Likely future work
 
 ### Next
-- **Mic calibration workflow** — Binaural microphones color measurements. Near-term: document clone-target calibration against a published reference headphone so users can calibrate within one rig/head setup. Long-term: derive mic response curve via comparison to trusted published data.
-- GUI display for EQ clipping assessment
-- CLI output for clipping summary
-- GUI shell/view split — further extraction from gui.py
+
+- **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
+  - Which published measurement databases are reliable
+  - How to handle ear canal resonance variation
+  - Whether per-user calibration is tractable
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
