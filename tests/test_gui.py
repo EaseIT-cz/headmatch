@@ -230,8 +230,28 @@ def _basic_vars(mode="flat"):
         basic_target_csv_var=DummyVar(value="/tmp/target.csv"),
         basic_search_query_var=DummyVar(value="HD 650"),
         basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
         choose_target_csv=lambda: None,
+        choose_basic_search_match=lambda _i: None,
     )
+
+
+def test_basic_mode_shows_database_match_choices():
+    from headmatch.gui.views.basic import render_basic_mode
+    from headmatch.headphone_db import HeadphoneEntry
+
+    ttk = RecordingTtk()
+    frame = DummyWidget()
+    vars = _basic_vars("database")
+    vars.basic_search_matches = [
+        HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="a"),
+        HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="b"),
+    ]
+    render_basic_mode(ttk, frame, variables=vars, on_next=lambda: None, on_back=lambda: None, on_measure=lambda: None, on_export=lambda: None, on_search=lambda: None)
+    buttons = [w.text for w in ttk.created if getattr(w, "kind", None) == "Button" and w.text]
+    assert any("oratory1990" in text for text in buttons)
+    assert any("crinacle" in text for text in buttons)
 
 
 def test_basic_mode_hides_irrelevant_controls_by_source_selection():
@@ -247,7 +267,37 @@ def test_basic_mode_hides_irrelevant_controls_by_source_selection():
         assert ("Search database" in labels) == (mode == "database")
 
 
-def test_basic_search_downloads_and_selects_csv(monkeypatch, tmp_path):
+def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
+    from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.headphone_db import HeadphoneEntry
+
+    monkeypatch.setattr("headmatch.gui.shell.search_headphone", lambda _q: [
+        HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv"),
+        HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="results/crinacle/over-ear/HD 650/HD 650.csv"),
+    ])
+
+    refreshed = {"count": 0}
+    app = SimpleNamespace(
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
+        basic_target_mode_var=DummyVar(value="database"),
+        basic_target_csv_var=DummyVar(value=""),
+        basic_target_path_var=DummyVar(value=""),
+        refresh_basic_mode_target_step=lambda: refreshed.__setitem__("count", refreshed["count"] + 1),
+        choose_basic_search_match=lambda _i: None,
+    )
+
+    HeadMatchGuiApp.basic_search_target(app)
+
+    assert len(app.basic_search_matches) == 2
+    assert app.basic_target_csv_var.get() == ""
+    assert "Choose one below" in app.basic_search_results_var.get()
+    assert refreshed["count"] == 1
+
+
+def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_path):
     from headmatch.gui.shell import HeadMatchGuiApp
     from headmatch.headphone_db import HeadphoneEntry
 
@@ -271,19 +321,23 @@ def test_basic_search_downloads_and_selects_csv(monkeypatch, tmp_path):
     app = SimpleNamespace(
         basic_search_query_var=DummyVar(value="HD 650"),
         basic_search_results_var=DummyVar(value=""),
+        basic_search_choice_var=DummyVar(value=""),
+        basic_search_matches=[],
         basic_target_mode_var=DummyVar(value="flat"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
+        refresh_basic_mode_target_step=lambda: None,
     )
+    app.choose_basic_search_match = lambda i: HeadMatchGuiApp.choose_basic_search_match(app, i)
 
     HeadMatchGuiApp.basic_search_target(app)
 
     assert calls["query"] == "HD 650"
     assert calls["url"].startswith("https://")
     assert app.basic_target_mode_var.get() == "database"
-    assert app.basic_target_csv_var.get() == str(tmp_path / "HD 650.csv")
-    assert app.basic_target_path_var.get() == str(tmp_path / "HD 650.csv")
-    assert "Downloaded HD 650" in app.basic_search_results_var.get()
+    assert app.basic_target_csv_var.get() == str(tmp_path / "HD 650 - oratory1990.csv")
+    assert app.basic_target_path_var.get() == str(tmp_path / "HD 650 - oratory1990.csv")
+    assert "Selected HD 650" in app.basic_search_results_var.get()
 
 
 def test_online_steps_explain_playback_vs_capture_targets():

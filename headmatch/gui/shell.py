@@ -204,6 +204,8 @@ class HeadMatchGuiApp:
         self.basic_target_mode_var = tk.StringVar(master=root, value="flat")
         self.basic_search_query_var = tk.StringVar(master=root, value="")
         self.basic_search_results_var = tk.StringVar(master=root, value="")
+        self.basic_search_choice_var = tk.StringVar(master=root, value="")
+        self.basic_search_matches: list = []
         self.basic_target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
         self.basic_target_path_var = tk.StringVar(master=root, value="")
         self.basic_clone_source_var = tk.StringVar(master=root, value="")
@@ -687,6 +689,28 @@ class HeadMatchGuiApp:
         if self.current_view.get() == "basic-mode" and self.basic_step_var.get() == "target":
             self.show_view("basic-mode")
 
+    def choose_basic_search_match(self, index: int) -> None:
+        matches = getattr(self, "basic_search_matches", []) or []
+        if index < 0 or index >= len(matches):
+            self.basic_search_results_var.set("Invalid search result selection.")
+            return
+        entry = matches[index]
+        from ..paths import documents_dir
+        safe_name = entry.name.replace("/", "_").replace("\\", "_")
+        safe_source = entry.source.replace("/", "_").replace("\\", "_")
+        out_path = Path(documents_dir()) / f"{safe_name} - {safe_source}.csv"
+        try:
+            saved = fetch_curve_from_url(entry.raw_csv_url, out_path)
+        except Exception as exc:
+            self.basic_search_results_var.set(f"Found {entry.name}, but download failed: {exc}")
+            return
+        self.basic_target_mode_var.set("database")
+        self.basic_target_csv_var.set(str(saved))
+        self.basic_target_path_var.set(str(saved))
+        self.basic_search_choice_var.set(f"{entry.name} — {entry.source}")
+        self.basic_search_results_var.set(f"Selected {entry.name} from {entry.source}.")
+        self.refresh_basic_mode_target_step()
+
     def choose_output_dir(self) -> None:
         self._choose_directory(self.output_dir_var, title="Choose output folder", fallback=self.state.default_output_dir)
 
@@ -737,29 +761,29 @@ class HeadMatchGuiApp:
     def basic_search_target(self) -> None:
         query = self.basic_search_query_var.get().strip()
         if not query:
+            self.basic_search_matches = []
             self.basic_search_results_var.set("Enter a headphone model name to search the database.")
+            self.refresh_basic_mode_target_step()
             return
         try:
             results = search_headphone(query)
         except Exception as exc:
+            self.basic_search_matches = []
             self.basic_search_results_var.set(f"Search failed: {exc}")
+            self.refresh_basic_mode_target_step()
             return
         if not results:
+            self.basic_search_matches = []
             self.basic_search_results_var.set(f"No matches for '{query}'.")
+            self.refresh_basic_mode_target_step()
             return
-        entry = results[0]
-        from ..paths import documents_dir
-        safe_name = entry.name.replace("/", "_").replace("\\", "_")
-        out_path = Path(documents_dir()) / f"{safe_name}.csv"
-        try:
-            saved = fetch_curve_from_url(entry.raw_csv_url, out_path)
-        except Exception as exc:
-            self.basic_search_results_var.set(f"Found {entry.name}, but download failed: {exc}")
+        self.basic_search_matches = results[:8]
+        if len(self.basic_search_matches) == 1:
+            self.choose_basic_search_match(0)
             return
-        self.basic_target_mode_var.set("database")
-        self.basic_target_csv_var.set(str(saved))
-        self.basic_target_path_var.set(str(saved))
-        self.basic_search_results_var.set(f"Downloaded {entry.name} to {saved}.")
+        self.basic_search_choice_var.set("")
+        self.basic_search_results_var.set(f"Found {len(self.basic_search_matches)} matches. Choose one below.")
+        self.refresh_basic_mode_target_step()
 
     def basic_export_results(self) -> None:
         self._show_status(f"Exported to {self.basic_export_path_var.get().strip() or self.output_dir_var.get().strip()}.")
@@ -773,7 +797,7 @@ class HeadMatchGuiApp:
             worker=lambda: self._online_runner(
                 output_dir=out_dir,
                 sweep_spec=self._build_sweep(),
-                target_path=(self.basic_target_csv_var.get().strip() if self.basic_target_mode_var.get() == "csv" else None),
+                target_path=(self.basic_target_csv_var.get().strip() if self.basic_target_mode_var.get() in {"csv", "database"} else None),
                 output_target=None,
                 input_target=None,
                 iterations=3,
