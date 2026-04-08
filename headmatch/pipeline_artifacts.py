@@ -24,7 +24,6 @@ from .exporters import (
     export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
-from .eq_clipping import EQClippingAssessment
 from .io_utils import save_json
 from .peq import FilterBudget, PEQBand, peq_chain_response_db
 from .pipeline_confidence import summarize_trustworthiness
