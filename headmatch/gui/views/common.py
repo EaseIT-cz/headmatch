@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...history import build_history_selection
-from ...troubleshooting import confidence_troubleshooting_steps
 
 SECTION_PAD = 12
 FIELD_PAD_Y = 3
