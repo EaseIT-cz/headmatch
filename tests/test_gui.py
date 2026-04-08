@@ -95,6 +95,13 @@ class DummyRoot(DummyWidget):
         return None
 
 
+class RecordingWidget(DummyWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.text = kwargs.get("text")
+        self.textvariable = kwargs.get("textvariable")
+
+
 class DummyTtk:
     Frame = DummyWidget
     Label = DummyWidget
@@ -103,6 +110,26 @@ class DummyTtk:
     Entry = DummyWidget
     Scrollbar = DummyWidget
     Combobox = DummyWidget
+
+
+class RecordingTtk:
+    def __init__(self):
+        self.created = []
+        self.Label = self._factory("Label")
+        self.Button = self._factory("Button")
+        self.LabelFrame = self._factory("LabelFrame")
+        self.Entry = self._factory("Entry")
+        self.Scrollbar = self._factory("Scrollbar")
+        self.Combobox = self._factory("Combobox")
+        self.Frame = self._factory("Frame")
+
+    def _factory(self, kind):
+        def ctor(*args, **kwargs):
+            widget = RecordingWidget(*args, **kwargs)
+            widget.kind = kind
+            self.created.append(widget)
+            return widget
+        return ctor
 
 
 class DummyStyle:
@@ -194,6 +221,69 @@ def test_navigation_items_cover_shell_sections():
         "Target Editor", "Import APO", "Fetch Curve", "Results",
     ]
 
+
+
+def _basic_vars(mode="flat"):
+    return SimpleNamespace(
+        basic_step_var=DummyVar(value="target"),
+        basic_target_mode_var=DummyVar(value=mode),
+        basic_target_csv_var=DummyVar(value="/tmp/target.csv"),
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        choose_target_csv=lambda: None,
+    )
+
+
+def test_basic_mode_hides_irrelevant_controls_by_source_selection():
+    from headmatch.gui.views.basic import render_basic_mode
+
+    for mode, expected in [("flat", set()), ("csv", {"Target CSV"}), ("database", {"Search database"})]:
+        ttk = RecordingTtk()
+        frame = DummyWidget()
+        render_basic_mode(ttk, frame, variables=_basic_vars(mode), on_next=lambda: None, on_back=lambda: None, on_measure=lambda: None, on_export=lambda: None, on_search=lambda: None)
+        labels = {w.text for w in ttk.created if getattr(w, "kind", None) == "Label" and w.text}
+        assert expected.issubset(labels)
+        assert ("Target CSV" in labels) == (mode == "csv")
+        assert ("Search database" in labels) == (mode == "database")
+
+
+def test_basic_search_downloads_and_selects_csv(monkeypatch, tmp_path):
+    from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.headphone_db import HeadphoneEntry
+
+    calls = {}
+
+    def fake_search(query):
+        calls["query"] = query
+        return [HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv")]
+
+    def fake_fetch(url, out_path):
+        calls["url"] = url
+        calls["out_path"] = Path(out_path)
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text("frequency_hz,response_db\n20,0\n")
+        return Path(out_path)
+
+    monkeypatch.setattr("headmatch.gui.shell.search_headphone", fake_search)
+    monkeypatch.setattr("headmatch.gui.shell.fetch_curve_from_url", fake_fetch)
+    monkeypatch.setattr("headmatch.paths.documents_dir", lambda: tmp_path)
+
+    app = SimpleNamespace(
+        basic_search_query_var=DummyVar(value="HD 650"),
+        basic_search_results_var=DummyVar(value=""),
+        basic_target_mode_var=DummyVar(value="flat"),
+        basic_target_csv_var=DummyVar(value=""),
+        basic_target_path_var=DummyVar(value=""),
+    )
+
+    HeadMatchGuiApp.basic_search_target(app)
+
+    assert calls["query"] == "HD 650"
+    assert calls["url"].startswith("https://")
+    assert app.basic_target_mode_var.get() == "database"
+    assert app.basic_target_csv_var.get() == str(tmp_path / "HD 650.csv")
+    assert app.basic_target_path_var.get() == str(tmp_path / "HD 650.csv")
+    assert "Downloaded HD 650" in app.basic_search_results_var.get()
 
 
 def test_online_steps_explain_playback_vs_capture_targets():

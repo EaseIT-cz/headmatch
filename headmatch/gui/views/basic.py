@@ -19,11 +19,17 @@ def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on
 
     if current == 'target':
         add_combobox_row(ttk, card, 0, "Target source", variables.basic_target_mode_var, ("flat", "csv", "database"), empty_label="")
-        add_picker_row(ttk, card, 1, "Target CSV", variables.basic_target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
-        add_entry_row(ttk, card, 2, "Search database", variables.basic_search_query_var)
-        ttk.Button(card, text="Search", command=on_search).grid(row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(card, textvariable=variables.basic_search_results_var, wraplength=DETAIL_WRAP, justify="left").grid(row=3, column=1, sticky="w", pady=(6, 0))
-        ttk.Button(card, text="Next: Measurement", command=on_next).grid(row=4, column=0, sticky="w", pady=(10, 0))
+        target_mode = variables.basic_target_mode_var.get().strip()
+        row = 1
+        if target_mode == 'csv':
+            add_picker_row(ttk, card, row, "Target CSV", variables.basic_target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
+            row += 1
+        if target_mode == 'database':
+            add_entry_row(ttk, card, row, "Search database", variables.basic_search_query_var)
+            ttk.Button(card, text="Search", command=on_search).grid(row=row + 1, column=0, sticky="w", pady=(6, 0))
+            ttk.Label(card, textvariable=variables.basic_search_results_var, wraplength=DETAIL_WRAP, justify="left").grid(row=row + 1, column=1, sticky="w", pady=(6, 0))
+            row += 2
+        ttk.Button(card, text="Next: Measurement", command=on_next).grid(row=row, column=0, sticky="w", pady=(10, 0))
     elif current == 'measure':
         ttk.Label(card, text="Safe defaults: sample rate 48000 Hz, 3 iterations averaged, default playback/capture devices, max 10 PEQ filters.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Label(card, textvariable=variables.basic_progress_var, wraplength=DETAIL_WRAP, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))

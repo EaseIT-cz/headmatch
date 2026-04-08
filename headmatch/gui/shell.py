@@ -542,7 +542,7 @@ class HeadMatchGuiApp:
             entry = self._search_results_data[idx]
             self.fetch_url_var.set(entry.raw_csv_url)
             safe_name = entry.name.replace("/", "_").replace("\\", "_")
-            from .paths import documents_dir
+            from ..paths import documents_dir
             self.fetch_output_var.set(str(Path(documents_dir()) / f"{safe_name}.csv"))
             self.root.update_idletasks()
             self._show_status(f"Selected: {entry.name} — click \u2018Fetch and save\u2019 to download.")
@@ -729,8 +729,30 @@ class HeadMatchGuiApp:
 
     def basic_search_target(self) -> None:
         query = self.basic_search_query_var.get().strip()
-        if query:
-            self.basic_search_results_var.set(f"Search results for {query} ready")
+        if not query:
+            self.basic_search_results_var.set("Enter a headphone model name to search the database.")
+            return
+        try:
+            results = search_headphone(query)
+        except Exception as exc:
+            self.basic_search_results_var.set(f"Search failed: {exc}")
+            return
+        if not results:
+            self.basic_search_results_var.set(f"No matches for '{query}'.")
+            return
+        entry = results[0]
+        from ..paths import documents_dir
+        safe_name = entry.name.replace("/", "_").replace("\\", "_")
+        out_path = Path(documents_dir()) / f"{safe_name}.csv"
+        try:
+            saved = fetch_curve_from_url(entry.raw_csv_url, out_path)
+        except Exception as exc:
+            self.basic_search_results_var.set(f"Found {entry.name}, but download failed: {exc}")
+            return
+        self.basic_target_mode_var.set("database")
+        self.basic_target_csv_var.set(str(saved))
+        self.basic_target_path_var.set(str(saved))
+        self.basic_search_results_var.set(f"Downloaded {entry.name} to {saved}.")
 
     def basic_export_results(self) -> None:
         self._show_status(f"Exported to {self.basic_export_path_var.get().strip() or self.output_dir_var.get().strip()}.")
