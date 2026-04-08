@@ -24,6 +24,7 @@ from .exporters import (
     export_equalizer_apo_graphiceq_txt,
     export_equalizer_apo_parametric_txt,
 )
+from .eq_clipping import EQClippingAssessment
 from .io_utils import save_json
 from .peq import FilterBudget, PEQBand, peq_chain_response_db
 from .pipeline_confidence import summarize_trustworthiness
@@ -60,6 +61,7 @@ def _run_summary(
 ) -> FrontendRunSummary:
     identity = get_app_identity()
     trust_summary = summarize_trustworthiness(result, report)
+    clipping_payload = report.get('eq_clipping')
     return FrontendRunSummary(
         schema_version=RUN_SUMMARY_SCHEMA_VERSION,
         generated_by=identity.as_metadata(),
@@ -83,6 +85,7 @@ def _run_summary(
         },
         results_guide=str(out_dir / RESULTS_GUIDE_NAME),
         filter_budget=filter_budget,
+        eq_clipping_assessment=clipping_payload if isinstance(clipping_payload, dict) else None,
     )
 
 
@@ -200,7 +203,13 @@ def write_fit_artifacts(
     """Write all fit output artifacts to out_dir and return the run summary dict."""
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
-    export_equalizer_apo_parametric_txt(out_dir / 'equalizer_apo.txt', left_bands, right_bands)
+    clipping = report.get('eq_clipping') if isinstance(report.get('eq_clipping'), dict) else None
+    export_equalizer_apo_parametric_txt(
+        out_dir / 'equalizer_apo.txt',
+        left_bands,
+        right_bands,
+        preamp_db=(float(clipping['preamp_db']) if clipping and clipping.get('will_clip') else None),
+    )
     # Dense GraphicEQ: export the actual PEQ-fitted response (what the parametric
     # preset applies), not the raw correction target.
     left_fitted_eq = peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)

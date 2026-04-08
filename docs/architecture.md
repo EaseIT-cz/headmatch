@@ -305,6 +305,7 @@ The shipped product includes:
 ## Likely future work
 
 ### Next
+- **Mic calibration workflow** — Binaural microphones color measurements. Near-term: document clone-target calibration against a published reference headphone so users can calibrate within one rig/head setup. Long-term: derive mic response curve via comparison to trusted published data.
 - GUI display for EQ clipping assessment
 - CLI output for clipping summary
 - GUI shell/view split — further extraction from gui.py

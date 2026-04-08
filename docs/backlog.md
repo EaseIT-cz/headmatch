@@ -40,9 +40,27 @@ Nothing in progress. Awaiting next priorities.
 
 ## Next
 
-- GUI display for EQ clipping assessment
-- CLI output for clipping summary
-- GUI shell/view split — gui.py is ~880 lines
+### Priority 1: User onboarding (v0.7.0 focus)
+
+- **TASK-101: GUI Basic Mode Wizard** — Guided 3-step workflow for beginners. Flat target default, 3 iterations, max 10 PEQ filters, no exposed complexity.
+- **TASK-102: GUI Shell/View Refactoring** — Extract views from 920-line gui.py into gui/views/. Enables parallel work on Basic Mode.
+- **TASK-103: Clone-Target Calibration Docs** — Document clone-target workflow as mic calibration technique.
+
+### Priority 2: Clipping visibility
+
+- **TASK-104: EQ Clipping GUI Display** — Show preamp recommendations in completion panel.
+- **TASK-105: EQ Clipping CLI Output** — Add clipping summary to fit command output.
+
+### Priority 3: Mic calibration roadmap
+
+- **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
+  - Which published measurement databases are reliable
+  - How to handle ear canal resonance variation
+  - Whether per-user calibration is tractable
+
+### Priority 4: Code health
+
+- GUI shell/view split — gui.py is ~880 lines (covered by TASK-102)
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 
@@ -61,4 +79,4 @@ Nothing in progress. Awaiting next priorities.
 - Room correction / speaker measurement mode
 - Asynchronous device support / clock drift compensation
 - Automated HRTF target integration
-- Safe mode vs advanced mode UI split
+- Safe mode vs advanced mode UI split (covered by TASK-101)

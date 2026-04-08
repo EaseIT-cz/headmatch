@@ -137,14 +137,17 @@ def export_camilladsp_filter_snippet_yaml(path: str | Path, bands_left: List[PEQ
     return path
 
 
-def _apo_preamp_db(bands: Iterable[PEQBand]) -> float:
+def _apo_preamp_db(bands: Iterable[PEQBand], preamp_db: float | None = None) -> float:
+    if preamp_db is not None:
+        preamp = round(float(preamp_db), 2)
+        return 0.0 if abs(preamp) < 0.005 else preamp
     boost = max((band.gain_db for band in bands), default=0.0)
     preamp = round(-max(0.0, boost), 2)
     return 0.0 if abs(preamp) < 0.005 else preamp
 
 
-def _format_apo_channel(channel: str, bands: List[PEQBand]) -> list[str]:
-    lines = [f'Channel: {channel}', f'Preamp: {_apo_preamp_db(bands):.2f} dB']
+def _format_apo_channel(channel: str, bands: List[PEQBand], *, preamp_db: float | None = None) -> list[str]:
+    lines = [f'Channel: {channel}', f'Preamp: {_apo_preamp_db(bands, preamp_db):.2f} dB']
     for index, band in enumerate(_bands_sorted_by_frequency(bands), 1):
         lines.append(
             f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} '
@@ -153,16 +156,16 @@ def _format_apo_channel(channel: str, bands: List[PEQBand]) -> list[str]:
     return lines
 
 
-def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBand], bands_right: List[PEQBand]) -> Path:
+def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBand], bands_right: List[PEQBand], *, preamp_db: float | None = None) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         '; headmatch Equalizer APO parametric preset',
         '; Generated for stereo headphones with per-channel filter sections.',
         '',
-        *_format_apo_channel('L', bands_left),
+        *_format_apo_channel('L', bands_left, preamp_db=preamp_db),
         '',
-        *_format_apo_channel('R', bands_right),
+        *_format_apo_channel('R', bands_right, preamp_db=preamp_db),
         '',
     ]
     path.write_text('\n'.join(lines), encoding="utf-8")

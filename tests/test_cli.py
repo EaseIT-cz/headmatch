@@ -320,6 +320,79 @@ def test_fit_next_steps_prints_confidence_summary(capsys, tmp_path):
     assert "Troubleshooting:" in out
     assert "Open the fit graphs before using the preset" in out
 
+def test_fit_next_steps_prints_clipping_summary(capsys, tmp_path):
+    summary_dir = tmp_path / "fit"
+    summary_dir.mkdir()
+    (summary_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "fit",
+  "out_dir": "/tmp/demo",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {
+    "score": 82,
+    "label": "medium",
+    "headline": "This run looks usable, but review it before trusting it fully.",
+    "interpretation": "Some signals are only fair.",
+    "reasons": [],
+    "warnings": ["Check the graphs."],
+    "metrics": {}
+  },
+  "eq_clipping_assessment": {
+    "will_clip": true,
+    "left_peak_boost_db": 7.25,
+    "right_peak_boost_db": 4.0,
+    "left_preamp_db": -7.25,
+    "right_preamp_db": -4.0,
+    "preamp_db": -7.25,
+    "headroom_loss_db": 7.25,
+    "quality_concern": "Moderate headroom loss (7.3 dB)."
+  },
+  "plots": {},
+  "results_guide": "/tmp/demo/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("fit", type("Args", (), {"out_dir": str(summary_dir)})())
+
+    out = capsys.readouterr().out
+    assert "Preamp recommendation: -7.2 dB" in out
+    assert "Max boost level: 7.2 dB" in out
+    assert "moderate headroom loss" in out
+
+
+def test_fit_next_steps_show_clipping_details(capsys, tmp_path):
+    summary_dir = tmp_path / "fit"
+    summary_dir.mkdir()
+    (summary_dir / "run_summary.json").write_text(
+        """{
+  "schema_version": 1,
+  "kind": "fit",
+  "out_dir": "/tmp/demo",
+  "sample_rate": 48000,
+  "frequency_points": 2048,
+  "target": "flat_target",
+  "filters": {"left": 4, "right": 4},
+  "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+  "generated_by": {"name": "headmatch"},
+  "confidence": {"score": 82, "label": "medium", "headline": "x", "interpretation": "y", "reasons": [], "warnings": [], "metrics": {}},
+  "eq_clipping_assessment": {"will_clip": true, "left_peak_boost_db": 7.25, "right_peak_boost_db": 4.0, "left_preamp_db": -7.25, "right_preamp_db": -4.0, "preamp_db": -7.25, "headroom_loss_db": 7.25, "quality_concern": "Moderate headroom loss (7.3 dB)."},
+  "plots": {},
+  "results_guide": "/tmp/demo/README.txt"
+}"""
+    )
+
+    cli.print_next_steps("fit", type("Args", (), {"out_dir": str(summary_dir), "show_clipping": True})())
+
+    out = capsys.readouterr().out
+    assert "Detailed clipping breakdown:" in out
+    assert "Left peak boost" in out
+
 
 def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):
     iter_dir = tmp_path / "iter_02"
@@ -354,3 +427,35 @@ def test_start_next_steps_reads_last_iteration_confidence(capsys, tmp_path):
     out = capsys.readouterr().out
     assert "Confidence: High (91/100)" in out
     assert "The main stability signals look clean." in out
+
+
+def test_fit_json_output_includes_clipping_assessment(monkeypatch, capsys, tmp_path):
+    summary = {
+        "schema_version": 1,
+        "kind": "fit",
+        "out_dir": str(tmp_path / "fit"),
+        "sample_rate": 48000,
+        "frequency_points": 2048,
+        "target": "flat_target",
+        "filters": {"left": 4, "right": 4},
+        "predicted_error_db": {"left_rms": 1.5, "right_rms": 1.6, "left_max": 3.1, "right_max": 3.0},
+        "generated_by": {"name": "headmatch"},
+        "confidence": {"score": 82, "label": "medium", "headline": "x", "interpretation": "y", "reasons": [], "warnings": [], "metrics": {}},
+        "eq_clipping_assessment": {"will_clip": True, "preamp_db": -7.25},
+        "plots": {},
+        "results_guide": "/tmp/demo/README.txt",
+    }
+
+    def fake_process_single_measurement(*_args, **_kwargs):
+        out_dir = tmp_path / "fit"
+        out_dir.mkdir()
+        (out_dir / "run_summary.json").write_text(__import__("json").dumps(summary))
+
+    monkeypatch.setattr("headmatch.pipeline.process_single_measurement", fake_process_single_measurement)
+    monkeypatch.setattr("headmatch.cli.save_config", lambda *_args, **_kwargs: None)
+
+    cli.main(["fit", "--recording", str(tmp_path / "recording.wav"), "--out-dir", str(tmp_path / "fit"), "--json"])
+
+    out = capsys.readouterr().out
+    assert '"eq_clipping_assessment"' in out
+    assert '"preamp_db": -7.25' in out

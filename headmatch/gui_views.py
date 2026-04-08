@@ -191,17 +191,71 @@ def render_progress(ttk, frame, *, title: str, body: str) -> None:
     ).grid(row=0, column=0, sticky="w")
 
 
-def render_completion(ttk, frame, *, title: str, body: str, steps: tuple[str, ...], on_home, on_history) -> None:
+def render_completion(ttk, frame, *, title: str, body: str, steps: tuple[str, ...], clipping_assessment=None, on_home, on_history) -> None:
     ttk.Label(frame, text=title, style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(frame, text=body, wraplength=BODY_WRAP, justify="left").grid(row=1, column=0, sticky="w", pady=(8, 12))
+    row = 2
+    if clipping_assessment:
+        card = ttk.LabelFrame(frame, text="EQ clipping assessment", padding=SECTION_PAD)
+        card.grid(row=row, column=0, sticky="ew")
+        card.columnconfigure(1, weight=1)
+        indicator = "⚠" if clipping_assessment.get("will_clip") else "✓"
+        status = "Clipping risk detected" if clipping_assessment.get("will_clip") else "No clipping risk detected"
+        ttk.Label(card, text=f"{indicator} {status}", style="Heading.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(card, text="Preamp recommendation").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=2)
+        ttk.Label(card, text=f"{float(clipping_assessment.get('preamp_db', 0.0)):+.2f} dB").grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Label(card, text="Max boost level").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=2)
+        ttk.Label(card, text=f"{max(float(clipping_assessment.get('left_peak_boost_db', 0.0)), float(clipping_assessment.get('right_peak_boost_db', 0.0))):+.2f} dB").grid(row=2, column=1, sticky="w", pady=2)
+        ttk.Label(card, text="Headroom loss").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=2)
+        ttk.Label(card, text=f"{float(clipping_assessment.get('headroom_loss_db', 0.0)):.2f} dB").grid(row=3, column=1, sticky="w", pady=2)
+        warning = clipping_assessment.get("quality_concern")
+        if warning:
+            ttk.Label(card, text="Quality warning").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=2)
+            ttk.Label(card, text=warning, wraplength=DETAIL_WRAP, justify="left").grid(row=4, column=1, sticky="w", pady=2)
+        row += 1
     card = ttk.LabelFrame(frame, text="Next steps", padding=SECTION_PAD)
-    card.grid(row=2, column=0, sticky="ew")
+    card.grid(row=row, column=0, sticky="ew")
     for idx, step in enumerate(steps):
         ttk.Label(card, text=f"- {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
     actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
-    actions.grid(row=3, column=0, sticky="w")
+    actions.grid(row=row + 1, column=0, sticky="w")
     ttk.Button(actions, text="Back to Measure", command=on_home).grid(row=0, column=0, sticky="w")
     ttk.Button(actions, text="Open Results", command=on_history).grid(row=0, column=1, sticky="w", padx=(12, 0))
+
+
+
+def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on_export, on_search) -> None:
+    ttk.Label(frame, text="Basic Mode", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(frame, text="A simple 3-step wizard with safe defaults. Advanced controls stay hidden.", wraplength=BODY_WRAP, justify="left").grid(row=1, column=0, sticky="w", pady=(8, 12))
+    steps = ("Target selection", "Measurement", "Review & Export")
+    step_frame = ttk.LabelFrame(frame, text="Wizard steps", padding=SECTION_PAD)
+    step_frame.grid(row=2, column=0, sticky="ew")
+    for idx, step in enumerate(steps):
+        ttk.Label(step_frame, text=f"{idx + 1}. {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
+
+    current = variables.basic_step_var.get()
+    card = ttk.LabelFrame(frame, text=f"Step { {'target': '1', 'measure': '2', 'review': '3'}.get(current, '1')} — { {'target': 'Target selection', 'measure': 'Measurement', 'review': 'Review & Export'}.get(current, 'Target selection')}", padding=SECTION_PAD)
+    card.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    card.columnconfigure(1, weight=1)
+
+    if current == 'target':
+        add_combobox_row(ttk, card, 0, "Target source", variables.basic_target_mode_var, ("flat", "csv", "database"), empty_label="")
+        add_picker_row(ttk, card, 1, "Target CSV", variables.basic_target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
+        add_entry_row(ttk, card, 2, "Search database", variables.basic_search_query_var)
+        ttk.Button(card, text="Search", command=on_search).grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(card, textvariable=variables.basic_search_results_var, wraplength=DETAIL_WRAP, justify="left").grid(row=3, column=1, sticky="w", pady=(6, 0))
+        ttk.Button(card, text="Next: Measurement", command=on_next).grid(row=4, column=0, sticky="w", pady=(10, 0))
+    elif current == 'measure':
+        ttk.Label(card, text="Safe defaults: sample rate 48000 Hz, 3 iterations averaged, default playback/capture devices, max 10 PEQ filters.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(card, textvariable=variables.basic_progress_var, wraplength=DETAIL_WRAP, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Button(card, text="Start Measurement", command=on_measure).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Button(card, text="Back", command=on_back).grid(row=2, column=1, sticky="w", pady=(8, 0))
+    else:
+        ttk.Label(card, text="Review the result and export to the default location.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, sticky="w")
+        ttk.Label(card, text="Max PEQ filters: 10", style="Heading.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(card, textvariable=variables.basic_export_path_var, wraplength=DETAIL_WRAP, justify="left").grid(row=2, column=0, sticky="w")
+        ttk.Button(card, text="Export", command=on_export).grid(row=3, column=0, sticky="w", pady=(8, 0))
+        ttk.Button(card, text="Back", command=on_back).grid(row=3, column=1, sticky="w", pady=(8, 0))
 
 
 def render_history(ttk, frame, *, history_root_var, config_path: Path):

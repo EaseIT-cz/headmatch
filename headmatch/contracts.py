@@ -45,6 +45,7 @@ class FrontendConfig:
     max_filters: int = 8
     start_iterations: int = 1
     iterate_iterations: int = 2
+    mode: Literal["basic", "advanced"] = "advanced"
 
     @property
     def output_target(self) -> Optional[str]:
@@ -163,6 +164,7 @@ class FrontendRunSummary:
     confidence: ConfidenceSummary
     plots: dict[str, str]
     results_guide: str
+    eq_clipping_assessment: dict[str, Any] | None = None
     filter_budget: "FilterBudget | None" = None
 
     def to_dict(self) -> dict:
@@ -185,6 +187,7 @@ class FrontendRunSummary:
                 "fill_policy": self.filter_budget.fill_policy,
                 "profile": self.filter_budget.profile,
             },
+            "eq_clipping_assessment": self.eq_clipping_assessment,
         }
 
     @classmethod
@@ -215,6 +218,7 @@ class FrontendRunSummary:
                 warnings=tuple(confidence_payload.get("warnings", ())),
                 metrics=dict(confidence_payload.get("metrics", {})),
             ),
+            eq_clipping_assessment=payload.get("eq_clipping_assessment") or payload.get("eq_clipping"),
             plots=dict(payload.get("plots", {})),
             results_guide=payload.get("results_guide", str(Path(payload["out_dir"]) / "README.txt")),
             filter_budget=filter_budget,

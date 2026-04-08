@@ -45,6 +45,9 @@ Create a target curve that moves one headphone toward the tonal balance of anoth
 ### 6. Result interpretation
 Each run can include a plain-language trust summary so users can tell whether the measurement looks believable.
 
+### 7. EQ clipping prediction
+Each fit automatically checks whether the generated EQ profile could cause digital clipping. If boosts are too aggressive, HeadMatch recommends a preamp reduction and flags potential quality concerns.
+
 ---
 
 ## Interaction modes
@@ -338,6 +341,16 @@ headmatch fit \
 ```
 
 This is different from the lightweight example workflow in `docs/examples/clone-targets/`: those shipped CSVs are small published-style examples for learning the command shape. They are useful for demos and experimentation, but the preferred path for serious personal cloning is to measure both headphones on your own rig and generate the difference target from those matching measurements.
+
+### Mic calibration via clone target
+
+If you use a binaural rig, you can also use clone targets as a practical mic calibration step.
+
+The idea is simple: measure a reference headphone with published measurements, save that run as a clone target, then use it as your calibration baseline for other headphones measured on the same rig.
+
+This does **not** remove all rig effects globally. It makes your subsequent measurements more comparable within the same head/rig/setup combination, which is often the useful part.
+
+See `docs/examples/clone-target-calibration.md` for the step-by-step workflow and limitations.
 
 ---
 
