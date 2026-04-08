@@ -84,7 +84,13 @@ OfflineFitRunner = Callable[..., dict]
 DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 
 
+BASIC_NAV_ITEMS: tuple[NavigationItem, ...] = (
+    NavigationItem("basic-mode", "Basic Workflow"),
+    NavigationItem("history", "Results"),
+)
+
 NAV_ITEMS: tuple[NavigationItem, ...] = (
+
     NavigationItem("measure-online", "Measure"),
     NavigationItem("setup-check", "Setup Check"),
     NavigationItem("prepare-offline", "Prepare Offline"),
@@ -269,23 +275,29 @@ class HeadMatchGuiApp:
         nav.grid_propagate(False)
         nav.columnconfigure(0, weight=1)
         ttk.Label(nav, text="Mode", style="Heading.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
-        mode_row = ttk.Frame(nav)
-        mode_row.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        basic_mode = ttk.Label(mode_row, text="Basic", style="Heading.TLabel")
-        advanced_mode = ttk.Label(mode_row, text="Advanced", style="Heading.TLabel")
-        basic_mode.grid(row=0, column=0, sticky="w")
-        advanced_mode.grid(row=0, column=1, sticky="w", padx=(10, 0))
-        basic_mode.bind("<Button-1>", lambda _evt: self.set_mode("basic"))
-        advanced_mode.bind("<Button-1>", lambda _evt: self.set_mode("advanced"))
+        self.mode_selector = ttk.Combobox(nav, textvariable=self.mode_var, values=("basic", "advanced"), state="readonly")
+        self.mode_selector.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self.mode_selector.bind("<<ComboboxSelected>>", lambda _evt: self.set_mode(self.mode_var.get()))
         ttk.Label(nav, text="Workflows", style="Heading.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 6))
-        for idx, item in enumerate(NAV_ITEMS, start=3):
-            ttk.Button(nav, text=item.label, command=lambda key=item.key: self.show_view(key)).grid(
-                row=idx, column=0, sticky="ew", pady=2
-            )
+        self.nav_buttons_frame = ttk.Frame(nav)
+        self.nav_buttons_frame.grid(row=3, column=0, sticky="ew")
+        self.nav_buttons_frame.columnconfigure(0, weight=1)
+        self._render_nav_buttons()
 
         self.content = ttk.Frame(root, padding=(10, 8, 16, 16))
         self.content.grid(row=1, column=1, sticky="nsew")
         self.content.columnconfigure(0, weight=1)
+
+    def _nav_items_for_mode(self) -> tuple[NavigationItem, ...]:
+        return BASIC_NAV_ITEMS if self.mode_var.get() == "basic" else NAV_ITEMS
+
+    def _render_nav_buttons(self) -> None:
+        for child in self.nav_buttons_frame.winfo_children():
+            child.destroy()
+        for idx, item in enumerate(self._nav_items_for_mode()):
+            self._ttk.Button(self.nav_buttons_frame, text=item.label, command=lambda key=item.key: self.show_view(key)).grid(
+                row=idx, column=0, sticky="ew", pady=2
+            )
 
     def show_view(self, key: str) -> None:
         self.current_view.set(key)
@@ -779,6 +791,7 @@ class HeadMatchGuiApp:
         # GuiState is frozen, so replace the entire state
         self.state = replace(self.state, mode=mode)
         self._save_current_config()
+        self._render_nav_buttons()
         self.show_view("basic-mode" if mode == "basic" else "measure-online")
 
     def basic_next_step(self) -> None:
