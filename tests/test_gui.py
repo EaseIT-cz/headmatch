@@ -672,9 +672,9 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
 
 
 def test_gui_views_include_browse_buttons_for_major_path_fields():
-    from headmatch import gui_views
+    from headmatch.gui.views import _legacy
 
-    source = Path(gui_views.__file__).read_text()
+    source = Path(_legacy.__file__).read_text()
     assert source.count('button_text="Browse…"') >= 5
 
 
