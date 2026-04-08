@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import queue
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -776,7 +776,8 @@ class HeadMatchGuiApp:
 
     def set_mode(self, mode: str) -> None:
         self.mode_var.set(mode)
-        self.state.mode = mode
+        # GuiState is frozen, so replace the entire state
+        self.state = replace(self.state, mode=mode)
         self._save_current_config()
         self.show_view("basic-mode" if mode == "basic" else "measure-online")
 
