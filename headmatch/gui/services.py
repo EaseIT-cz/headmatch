@@ -8,9 +8,14 @@ from typing import Callable, Protocol
 
 
 class FileDialogProtocol(Protocol):
-    def askdirectory(self, **kwargs): ...
-    def askopenfilename(self, **kwargs): ...
-    def asksaveasfilename(self, **kwargs): ...
+    def askdirectory(self, **kwargs):
+        pass
+
+    def askopenfilename(self, **kwargs):
+        pass
+
+    def asksaveasfilename(self, **kwargs):
+        pass
 
 
 @dataclass(frozen=True)
