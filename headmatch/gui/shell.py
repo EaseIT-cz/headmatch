@@ -20,19 +20,13 @@ def _get_filedialog():
 
 from ..app_identity import get_app_identity
 from ..contracts import FrontendConfig
-from ..measure import (
-    OfflineMeasurementPlan,
-    collect_doctor_checks,
-    collect_pipewire_target_selection,
-    format_doctor_report,
-    prepare_offline_measurement,
-)
+from ..measure import OfflineMeasurementPlan, SweepSpec, collect_doctor_checks, collect_pipewire_target_selection, format_doctor_report, prepare_offline_measurement
 from ..pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
 from ..history import build_history_selection
-from ..target_editor import TargetEditor
+from ..headphone_db import fetch_curve_from_url, search_headphone
 from ..apo_import import load_apo_preset
 from ..apo_refine import refine_apo_preset
-from ..headphone_db import fetch_curve_from_url, search_headphone
+from ..target_editor import TargetEditor
 from .views import (
     render_basic_mode,
     render_clone_target_workflow,
@@ -47,7 +41,8 @@ from .views import (
     render_target_editor,
 )
 from ..settings import load_or_create_config
-from ..signals import SweepSpec
+from .controllers import WorkflowControllers
+from .services import BackgroundTaskService, FilePickerService
 
 
 @dataclass(frozen=True)
@@ -172,7 +167,10 @@ class HeadMatchGuiApp:
         self._offline_prepare_runner = offline_prepare_runner
         self._offline_fit_runner = offline_fit_runner
         self._doctor_report_runner = doctor_report_runner
-        self._task_queue: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._controllers = WorkflowControllers(self)
+        self._file_picker = FilePickerService(_get_filedialog(), root=root)
+        self._background_tasks = BackgroundTaskService(task_queue=queue.Queue(), thread_factory=threading.Thread)
+        self._task_queue = self._background_tasks.task_queue
         self._active_task_name: str | None = None
         self._last_completion_steps: tuple[str, ...] = ()
         self._completion_clipping_assessment: dict | None = None
@@ -227,6 +225,9 @@ class HeadMatchGuiApp:
         self.show_view(state.current_view)
 
     def build_history_selection(self):
+        controller = getattr(self, "_controllers", None)
+        if controller is not None:
+            return controller.build_history_selection()
         return build_history_selection(self.history_root_var.get(), self.state.config_path.parent)
 
 
@@ -397,48 +398,19 @@ class HeadMatchGuiApp:
         )
 
     def refresh_setup_check(self) -> None:
-        report = self._doctor_report_runner(
-            self.state.config_path,
-            FrontendConfig(
-                default_output_dir=self.output_dir_var.get().strip() or None,
-                preferred_target_csv=self.target_csv_var.get().strip() or None,
-                pipewire_output_target=self._strip_device_label(self.output_target_var.get()) or None,
-                pipewire_input_target=self._strip_device_label(self.input_target_var.get()) or None,
-                sample_rate=self.state.sample_rate,
-                duration_s=self.state.duration_s,
-                f_start_hz=self.state.f_start_hz,
-                f_end_hz=self.state.f_end_hz,
-                pre_silence_s=self.state.pre_silence_s,
-                post_silence_s=self.state.post_silence_s,
-                amplitude=self.state.amplitude,
-                start_iterations=self._parse_positive_int(self.iterations_var.get().strip(), "Iterations"),
-                max_filters=self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters"),
-                mode=self.mode_var.get().strip() or self.state.mode,
-            ),
-        )
-        self.doctor_report_var.set(report)
-        if self.current_view.get() == "setup-check":
-            for child in self.content.winfo_children():
-                child.destroy()
-            render_setup_check(
-                self._ttk,
-                self.content,
-                report=report,
-                on_refresh=self.refresh_setup_check,
-                on_measure=lambda: self.show_view("measure-online"),
-            )
+        self._controllers.refresh_setup_check()
 
     def _render_target_editor(self) -> None:
         def _save():
             path = self.target_editor_save_path_var.get().strip()
             if not path:
-                fd = _get_filedialog()
-                if fd:
-                    path = fd.asksaveasfilename(
-                        title="Save target curve",
-                        defaultextension=".csv",
-                        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-                    )
+                path = self._file_picker.choose_save_file(
+                    path,
+                    title="Save target curve",
+                    defaultextension=".csv",
+                    filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                    fallback=self.state.config_path.parent,
+                ) or ""
                 if not path:
                     return
                 self.target_editor_save_path_var.set(path)
@@ -450,12 +422,11 @@ class HeadMatchGuiApp:
             self.show_view("target-editor")
 
         def _load():
-            fd = _get_filedialog()
-            if not fd:
-                return
-            path = fd.askopenfilename(
+            path = self._file_picker.choose_file(
+                self.target_editor_save_path_var.get(),
                 title="Load target curve",
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                fallback=self.state.config_path.parent,
             )
             if not path:
                 return
@@ -480,7 +451,7 @@ class HeadMatchGuiApp:
     def _render_import_apo(self) -> None:
         render_import_apo(
             self._ttk, self.content, variables=self,
-            on_import=self._run_apo_import, on_refine=self._run_apo_refine,
+            on_import=self._controllers.run_apo_import, on_refine=self._controllers.run_apo_refine,
             on_choose_preset=self._choose_apo_preset,
             on_choose_output=self._choose_apo_output_dir,
             on_choose_refine_recording=self._choose_refine_recording,
@@ -489,114 +460,38 @@ class HeadMatchGuiApp:
         )
 
     def _choose_apo_preset(self) -> None:
-        fd = _get_filedialog()
-        if fd:
-            path = fd.askopenfilename(
-                title="Select APO preset",
-                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            )
-            if path:
-                self.apo_preset_var.set(path)
+        path = self._file_picker.choose_file(self.apo_preset_var.get(), title="Select APO preset", filetypes=[("Text files", "*.txt"), ("All files", "*.*")], fallback=self.state.config_path.parent)
+        if path:
+            self.apo_preset_var.set(path)
 
     def _choose_apo_output_dir(self) -> None:
-        fd = _get_filedialog()
-        if fd:
-            path = fd.askdirectory(title="Select output folder")
-            if path:
-                self.apo_output_dir_var.set(path)
+        path = self._file_picker.choose_directory(self.apo_output_dir_var.get(), title="Select output folder", fallback=self.state.default_output_dir)
+        if path:
+            self.apo_output_dir_var.set(path)
 
     def _choose_refine_recording(self) -> None:
-        fd = _get_filedialog()
-        if fd:
-            path = fd.askopenfilename(
-                title="Select recording WAV",
-                filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
-            )
-            if path:
-                self.apo_refine_recording_var.set(path)
+        path = self._file_picker.choose_file(self.apo_refine_recording_var.get(), title="Select recording WAV", filetypes=[("WAV files", "*.wav"), ("All files", "*.*")], fallback=self.output_dir_var.get().strip() or self.state.default_output_dir)
+        if path:
+            self.apo_refine_recording_var.set(path)
 
     def _choose_refine_target(self) -> None:
-        fd = _get_filedialog()
-        if fd:
-            path = fd.askopenfilename(
-                title="Select target CSV (optional)",
-                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            )
-            if path:
-                self.apo_refine_target_var.set(path)
+        path = self._file_picker.choose_file(self.apo_refine_target_var.get(), title="Select target CSV (optional)", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")], fallback=self.state.config_path.parent)
+        if path:
+            self.apo_refine_target_var.set(path)
 
     def _choose_refine_output(self) -> None:
-        fd = _get_filedialog()
-        if fd:
-            path = fd.askdirectory(title="Select output folder for refined results")
-            if path:
-                self.apo_refine_output_var.set(path)
+        path = self._file_picker.choose_directory(self.apo_refine_output_var.get(), title="Select output folder for refined results", fallback=self.state.default_output_dir)
+        if path:
+            self.apo_refine_output_var.set(path)
 
-    def _run_apo_refine(self) -> None:
-        preset_path = self.apo_preset_var.get().strip()
-        recording_path = self.apo_refine_recording_var.get().strip()
-        out_dir = self.apo_refine_output_var.get().strip()
-        target_path = self.apo_refine_target_var.get().strip() or None
-        if not preset_path:
-            self._show_status("Select an APO preset file in the Import section above.")
-            return
-        if not recording_path:
-            self._show_status("Select a recording WAV to refine against.")
-            return
-        if not out_dir:
-            self._show_status("Select an output folder.")
-            return
-        try:
-            from ..signals import SweepSpec
-            from ..settings import load_or_create_config
-            config, _, _ = load_or_create_config(self.state.config_path)
-            spec = SweepSpec(
-                sample_rate=config.sample_rate,
-                duration_s=config.duration_s,
-            )
-            report = refine_apo_preset(
-                preset_path=preset_path,
-                recording_wav=recording_path,
-                sweep_spec=spec,
-                out_dir=out_dir,
-                target_path=target_path,
-            )
-            orig = report.get('original_error', {})
-            self._show_status(
-                f"Refined: L {orig.get('left_rms', 0):.1f}→{report['predicted_left_rms_error_db']:.1f} dB, "
-                f"R {orig.get('right_rms', 0):.1f}→{report['predicted_right_rms_error_db']:.1f} dB → {out_dir}"
-            )
-        except Exception as exc:
-            self._show_status(f"Refine failed: {exc}")
 
-    def _run_apo_import(self) -> None:
-        preset_path = self.apo_preset_var.get().strip()
-        out_dir = self.apo_output_dir_var.get().strip()
-        if not preset_path or not out_dir:
-            self._show_status("Please select both a preset file and output folder.")
-            return
-        try:
-            from .exporters import (
-                export_camilladsp_filters_yaml,
-                export_camilladsp_filter_snippet_yaml,
-                export_equalizer_apo_parametric_txt,
-            )
-            left_bands, right_bands = load_apo_preset(preset_path)
-            out = Path(out_dir)
-            out.mkdir(parents=True, exist_ok=True)
-            export_equalizer_apo_parametric_txt(out / 'equalizer_apo.txt', left_bands, right_bands)
-            export_camilladsp_filters_yaml(out / 'camilladsp_full.yaml', left_bands, right_bands)
-            export_camilladsp_filter_snippet_yaml(out / 'camilladsp_filters_only.yaml', left_bands, right_bands)
-            self._show_status(f"Imported {len(left_bands)}L + {len(right_bands)}R filters → {out_dir}")
-        except Exception as exc:
-            self._show_status(f"Import failed: {exc}")
 
     def _render_fetch_curve(self) -> None:
         view = render_fetch_curve(
             self._ttk, self.content, variables=self,
-            on_search=self._run_search_headphone,
+            on_search=self._controllers.run_search_headphone,
             on_choose_output=self._choose_fetch_output,
-            on_fetch=self._run_fetch_curve,
+            on_fetch=self._controllers.run_fetch_curve,
         )
         self._search_results_frame = view["results_frame"]
         self._search_results_list = None
@@ -653,14 +548,9 @@ class HeadMatchGuiApp:
             self._show_status(f"Selected: {entry.name} — click \u2018Fetch and save\u2019 to download.")
 
     def _choose_fetch_output(self) -> None:
-        if filedialog:
-            path = filedialog.asksaveasfilename(
-                title="Save curve as",
-                defaultextension=".csv",
-                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            )
-            if path:
-                self.fetch_output_var.set(path)
+        path = self._file_picker.choose_save_file(self.fetch_output_var.get(), title="Save curve as", defaultextension=".csv", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")], fallback=self.state.config_path.parent)
+        if path:
+            self.fetch_output_var.set(path)
 
     def _run_fetch_curve(self) -> None:
         url = self.fetch_url_var.get().strip()
@@ -683,11 +573,10 @@ class HeadMatchGuiApp:
 
     def _render_history(self) -> None:
         def _browse_history():
-            if filedialog:
-                path = filedialog.askdirectory(title="Select results folder")
-                if path:
-                    self.history_root_var.set(path)
-                    self.show_view("history")
+            path = self._file_picker.choose_directory(self.history_root_var.get(), title="Select results folder", fallback=self.state.default_output_dir)
+            if path:
+                self.history_root_var.set(path)
+                self.show_view("history")
 
         render_history_page(
             self._ttk, self.content,
@@ -735,43 +624,14 @@ class HeadMatchGuiApp:
             raise ValueError(f"{label} must be greater than 0.")
         return value
 
-    @staticmethod
-    def _expanded_parent(value: str, fallback: str | Path) -> str:
-        raw = value.strip()
-        if raw:
-            return str(Path(raw).expanduser().parent)
-        return str(Path(fallback).expanduser())
-
-    @staticmethod
-    def _expanded_dir(value: str, fallback: str | Path) -> str:
-        raw = value.strip()
-        if raw:
-            return str(Path(raw).expanduser())
-        return str(Path(fallback).expanduser())
 
     def _choose_directory(self, variable, *, title: str, fallback: str | Path) -> None:
-        fd = _get_filedialog()
-        if fd is None:
-            return
-        selected = fd.askdirectory(
-            title=title,
-            initialdir=self._expanded_dir(variable.get(), fallback),
-            parent=getattr(self, 'root', None),
-            mustexist=False,
-        )
+        selected = self._file_picker.choose_directory(variable.get(), title=title, fallback=fallback)
         if selected:
             variable.set(selected)
 
     def _choose_file(self, variable, *, title: str, filetypes, fallback: str | Path) -> None:
-        fd = _get_filedialog()
-        if fd is None:
-            return
-        selected = fd.askopenfilename(
-            title=title,
-            initialdir=self._expanded_parent(variable.get(), fallback),
-            parent=getattr(self, 'root', None),
-            filetypes=filetypes,
-        )
+        selected = self._file_picker.choose_file(variable.get(), title=title, filetypes=filetypes, fallback=fallback)
         if selected:
             variable.set(selected)
 
@@ -995,15 +855,7 @@ class HeadMatchGuiApp:
         self.progress_body_var.set(progress_body)
         self.show_view_progress()
 
-        def target() -> None:
-            try:
-                result = worker()
-            except Exception as exc:  # pragma: no cover
-                self._task_queue.put(("error", exc))
-                return
-            self._task_queue.put(("success", (on_success, result)))
-
-        threading.Thread(target=target, daemon=True).start()
+        self._background_tasks.start(lambda: (on_success, worker()))
         self._schedule_task_poll()
 
     def show_view_progress(self) -> None:
@@ -1043,24 +895,7 @@ class HeadMatchGuiApp:
     def _save_current_config(self) -> None:
         """Persist current GUI settings to the config file."""
         try:
-            from ..settings import save_config
-            config = FrontendConfig(
-                default_output_dir=self.output_dir_var.get().strip() or None,
-                preferred_target_csv=self.target_csv_var.get().strip() or None,
-                pipewire_output_target=self._strip_device_label(self.output_target_var.get()) or None,
-                pipewire_input_target=self._strip_device_label(self.input_target_var.get()) or None,
-                sample_rate=self.state.sample_rate,
-                duration_s=self.state.duration_s,
-                f_start_hz=self.state.f_start_hz,
-                f_end_hz=self.state.f_end_hz,
-                pre_silence_s=self.state.pre_silence_s,
-                post_silence_s=self.state.post_silence_s,
-                amplitude=self.state.amplitude,
-                start_iterations=self._parse_positive_int(self.iterations_var.get().strip(), "Iterations"),
-                max_filters=self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters"),
-                mode=self.mode_var.get().strip() or self.state.mode,
-            )
-            save_config(config, self.state.config_path)
+            self._controllers.save_current_config()
         except Exception:
             pass  # Config save is best-effort; don't interrupt the workflow
 

@@ -218,11 +218,25 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
 
 
 def test_gui_copy_mentions_setup_helpers():
-    from headmatch import gui_views
+    from headmatch.gui.views import _legacy
 
-    source = Path(gui_views.__file__).read_text()
+    source = Path(_legacy.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
+
+
+def test_per_view_modules_import_cleanly():
+    from headmatch.gui.views import basic, completion, fetch_curve, history, import_apo, offline, online, setup, target_editor
+
+    assert hasattr(basic, "render_basic_mode")
+    assert hasattr(completion, "render_completion")
+    assert hasattr(fetch_curve, "render_fetch_curve")
+    assert hasattr(history, "render_history_page")
+    assert hasattr(import_apo, "render_import_apo")
+    assert hasattr(offline, "render_offline_wizard")
+    assert hasattr(online, "render_online_wizard")
+    assert hasattr(setup, "render_setup_check")
+    assert hasattr(target_editor, "render_target_editor")
 
 
 
