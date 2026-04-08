@@ -168,7 +168,7 @@ class WorkflowControllers:
             task_name="basic-mode",
             progress_title="Running basic measurement",
             progress_body="Basic mode is using defaults: 48 kHz, 3 iterations, default devices, and up to 10 PEQ filters.",
-            worker=lambda: iterative_measure_and_fit(output_dir=out_dir, sweep_spec=self.app._build_sweep(), target_path=(self.app.basic_target_csv_var.get().strip() if self.app.basic_target_mode_var.get() == "csv" else None), output_target=None, input_target=None, iterations=3, max_filters=10, iteration_mode="average"),
+            worker=lambda: iterative_measure_and_fit(output_dir=out_dir, sweep_spec=self.app._build_sweep(), target_path=(self.app.basic_target_csv_var.get().strip() if self.app.basic_target_mode_var.get() in {"csv", "database"} else None), output_target=None, input_target=None, iterations=3, max_filters=10, iteration_mode="average"),
             on_success=lambda result: self.app._set_completion(title="Basic mode complete", summary=f"Saved to {out_dir}.", result=result, steps=("Review the result", "Export to the default location", "Switch to Advanced for fine tuning")),
         )
 
