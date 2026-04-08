@@ -288,7 +288,7 @@ Confidence scoring and plain-language interpretation are part of the product.
 
 ## Current state
 
-Version 0.6.1. 520+ deterministic tests, passing on Linux and macOS.
+Version 0.7.0 release candidate. 531 deterministic tests passing; current measured coverage 75.53% in Linux CI-style validation.
 
 The shipped product includes:
 - Cross-platform audio backend (PipeWire on Linux, PortAudio on macOS/Windows)

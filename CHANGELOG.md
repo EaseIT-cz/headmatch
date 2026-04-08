@@ -1,6 +1,34 @@
 # HeadMatch Changelog
 
+## 0.7.0
+
+### GUI / workflow
+- Added GUI Basic Mode with a guided 3-step workflow.
+- Added a Basic/Advanced mode selector with mode-specific navigation.
+- Added a Basic Mode clone-target workflow for headphone cloning / rig-specific mic-coloration nulling.
+- Basic target selection now hides irrelevant controls and supports explicit choice when multiple database measurements match.
+
+### Refactoring
+- Split GUI views into per-view modules under `headmatch/gui/views/`.
+- Added shared GUI helper/service layers for picker and background-task orchestration.
+- Continued decomposing the GUI into a more maintainable structure.
+
+### EQ clipping
+- GUI completion now surfaces clipping risk and preamp recommendations.
+- CLI `fit` output now supports `--show-clipping` and `--json` clipping details.
+
+### Documentation / release process
+- Added clone-target mic calibration documentation.
+- Updated architecture, backlog, and release notes for 0.7.0.
+- Release validation now records test and coverage results.
+- GitHub Actions now enforce a coverage floor to prevent silent drops below the current baseline.
+
+### Validation
+- 531 tests passed.
+- Coverage: 75.53% total (`pytest --cov=headmatch`).
+
 ## 0.6.1
+
 
 ### Platform stability
 - macOS test suite passes with platform-specific skips for PipeWire-only tests.

@@ -1,7 +1,7 @@
 # HeadMatch Backlog
 
-**Version**: 0.6.2  
-**Tests**: 523 passing across Linux/macOS
+**Version**: 0.7.0  
+**Tests**: 531 passing across Linux/macOS
 
 ---
 
@@ -37,7 +37,7 @@
 
 ## Now
 
-Nothing in progress. Awaiting next priorities.
+Release candidate preparation complete. Awaiting final testing and release decision.
 
 ---
 
