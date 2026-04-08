@@ -60,8 +60,12 @@ Nothing in progress. Awaiting next priorities.
   - How to handle ear canal resonance variation
   - Whether per-user calibration is tractable
 
-### Priority 2: Code health
+### Priority 2: GUI refactoring backlog
 
+- **TASK-106: Split gui_views.py into real per-view modules**
+- **TASK-107: Extract GUI workflow controllers from HeadMatchGuiApp**
+- **TASK-108: Centralize GUI file-picking and background task helpers**
+- **TASK-109: Replace shell view dispatch with registry-based routing**
 - Extract repeated CLI parser setup into shared helpers
 - Richer per-backend error diagnostics
 

@@ -171,23 +171,20 @@ Audio I/O is abstracted behind a pluggable backend system:
 ### `gui.py` (37 lines)
 - re-exports from gui/shell.py and gui_views.py for backward compatibility
 
-### `gui/shell.py` (~1045 lines)
-- primary desktop workflow shell
-- mode switcher (Basic/Advanced)
-- guided measurement flow with iteration mode selection
-- auto-saves config after every successful run
+### `gui/shell.py` (~1100 lines, transitional)
+- primary desktop workflow shell and composition root
+- currently still owns navigation, picker orchestration, and several workflow entry points
+- planned follow-up: extract workflow controllers and route via a registry
 
-### `gui_views.py` (~875 lines)
-- primary desktop workflow shell
-- view rendering delegated to `gui_views.py`
-- guided measurement flow with iteration mode selection
-- auto-saves config after every successful run
+### `gui/views/` (transitional)
+- target structure for per-view modules
+- current intent is one module per view family plus shared form helpers
+- ongoing refactor should move rendering out of the legacy compatibility module
 
-### `gui_views.py` (~756 lines)
-- all view rendering functions (online wizard, offline wizard, setup check, target editor, import APO, fetch curve, history, progress, completion)
-- target editor with live-updating sliders, canvas drag-to-move, scrollable control points
-- `_PlotGeometry` for bidirectional freq↔pixel coordinate mapping
-- curve preview renderer shared by target editor and drag handlers
+### `gui_views.py` (legacy compatibility layer, transitional)
+- currently still contains most renderers and shared view helpers
+- should be reduced to a thin compatibility module or removed after per-view extraction
+- contains target editor rendering and plot geometry that should migrate into dedicated view modules
 
 ### `tui.py`
 - maintenance-mode terminal workflow
