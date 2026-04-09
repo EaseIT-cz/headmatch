@@ -18,7 +18,7 @@ from .peq import FilterBudget
 from .pipeline import process_single_measurement
 from .pipeline_artifacts import write_fit_artifacts
 from .signals import SweepSpec
-from .targets import create_flat_target, load_curve
+from .targets import load_curve
 
 
 @dataclass
