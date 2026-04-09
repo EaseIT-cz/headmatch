@@ -18,7 +18,6 @@ WorkflowName = Literal[
     "prepare-offline",
     "analyze",
     "fit",
-    "fit",
     "iterate",
     "clone-target",
 ]
@@ -80,24 +79,6 @@ class RunFilterCounts:
     left: int
     right: int
 
-    @property
-    def output_target(self) -> Optional[str]:
-        """Platform-neutral alias for pipewire_output_target."""
-        return self.pipewire_output_target
-
-    @output_target.setter
-    def output_target(self, value: Optional[str]) -> None:
-        self.pipewire_output_target = value
-
-    @property
-    def input_target(self) -> Optional[str]:
-        """Platform-neutral alias for pipewire_input_target."""
-        return self.pipewire_input_target
-
-    @input_target.setter
-    def input_target(self, value: Optional[str]) -> None:
-        self.pipewire_input_target = value
-
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -108,24 +89,6 @@ class RunErrorSummary:
     right_rms: float
     left_max: float
     right_max: float
-
-    @property
-    def output_target(self) -> Optional[str]:
-        """Platform-neutral alias for pipewire_output_target."""
-        return self.pipewire_output_target
-
-    @output_target.setter
-    def output_target(self, value: Optional[str]) -> None:
-        self.pipewire_output_target = value
-
-    @property
-    def input_target(self) -> Optional[str]:
-        """Platform-neutral alias for pipewire_input_target."""
-        return self.pipewire_input_target
-
-    @input_target.setter
-    def input_target(self, value: Optional[str]) -> None:
-        self.pipewire_input_target = value
 
     def to_dict(self) -> dict:
         return asdict(self)
