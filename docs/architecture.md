@@ -60,6 +60,7 @@ Audio I/O is abstracted behind a pluggable backend system:
 - Default device detection via `wpctl status` + `wpctl inspect`
 - Play-and-record via `pw-play` / `pw-record` subprocesses
 - PipeWire-specific doctor checks (tool availability + device count)
+- **Bug fix (0.7.1)**: File handle leak in `play_and_record()` — stderr file now properly closed via `with` statement
 
 ### `backend_portaudio.py`
 - PortAudio implementation via `sounddevice` library
@@ -120,6 +121,8 @@ Audio I/O is abstracted behind a pluggable backend system:
 - case-insensitive, space-insensitive model name matching
 - AutoEQ CSV parser and format conversion
 - HTTPS-only URL validation with 5 MB response cap; URLs percent-encoded for spaces
+- **Bug fix (0.7.1)**: Empty search query now returns `[]` instead of entire database
+- **Bug fix (0.7.1)**: Added frequency-range validation for downloaded FR curves (must span below and above 1 kHz)
 
 ### `target_editor.py`
 - drag-point target curve editor model
@@ -139,6 +142,7 @@ Audio I/O is abstracted behind a pluggable backend system:
 - confidence scoring algorithm and threshold constants
 - trustworthiness summary generation
 - warning and interpretation text
+- **Note**: Magic numbers need documentation (TASK-113)
 
 ### `pipeline_artifacts.py`
 - fit artifact writing (exports, graphs, README, summary JSON)
@@ -159,32 +163,84 @@ Audio I/O is abstracted behind a pluggable backend system:
 - `FrontendConfig` with platform-neutral `output_target`/`input_target` properties
 - config serialization uses new field names; loading accepts both old (`pipewire_*`) and new
 - run summary, confidence, and error dataclasses
+- **Bug fix (0.7.1)**: Removed invalid `output_target`/`input_target` properties from `RunFilterCounts` and `RunErrorSummary` (copy-paste error)
+- **Bug fix (0.7.1)**: Deduplicated `WorkflowName` Literal type
 
 ### `history.py`
 - shared run-summary discovery for GUI and TUI
+- **New (0.7.1)**: `confidence_icon()` — returns ✓/⚠/✗ Unicode icons
+- **New (0.7.1)**: `format_run_entry()` — structured per-run display
+- **New (0.7.1)**: `format_comparison_table()` — clean side-by-side layout
 
 ### `cli.py`
 - command-line entry points
 - explicit workflow surface
 - platform-neutral help text
+- **Bug fix (0.7.1)**: Deduplicated set literals in command routing
+- **New (0.7.1)**: `batch-fit` command — process multiple recordings from manifest
+- **New (0.7.1)**: `batch-template` command — generate batch manifest template
+- **New (0.7.1)**: `history` command — list recent run summaries
+- **New (0.7.1)**: `compare-runs` command — side-by-side comparison of recent runs
+- **New (0.7.1)**: `compare-ab` command — A/B comparison with preset export
+
+### `batch.py` (NEW in 0.7.1)
+- batch-fit workflow implementation
+- processes multiple recording/target pairs from JSON manifest
+- each entry gets own output directory with standard EQ exports
+- consolidated `batch_summary.json` tracks results, confidence, errors
+- failures don't abort batch
+- paths resolved relative to manifest file
+
+### `ab_compare.py` (NEW in 0.7.1)
+- A/B comparison tool for comparing two EQ runs
+- copies Equalizer APO and CamillaDSP presets with A_/B_ prefixes
+- generates `comparison.json` with per-metric diffs
+- prints human-readable comparison table with verdict
+- handles close results (< 0.1 dB difference)
 
 ### `gui.py` (37 lines)
 - re-exports from gui/shell.py and gui_views.py for backward compatibility
 
-### `gui/shell.py` (~1100 lines, transitional)
+### `gui/shell.py` (~1,011 lines, transitional)
 - primary desktop workflow shell and composition root
 - currently still owns navigation, picker orchestration, and several workflow entry points
-- planned follow-up: extract workflow controllers and route via a registry
+- **Note**: Needs decomposition (TASK-109)
+
+### `gui/controllers.py`
+- workflow controllers extracted from shell
+- online measurement, offline workflow, clone target, APO import/refine
+- 79% coverage
+
+### `gui/services.py`
+- file picker helpers
+- background task orchestration
+- 93% coverage
+- **Bug fix (0.7.1)**: Removed spurious `pragma: no cover` from error handler
 
 ### `gui/views/` (transitional)
 - target structure for per-view modules
 - current intent is one module per view family plus shared form helpers
 - ongoing refactor should move rendering out of the legacy compatibility module
 
+### `gui/views/basic.py`
+- Basic Mode UI
+- 83% coverage
+- **New (0.7.1)**: Dynamic help text below target mode selector
+- **New (0.7.1)**: Orange 'No devices found' hint for empty comboboxes
+
+### `gui/views/common.py`
+- Shared view components
+- 93% coverage
+
+### `gui/views/_legacy.py` (transitional)
+- currently still contains most renderers and shared view helpers
+- should be reduced to a thin compatibility module or removed after per-view extraction
+- 31% coverage — needs attention
+- **New (0.7.1)**: Missing-device guidance section with troubleshooting steps
+
 ### `gui_views.py` (legacy compatibility layer, transitional)
 - currently still contains most renderers and shared view helpers
 - should be reduced to a thin compatibility module or removed after per-view extraction
-- contains target editor rendering and plot geometry that should migrate into dedicated view modules
 
 ### `tui.py`
 - maintenance-mode terminal workflow
@@ -288,7 +344,15 @@ Confidence scoring and plain-language interpretation are part of the product.
 
 ## Current state
 
-Version 0.7.0 release candidate. 531 deterministic tests passing; current measured coverage 75.53% in Linux CI-style validation.
+Version 0.7.1 (post-review). 618 deterministic tests passing in ~8.5s.
+
+**Code review baseline**: commit 3607fbd (591 tests)
+**Post-review**: 12 patches applied, 27 new tests added
+
+Review delivered:
+- 6 bug fixes (contracts.py, cli.py, headphone_db.py, backend_pipewire.py, gui/services.py)
+- 3 new features (batch-fit, history/compare-runs, A/B comparison)
+- 3 UI/UX improvements (target guidance, missing-device guidance, confidence icons)
 
 The shipped product includes:
 - Cross-platform audio backend (PipeWire on Linux, PortAudio on macOS/Windows)
@@ -303,6 +367,8 @@ The shipped product includes:
 - Clone-target headphone-to-headphone workflow
 - Multi-pass averaging iteration mode
 - SVG review graphs in fit output folders
+- Batch-fit workflow for multi-recording processing
+- History review and A/B comparison commands
 - CI matrix across Python 3.10–3.13 with coverage reporting
 - Config auto-save from GUI with field name migration
 
@@ -310,16 +376,26 @@ The shipped product includes:
 
 ## Likely future work
 
-### Next
+See `docs/backlog.md` for prioritized task list.
 
-- **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
-  - Which published measurement databases are reliable
-  - How to handle ear canal resonance variation
-  - Whether per-user calibration is tractable
-- Extract repeated CLI parser setup into shared helpers
-- Richer per-backend error diagnostics
+### Next (from code review)
+
+- **TASK-109: Decompose gui/shell.py** — At 1,011 lines, the main GUI file handles state management, rendering dispatch, event handling, and workflow coordination. Extract `GuiState` into its own module, break out Tkinter variable initialization.
+- **TASK-110: Standardize error hierarchy** — Define `HeadMatchError` base class with `MeasurementError`, `ConfigError`, `NetworkError` subclasses. Replace inconsistent ValueError/RuntimeError/ConnectionError usage.
+- **TASK-111: Add type checking CI** — Codebase uses type hints extensively but no mypy/pyright step. Would catch issues at development time.
+- **TASK-112: Add coverage CI gate** — Remove remaining `pragma: no-cover` markers, add CI step that fails if coverage drops below threshold (e.g., 80%).
+- **TASK-113: Document confidence scoring derivation** — `pipeline_confidence.py` uses magic numbers (ALIGNMENT_SCORE_WARN=0.85, etc.) without explaining derivation.
+- **TASK-114: Security: URL validation** — `fetch_curve_from_url` accepts any HTTPS URL. Consider domain allowlisting.
+
+### GUI Refactoring (ongoing)
+
+- **TASK-106: Split gui_views.py into per-view modules**
+- **TASK-107: Extract workflow controllers**
+- **TASK-108: Centralize file-picking and background task helpers**
 
 ### Later
+
+- **TASK-115: Async audio backend** — Replace `time.sleep()` synchronization with asyncio-based process management.
 - macOS .app bundle (currently distributed as raw binary)
 - Windows .exe binary via PyInstaller
 - AppImage wrapper for Linux
@@ -328,4 +404,3 @@ The shipped product includes:
 - Closed-loop EQ refinement (measure → apply → re-measure)
 - Room correction / speaker measurement mode
 - Windows installer and testing
-- Safe mode vs advanced mode UI split
