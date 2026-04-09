@@ -258,7 +258,7 @@ def _run_summary_path(cmd: str, args) -> Path | None:
     if not out_dir:
         return None
     base = Path(out_dir)
-    if cmd in {"fit", "fit"}:
+    if cmd in {"fit"}:
         return base / "run_summary.json"
     if cmd in {"start", "iterate"}:
         iteration_mode = getattr(args, "iteration_mode", "independent")
@@ -368,7 +368,7 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Analysis written to {out_dir}.")
         print("Review the CSVs, or run fit to build EQ.")
-    elif cmd in {"fit", "fit", "iterate"}:
+    elif cmd in {"fit", "iterate"}:
         print_run_confidence(cmd, args)
         summary_path = _run_summary_path(cmd, args)
         if summary_path is not None and summary_path.exists():
@@ -403,12 +403,12 @@ def format_user_error(cmd: str, exc: ValueError) -> str:
             f"clone-target failed: {message}\n"
             "Check that both input CSVs include frequency and response columns, span 1 kHz, and that --out points to a new file."
         )
-    if cmd in {"fit", "fit", "start", "iterate"} and 'Target curve' in message:
+    if cmd in {"fit", "start", "iterate"} and 'Target curve' in message:
         return (
             f"target CSV could not be used: {message}\n"
             "Use a target file that includes frequency + response data and spans 1 kHz."
         )
-    if cmd in {"fit", "fit", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
+    if cmd in {"fit", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
         return (
             f"target CSV could not be read: {message}\n"
             "Expected a CSV with a frequency column such as frequency_hz/frequency/freq and a response column such as response_db/raw/target_db."
