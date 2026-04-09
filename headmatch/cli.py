@@ -228,6 +228,20 @@ def build_parser(config) -> argparse.ArgumentParser:
     )
     p.add_argument("--root", default=".", help="Root folder to search for run_summary.json files.")
 
+    p = sub.add_parser(
+        "compare-ab",
+        help="A/B compare two runs and export paired presets for quick switching.",
+        description=(
+            "Compare two run directories side by side and export both presets "
+            "into a single folder with A_/B_ prefixes for easy A/B testing."
+        ),
+    )
+    p.add_argument("--run-a", required=True, help="Path to the first run directory.")
+    p.add_argument("--run-b", required=True, help="Path to the second run directory.")
+    p.add_argument("--label-a", default="A", help="Label for the first run (default: A).")
+    p.add_argument("--label-b", default="B", help="Label for the second run (default: B).")
+    p.add_argument("--out-dir", required=True, help="Output directory for comparison presets.")
+
     sub.add_parser(
         "list-targets",
         help="List likely audio playback and capture targets.",
@@ -666,6 +680,19 @@ def main(argv: list[str] | None = None) -> None:
                         print(f"  {field.label:<{max_label}s}  A: {field.left}")
                         print(f"  {' ':<{max_label}s}  B: {field.right}")
                         print()
+        elif args.cmd == "compare-ab":
+            from .ab_compare import build_comparison_pair, export_ab_comparison, format_comparison_table
+            pair = build_comparison_pair(
+                args.run_a, args.run_b,
+                label_a=args.label_a, label_b=args.label_b,
+            )
+            print(format_comparison_table(pair))
+            print()
+            export = export_ab_comparison(pair, args.out_dir)
+            print(f"Presets exported to {export.output_dir}")
+            print(f"  {export.preset_a_apo.name}, {export.preset_b_apo.name}")
+            print(f"  {export.preset_a_cdsp.name}, {export.preset_b_cdsp.name}")
+            print(f"  {export.comparison_json.name}")
         elif args.cmd == "iterate":
             iterative_measure_and_fit(
                 output_dir=args.out_dir,
