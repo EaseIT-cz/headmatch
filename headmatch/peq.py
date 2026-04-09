@@ -79,7 +79,7 @@ class FitObjective:
         """Unsmoothed residual for bandwidth estimation."""
         builder = response_builder or peq_chain_response_db
         current = builder(self.freqs_hz, self.sample_rate, bands)
-        return self.eq_target_db - current
+        return self.eq_target_db - current  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -123,7 +123,7 @@ class PEQBand:
         inner = (A + 1.0 / A) * (1.0 / s - 1.0) + 2.0
         if inner <= 0:
             return 0.707
-        return 1.0 / (inner ** 0.5)
+        return 1.0 / (inner ** 0.5)  # type: ignore[no-any-return]
 
 
 @dataclass(frozen=True)
@@ -210,7 +210,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
     num = b0 + b1 * z_inv + b2 * z_inv2
     den = a0 + a1 * z_inv + a2 * z_inv2
     h = num / den
-    return 20 * np.log10(np.maximum(np.abs(h), 1e-12))
+    return 20 * np.log10(np.maximum(np.abs(h), 1e-12))  # type: ignore[no-any-return]
 
 
 def peq_chain_response_db(freqs_hz: np.ndarray, fs: int, bands: List[PEQBand]) -> np.ndarray:
@@ -288,7 +288,7 @@ def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: 
         return None
     if _same_sign_fraction(edge_values, edge_mean) < 0.7:
         return None
-    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7, slope=0.7)
+    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7, slope=0.7)  # type: ignore[arg-type]
 
 
 def _max_q_for_frequency(freq_hz: float, requested_max_q: float) -> float:
@@ -400,9 +400,9 @@ def _refine_bands_jointly(
     x0 = []
     for i in peaking_indices:
         x0.extend([bands[i].freq, bands[i].gain_db, bands[i].q])
-    x0 = np.array(x0, dtype=np.float64)
+    x0 = np.array(x0, dtype=np.float64)  # type: ignore[assignment]
 
-    initial_cost = _cost(x0)
+    initial_cost = _cost(x0)  # type: ignore[arg-type]
     max_iter = min(80 * len(peaking_indices), 400)
     result = minimize(_cost, x0, method='Nelder-Mead',
                       options={'maxiter': max_iter, 'xatol': 0.5, 'fatol': 0.05})

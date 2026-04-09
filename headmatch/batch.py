@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .app_identity import get_app_identity
 from .io_utils import save_json
@@ -120,7 +120,7 @@ def run_batch_fit(
     *,
     max_filters: int = 8,
     filter_budget: FilterBudget | None = None,
-    on_progress: callable = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> list[BatchResult]:
     """Process all entries in a batch manifest.
 

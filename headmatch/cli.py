@@ -380,7 +380,7 @@ def print_clipping_summary(summary: FrontendRunSummary, *, detailed: bool = Fals
     preamp_db = assessment.get("preamp_db")
     if preamp_db is None:
         preamp_db = assessment.get("total_preamp_db")
-    print(f"Preamp recommendation: {float(preamp_db):.1f} dB")
+    print(f"Preamp recommendation: {float(preamp_db or 0):.1f} dB")
     peak_boost = max(float(assessment.get("left_peak_boost_db", 0.0)), float(assessment.get("right_peak_boost_db", 0.0)))
     print(f"Max boost level: {peak_boost:.1f} dB")
     headroom = float(assessment.get("headroom_loss_db", 0.0))
@@ -392,8 +392,8 @@ def print_clipping_summary(summary: FrontendRunSummary, *, detailed: bool = Fals
         print("Detailed clipping breakdown:")
         print(f"- Left peak boost: {float(assessment.get('left_peak_boost_db', 0.0)):+.1f} dB")
         print(f"- Right peak boost: {float(assessment.get('right_peak_boost_db', 0.0)):+.1f} dB")
-        print(f"- Left preamp: {float(assessment.get('left_preamp_db', preamp_db)):.1f} dB")
-        print(f"- Right preamp: {float(assessment.get('right_preamp_db', preamp_db)):.1f} dB")
+        print(f"- Left preamp: {float(assessment.get('left_preamp_db', preamp_db)):.1f} dB")  # type: ignore[arg-type]
+        print(f"- Right preamp: {float(assessment.get('right_preamp_db', preamp_db)):.1f} dB")  # type: ignore[arg-type]
         if assessment.get("quality_concern"):
             print(f"- Note: {assessment['quality_concern']}")
 
@@ -409,7 +409,7 @@ def print_next_steps(cmd: str, args) -> None:
     elif cmd == "measure":
         print()
         print(f"Measurement saved in {out_dir}.")
-        print(f"Next: headmatch fit --recording {Path(out_dir) / 'recording.wav'} --out-dir {Path(out_dir) / 'fit'}")
+        print(f"Next: headmatch fit --recording {Path(out_dir) / 'recording.wav'} --out-dir {Path(out_dir) / 'fit'}")  # type: ignore[arg-type]
     elif cmd == "prepare-offline":
         print()
         print(f"Offline package saved in {out_dir}.")
@@ -439,9 +439,9 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         result = getattr(args, "tui_result", None)
         if getattr(result, "workflow", None) == "history":
-            print(f"History browser finished. Review outputs in {result.out_dir}.")
+            print(f"History browser finished. Review outputs in {result.out_dir}.")  # type: ignore[union-attr]
             if getattr(result, "details", ""):
-                print(f"Guide: {result.details}")
+                print(f"Guide: {result.details}")  # type: ignore[union-attr]
         else:
             print("Wizard finished. Reopen 'headmatch tui' any time for another guided run.")
 
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.cmd == "tui":
             from sys import stdin, stdout
-            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda path=None: load_or_create_config(bootstrap_args.config or path), config_path=bootstrap_args.config)
+            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda path=None: load_or_create_config(bootstrap_args.config or path), config_path=bootstrap_args.config)  # type: ignore[misc]
         elif args.cmd == "start":
             print(f"Starting guided measurement workflow in {args.out_dir} ...")
             iterative_measure_and_fit(
@@ -624,21 +624,21 @@ def main(argv: list[str] | None = None) -> None:
             def _batch_progress(current, total, label):
                 print(f"  [{current}/{total}] {label} ...")
             print(f"Running batch fit from {args.manifest} ...")
-            results = run_batch_fit(
+            results = run_batch_fit(  # type: ignore[assignment]
                 args.manifest,
                 spec_from_args(args),
                 max_filters=args.max_filters,
                 filter_budget=filter_budget_from_args(args),
                 on_progress=_batch_progress,
             )
-            succeeded = sum(1 for r in results if r.success)
-            failed = sum(1 for r in results if not r.success)
+            succeeded = sum(1 for r in results if r.success)  # type: ignore[attr-defined,misc]
+            failed = sum(1 for r in results if not r.success)  # type: ignore[attr-defined,misc]
             print(f"Batch complete: {succeeded} succeeded, {failed} failed out of {len(results)}.")
             for r in results:
-                if r.success:
-                    print(f"  ✓ {r.label}: L={r.predicted_left_rms_error_db:.2f} R={r.predicted_right_rms_error_db:.2f} dB RMS ({r.confidence_label})")
+                if r.success:  # type: ignore[attr-defined]
+                    print(f"  ✓ {r.label}: L={r.predicted_left_rms_error_db:.2f} R={r.predicted_right_rms_error_db:.2f} dB RMS ({r.confidence_label})")  # type: ignore[attr-defined]
                 else:
-                    print(f"  ✗ {r.label}: {r.error}")
+                    print(f"  ✗ {r.label}: {r.error}")  # type: ignore[attr-defined]
         elif args.cmd == "batch-template":
             from .batch import generate_manifest_template
             out = generate_manifest_template(args.out, num_entries=args.entries)
@@ -653,11 +653,11 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 print(f"Recent runs under {args.root}:")
                 print()
-                for i, entry in enumerate(runs, 1):
-                    print(format_run_entry(entry, i))
+                for i, entry in enumerate(runs, 1):  # type: ignore[assignment]
+                    print(format_run_entry(entry, i))  # type: ignore[arg-type]
                     print()
         elif args.cmd == "compare-runs":
-            from .history import load_recent_runs, build_run_comparison, format_comparison_table
+            from .history import load_recent_runs, build_run_comparison, format_comparison_table as format_run_comparison_table
             runs = load_recent_runs(args.root, limit=2)
             if len(runs) < 2:
                 print(f"Need at least 2 runs under {args.root} to compare. Found {len(runs)}.")
@@ -666,7 +666,7 @@ def main(argv: list[str] | None = None) -> None:
                 if comparison is None:
                     print("Could not build comparison.")
                 else:
-                    print(format_comparison_table(comparison))
+                    print(format_run_comparison_table(comparison))
         elif args.cmd == "compare-ab":
             from .ab_compare import build_comparison_pair, export_ab_comparison, format_comparison_table
             pair = build_comparison_pair(

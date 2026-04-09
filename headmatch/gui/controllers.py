@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from ..apo_import import load_apo_preset
 from ..apo_refine import refine_apo_preset
@@ -13,10 +13,15 @@ from ..headphone_db import fetch_curve_from_url, search_headphone
 from ..signals import SweepSpec
 from ..settings import load_or_create_config, save_config
 
+if TYPE_CHECKING:
+    from .shell import HeadMatchGuiApp
 
-@dataclass
+
 class WorkflowControllers:
-    app: object
+    """Workflow controller methods bound to a GUI app instance."""
+
+    def __init__(self, app: HeadMatchGuiApp) -> None:
+        self.app = app
 
     def build_history_selection(self):
         return build_history_selection(self.app.history_root_var.get(), self.app.state.config_path.parent)
@@ -38,12 +43,12 @@ class WorkflowControllers:
                 amplitude=self.app.state.amplitude,
                 start_iterations=self.app._parse_positive_int(self.app.iterations_var.get().strip(), "Iterations"),
                 max_filters=self.app._parse_positive_int(self.app.max_filters_var.get().strip(), "Max PEQ filters"),
-                mode=self.app.mode_var.get().strip() or self.app.state.mode,
+                mode=self.app.mode_var.get().strip() or self.app.state.mode,  # type: ignore[arg-type]
             ),
         )
         self.app.doctor_report_var.set(report)
         if self.app.current_view.get() == "setup-check":
-            for child in self.app.content.winfo_children():
+            for child in self.app.content.winfo_children():  # type: ignore[attr-defined]
                 child.destroy()
             self.app._render_setup_check()
 
@@ -123,7 +128,7 @@ class WorkflowControllers:
         scrollbar.grid(row=1, column=1, sticky="ns", pady=(4, 0))
         listbox.configure(yscrollcommand=scrollbar.set)
         listbox.bind("<<ListboxSelect>>", self.app._on_search_result_selected)
-        self.app._search_results_list = listbox
+        self.app._search_results_list = listbox  # type: ignore[assignment]
 
     def run_fetch_curve(self) -> None:
         url = self.app.fetch_url_var.get().strip()
@@ -233,6 +238,6 @@ class WorkflowControllers:
             amplitude=self.app.state.amplitude,
             start_iterations=self.app._parse_positive_int(self.app.iterations_var.get().strip(), "Iterations"),
             max_filters=self.app._parse_positive_int(self.app.max_filters_var.get().strip(), "Max PEQ filters"),
-            mode=self.app.mode_var.get().strip() or self.app.state.mode,
+            mode=self.app.mode_var.get().strip() or self.app.state.mode,  # type: ignore[arg-type]
         )
         save_config(config, self.app.state.config_path)

@@ -112,7 +112,7 @@ def summarize_trustworthiness(result: MeasurementResult, report: dict) -> Confid
 
     return ConfidenceSummary(
         score=score,
-        label=label,
+        label=label,  # type: ignore[arg-type]
         headline=headline,
         interpretation=interpretation,
         reasons=tuple(reasons),
