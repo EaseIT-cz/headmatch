@@ -5,7 +5,6 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from headmatch.batch import (
-    BatchEntry,
     BatchResult,
     generate_manifest_template,
     load_batch_manifest,
