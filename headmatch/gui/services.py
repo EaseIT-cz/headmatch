@@ -100,7 +100,7 @@ class BackgroundTaskService:
         def target() -> None:
             try:
                 result = worker()
-            except Exception as exc:  # pragma: no cover
+            except Exception as exc:
                 self._task_queue.put(("error", exc))
                 return
             self._task_queue.put(("success", result))

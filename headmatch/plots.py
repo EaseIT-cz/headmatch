@@ -21,12 +21,12 @@ def _log_x_positions(freqs: np.ndarray, width: float, domain: np.ndarray | None 
     if np.isclose(log_max, log_min):
         return np.full_like(freqs, width * 0.5, dtype=np.float64)
     scale = width / (log_max - log_min)
-    return (np.log10(freqs) - log_min) * scale
+    return (np.log10(freqs) - log_min) * scale  # type: ignore[no-any-return]
 
 
 def _y_positions(values_db: np.ndarray, height: float) -> np.ndarray:
     clipped = np.clip(values_db, PLOT_Y_MIN, PLOT_Y_MAX)
-    return (PLOT_Y_MAX - clipped) * (height / (PLOT_Y_MAX - PLOT_Y_MIN))
+    return (PLOT_Y_MAX - clipped) * (height / (PLOT_Y_MAX - PLOT_Y_MIN))  # type: ignore[no-any-return]
 
 
 def _polyline_points(freqs: np.ndarray, values_db: np.ndarray, plot_x: float, plot_y: float, plot_w: float, plot_h: float) -> str:

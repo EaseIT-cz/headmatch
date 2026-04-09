@@ -1,5 +1,34 @@
 # HeadMatch Changelog
 
+## 0.7.1
+
+### Bug Fixes
+- Fixed invalid `output_target`/`input_target` properties on `RunFilterCounts` and `RunErrorSummary` (copy-paste error)
+- Deduplicated set literals in CLI command routing
+- Empty headphone search now returns `[]` instead of entire database
+- Fixed file handle leak in PipeWire `play_and_record()`
+- Added frequency-range validation for downloaded FR curves
+- Removed spurious `pragma: no cover` from error handler
+
+### New Features
+- **batch-fit**: Process multiple recordings from JSON manifest
+- **history**: Review past measurement runs
+- **compare-runs**: Side-by-side comparison of recent runs
+- **compare-ab**: A/B comparison tool with preset export
+
+### UI/UX
+- Basic-mode target guidance with dynamic help text
+- Missing-device guidance in online wizard
+- Confidence icons in CLI history output
+
+### Code Quality
+- Added mypy type checking CI workflow
+- Fixed 169 typing errors across 15 files
+
+### Validation
+- 618 tests passing (up from 591)
+- Coverage: 80% total
+
 ## 0.7.0
 
 ### GUI / workflow

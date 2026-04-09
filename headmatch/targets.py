@@ -34,7 +34,7 @@ def normalize_at_1khz(freqs_hz: np.ndarray, values_db: np.ndarray) -> np.ndarray
             'Target curve must span 1 kHz for normalization. '
             f'Got {freqs_hz[0]:.1f} Hz to {freqs_hz[-1]:.1f} Hz.'
         )
-    return values_db - np.interp(1000.0, freqs_hz, values_db)
+    return values_db - np.interp(1000.0, freqs_hz, values_db)  # type: ignore[no-any-return]
 
 
 
@@ -57,7 +57,7 @@ def _read_target_metadata(path: str | Path) -> dict[str, str]:
 def _infer_target_semantics(path: str | Path, metadata: dict[str, str]) -> TargetSemantics:
     explicit = metadata.get('headmatch_target_semantics') or metadata.get('target_semantics')
     if explicit in {'absolute', 'relative'}:
-        return explicit
+        return explicit  # type: ignore[return-value]
     stem = Path(path).stem.lower()
     if stem.startswith('clone_') or stem.endswith('_clone') or '_to_' in stem:
         return 'relative'

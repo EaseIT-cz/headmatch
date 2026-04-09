@@ -209,29 +209,28 @@ class PipeWireBackend:
             play_cmd.extend(["--target", device.output_target])
 
         stderr_path = paths.recording_wav.parent / 'pw-record-stderr.log'
-        stderr_file = open(stderr_path, 'w', encoding='utf-8')
-        rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.DEVNULL, stderr=stderr_file)
-        try:
-            time.sleep(max(0.35, spec.pre_silence_s * 0.75))
-            play_result = subprocess.run(play_cmd, capture_output=True, text=True, check=False)
-            if play_result.returncode != 0:
-                message = (play_result.stderr or play_result.stdout or 'pw-play failed').strip()
-                raise RuntimeError(
-                    f"Playback failed. {message} Try 'headmatch list-targets' to confirm the right --output-target."
-                )
-            time.sleep(capture_guard_s)
-        except Exception:
-            rec_proc.terminate()
-            raise
-        finally:
-            time.sleep(0.25)
-            rec_proc.terminate()
+        with open(stderr_path, 'w', encoding='utf-8') as stderr_file:
+            rec_proc = subprocess.Popen(rec_cmd, stdout=subprocess.DEVNULL, stderr=stderr_file)
             try:
-                rec_proc.wait(timeout=max(3.0, capture_guard_s + spec.post_silence_s + 1.0))
-            except subprocess.TimeoutExpired:
-                rec_proc.kill()
-                rec_proc.wait(timeout=2)
-            stderr_file.close()
+                time.sleep(max(0.35, spec.pre_silence_s * 0.75))
+                play_result = subprocess.run(play_cmd, capture_output=True, text=True, check=False)
+                if play_result.returncode != 0:
+                    message = (play_result.stderr or play_result.stdout or 'pw-play failed').strip()
+                    raise RuntimeError(
+                        f"Playback failed. {message} Try 'headmatch list-targets' to confirm the right --output-target."
+                    )
+                time.sleep(capture_guard_s)
+            except Exception:
+                rec_proc.terminate()
+                raise
+            finally:
+                time.sleep(0.25)
+                rec_proc.terminate()
+                try:
+                    rec_proc.wait(timeout=max(3.0, capture_guard_s + spec.post_silence_s + 1.0))
+                except subprocess.TimeoutExpired:
+                    rec_proc.kill()
+                    rec_proc.wait(timeout=2)
 
         if not paths.recording_wav.exists() or paths.recording_wav.stat().st_size == 0:
             stderr = ''

@@ -70,7 +70,7 @@ def parse_apo_parametric(text: str) -> Tuple[List[PEQBand], List[PEQBand]]:
 
         q_val = float(m.group(4))
         band = PEQBand(
-            kind=kind,
+            kind=kind,  # type: ignore[arg-type]
             freq=float(m.group(2)),
             gain_db=float(m.group(3)),
             q=q_val,

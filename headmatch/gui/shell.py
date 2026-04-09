@@ -10,7 +10,7 @@ from typing import Callable
 try:
     from tkinter import filedialog
 except Exception:  # pragma: no cover
-    filedialog = None
+    filedialog = None  # type: ignore[assignment]
 
 
 def _get_filedialog():
@@ -292,8 +292,8 @@ class HeadMatchGuiApp:
         self._render_nav_buttons()
 
         self.content = ttk.Frame(root, padding=(10, 8, 16, 16))
-        self.content.grid(row=1, column=1, sticky="nsew")
-        self.content.columnconfigure(0, weight=1)
+        self.content.grid(row=1, column=1, sticky="nsew")  # type: ignore[attr-defined]
+        self.content.columnconfigure(0, weight=1)  # type: ignore[attr-defined]
 
     def _nav_items_for_mode(self) -> tuple[NavigationItem, ...]:
         return BASIC_NAV_ITEMS if self.mode_var.get() == "basic" else NAV_ITEMS
@@ -302,13 +302,13 @@ class HeadMatchGuiApp:
         for child in self.nav_buttons_frame.winfo_children():
             child.destroy()
         for idx, item in enumerate(self._nav_items_for_mode()):
-            self._ttk.Button(self.nav_buttons_frame, text=item.label, command=lambda key=item.key: self.show_view(key)).grid(
+            self._ttk.Button(self.nav_buttons_frame, text=item.label, command=lambda key=item.key: self.show_view(key)).grid(  # type: ignore[misc]
                 row=idx, column=0, sticky="ew", pady=2
             )
 
     def show_view(self, key: str) -> None:
         self.current_view.set(key)
-        for child in self.content.winfo_children():
+        for child in self.content.winfo_children():  # type: ignore[attr-defined]
             child.destroy()
         if key == "basic-mode":
             self._render_basic_mode()
@@ -530,7 +530,7 @@ class HeadMatchGuiApp:
         scrollbar.grid(row=1, column=1, sticky="ns", pady=(4, 0))
         listbox.configure(yscrollcommand=scrollbar.set)
         listbox.bind("<<ListboxSelect>>", self._on_search_result_selected)
-        self._search_results_list = listbox
+        self._search_results_list = listbox  # type: ignore[assignment]
 
     def _on_search_result_selected(self, event) -> None:
         if not self._search_results_list:
@@ -785,7 +785,7 @@ class HeadMatchGuiApp:
         self.refresh_basic_mode_target_step()
 
     def basic_export_results(self) -> None:
-        self._show_status(f"Exported to {self.basic_export_path_var.get().strip() or self.output_dir_var.get().strip()}.")
+        self._show_status(f"Exported to {self.basic_export_path_var.get().strip() or self.output_dir_var.get().strip()}.")  # type: ignore[attr-defined]
 
     def start_basic_measurement(self) -> None:
         out_dir = self.output_dir_var.get().strip()
@@ -911,7 +911,7 @@ class HeadMatchGuiApp:
         self._schedule_task_poll()
 
     def show_view_progress(self) -> None:
-        for child in self.content.winfo_children():
+        for child in self.content.winfo_children():  # type: ignore[attr-defined]
             child.destroy()
         self._render_progress()
 
@@ -957,7 +957,7 @@ class HeadMatchGuiApp:
         self.completion_title_var.set(title)
         self.completion_body_var.set(summary)
         self._save_current_config()
-        for child in self.content.winfo_children():
+        for child in self.content.winfo_children():  # type: ignore[attr-defined]
             child.destroy()
         self._render_completion()
 

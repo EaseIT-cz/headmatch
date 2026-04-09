@@ -1,7 +1,8 @@
 # HeadMatch Backlog
 
-**Version**: 0.7.0  
-**Tests**: 531 passing across Linux/macOS
+**Version**: 0.7.1 (post-code review)  
+**Tests**: 618 passing across Linux/macOS  
+**Coverage**: 80%
 
 ---
 
@@ -22,6 +23,10 @@
 - **Basic Mode wizard** — guided 3-step workflow for beginners
 - **GUI clipping display** — preamp recommendations in completion panel
 - **CLI clipping output** — `--show-clipping` and `--json` flags
+- **Batch-fit workflow** — process multiple recordings from JSON manifest (NEW in 0.7.1)
+- **History & compare-runs** — CLI commands for reviewing past measurements (NEW in 0.7.1)
+- **A/B comparison tool** — side-by-side EQ comparison with preset export (NEW in 0.7.1)
+- **Confidence icons** — visual status indicators in CLI history output (NEW in 0.7.1)
 - CI matrix across Python 3.10–3.13 with coverage reporting
 - Config auto-save with field name migration
 - Standalone binaries: Linux x64, macOS ARM64
@@ -37,11 +42,35 @@
 
 ## Now
 
-Release candidate preparation complete. Awaiting final testing and release decision.
+Released 0.7.1. See RELEASE_NOTES-0.7.1.md.
 
 ---
 
-## Done (v0.6.2)
+## Done (0.7.1)
+
+Code review delivered the following:
+
+### Bug Fixes
+- **BUG-001**: Removed invalid `output_target`/`input_target` properties from `RunFilterCounts` and `RunErrorSummary` (copy-paste error from `FrontendConfig`)
+- **BUG-002**: Deduplicated set literals in CLI command routing
+- **BUG-003**: Empty headphone search now returns `[]` instead of entire database
+- **BUG-004**: Fixed file handle leak in PipeWire `play_and_record()`
+- **BUG-005**: Added frequency-range validation for downloaded FR curves
+- **BUG-006**: Removed spurious `pragma: no cover` from error handler with test coverage
+
+### New Features
+- **FEAT-001**: Batch-fit workflow (`headmatch batch-fit`, `headmatch batch-template`)
+- **FEAT-002**: History and compare-runs CLI commands
+- **FEAT-003**: A/B comparison tool with preset export (`headmatch compare-ab`)
+
+### UI/UX Improvements
+- **UI-001**: Basic-mode target guidance with dynamic help text
+- **UI-002**: Missing-device guidance in online wizard (troubleshooting steps)
+- **UI-003**: Confidence icons and clearer headers in history output
+
+---
+
+## Done (v0.7.0)
 
 - **TASK-101: GUI Basic Mode Wizard** — Guided 3-step workflow for beginners. Flat target default, 3 iterations, max 10 PEQ filters, no exposed complexity.
 - **TASK-102: GUI Shell/View Refactoring** — Extracted shell into `gui/shell.py`, views remain in `gui_views.py`. gui.py reduced to 37-line re-export.
@@ -51,28 +80,43 @@ Release candidate preparation complete. Awaiting final testing and release decis
 
 ---
 
+## Done (v0.6.2)
+
+All prior tasks completed. See release notes.
+
+---
+
 ## Next
 
-### Priority 1: Mic calibration roadmap
+### Priority 1: Code Quality (from review)
+
+- **TASK-109: Decompose gui/shell.py** — Extract `GuiState` into its own module, break out Tkinter variable initialization
+- **TASK-110: Standardize error hierarchy** — Define `HeadMatchError` base class with `MeasurementError`, `ConfigError`, `NetworkError` subclasses
+- **TASK-112: Add coverage CI gate** — Fail CI if coverage drops below 80%
+- **TASK-113: Document confidence scoring derivation** — Add docstrings/design doc for `pipeline_confidence.py` magic numbers
+
+### Priority 2: Security
+
+- **TASK-114: URL validation in fetch_curve_from_url** — Consider domain allowlisting to prevent SSRF-like abuse
+
+### Priority 3: GUI refactoring backlog
+
+- **TASK-106: Split gui_views.py into real per-view modules**
+- **TASK-107: Extract GUI workflow controllers from HeadMatchGuiApp**
+- **TASK-108: Centralize GUI file-picking and background task helpers**
+
+### Priority 4: Mic calibration roadmap
 
 - **Mic calibration workflow** — Long-term: derive mic response curve via trusted data comparison. Requires research on:
   - Which published measurement databases are reliable
   - How to handle ear canal resonance variation
   - Whether per-user calibration is tractable
 
-### Priority 2: GUI refactoring backlog
-
-- **TASK-106: Split gui_views.py into real per-view modules**
-- **TASK-107: Extract GUI workflow controllers from HeadMatchGuiApp**
-- **TASK-108: Centralize GUI file-picking and background task helpers**
-- **TASK-109: Replace shell view dispatch with registry-based routing**
-- Extract repeated CLI parser setup into shared helpers
-- Richer per-backend error diagnostics
-
 ---
 
 ## Later
 
+- **TASK-115: Async audio backend** — Replace `time.sleep()` synchronization with asyncio-based process management
 - macOS .app bundle (currently distributed as raw binary)
 - Windows .exe binary via PyInstaller
 - AppImage wrapper for Linux
@@ -82,4 +126,3 @@ Release candidate preparation complete. Awaiting final testing and release decis
 - CamillaDSP live-update via WebSocket API
 - Closed-loop EQ refinement (measure → apply → re-measure)
 - Room correction / speaker measurement mode
-- Asynchronous device support / clock drift compensation

@@ -67,7 +67,7 @@ def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fra
     if len(freqs_hz) != len(values_db):
         raise ValueError('freq and values must have the same length')
     if len(freqs_hz) < 2:
-        return values_db.copy()
+        return values_db.copy()  # type: ignore[no-any-return]
     logf = np.log2(np.maximum(freqs_hz, 1e-9))
     # Resample onto a uniform log2-frequency grid
     n = len(logf)
@@ -83,7 +83,7 @@ def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fra
     denominator = gaussian_filter1d(np.ones(n), sigma_samples, mode="constant", cval=0.0)
     v_smoothed = np.where(denominator > 1e-12, numerator / denominator, v_uniform)
     # Interpolate back to original (possibly non-uniform) frequency points
-    return np.interp(logf, grid, v_smoothed)
+    return np.interp(logf, grid, v_smoothed)  # type: ignore[no-any-return]
 
 
 

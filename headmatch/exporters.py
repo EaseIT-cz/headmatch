@@ -36,7 +36,7 @@ def _shelf_s_to_q(s: float, gain_db: float) -> float:
     inner = (A + 1.0 / A) * (1.0 / s - 1.0) + 2.0
     if inner <= 0:
         return 0.707
-    return round(1.0 / (inner ** 0.5), 4)
+    return round(1.0 / (inner ** 0.5), 4)  # type: ignore[no-any-return]
 
 
 def _band_payload(band: PEQBand) -> dict:
@@ -61,7 +61,7 @@ def _bands_sorted_by_frequency(bands: Iterable[PEQBand]) -> list[PEQBand]:
 
 def _build_filter_bank(bands_left: List[PEQBand], bands_right: List[PEQBand]) -> tuple[dict, list[str], list[str]]:
     filters = {}
-    left_names, right_names = [], []
+    left_names: list[str] = []; right_names: list[str] = []
     for channel_prefix, names, bands in (('L', left_names, bands_left), ('R', right_names, bands_right)):
         for i, band in enumerate(_bands_sorted_by_frequency(bands), 1):
             name = f'{channel_prefix}_{i}_{band.kind}'

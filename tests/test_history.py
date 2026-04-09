@@ -107,3 +107,48 @@ def test_build_history_selection_exposes_two_run_comparison(tmp_path):
     assert fields["Filters (L/R)"] == ("5/6", "4/4")
     assert "L rms 0.80" in fields["Predicted error"][0]
     assert "Medium (68/100)" in fields["Confidence"][0]
+
+
+from headmatch.history import confidence_icon, format_run_entry, format_comparison_table
+
+
+def test_confidence_icon_returns_checkmark_for_high():
+    assert confidence_icon("high") == "\u2713"
+
+
+def test_confidence_icon_returns_warning_for_medium():
+    assert confidence_icon("medium") == "\u26A0"
+
+
+def test_confidence_icon_returns_cross_for_low():
+    assert confidence_icon("low") == "\u2717"
+
+
+def test_confidence_icon_returns_question_for_unknown():
+    assert confidence_icon("unknown") == "?"
+
+
+def test_format_run_entry(tmp_path):
+    import json
+    from headmatch.contracts import (
+        ConfidenceSummary, FrontendRunSummary,
+        RunErrorSummary, RunFilterCounts,
+    )
+    summary = FrontendRunSummary(
+        schema_version=1, kind="fit", out_dir=str(tmp_path),
+        sample_rate=48000, frequency_points=256, target="flat",
+        filters=RunFilterCounts(left=5, right=5),
+        predicted_error_db=RunErrorSummary(left_rms=1.2, right_rms=1.5, left_max=3.0, right_max=3.5),
+        generated_by={}, plots={}, results_guide="",
+        confidence=ConfidenceSummary(
+            score=85, label="high", headline="Good run",
+            interpretation="", reasons=(), warnings=(), metrics={},
+        ),
+    )
+    from headmatch.history import RunHistoryEntry
+    entry = RunHistoryEntry(summary_path=tmp_path / "run_summary.json", summary=summary, guide_path=tmp_path / "README.txt")
+    text = format_run_entry(entry, 1)
+    assert "✓" in text
+    assert "HIGH" in text
+    assert "Good run" in text
+    assert "L rms=1.20" in text

@@ -192,12 +192,12 @@ class PortAudioBackend:
                 output_device = int(device.output_target)
             except ValueError:
                 # Try to find by name
-                output_device = device.output_target
+                output_device = device.output_target  # type: ignore[assignment]
         if device.input_target:
             try:
                 input_device = int(device.input_target)
             except ValueError:
-                input_device = device.input_target
+                input_device = device.input_target  # type: ignore[assignment]
 
         # Query device capabilities to avoid channel/samplerate mismatches
         try:

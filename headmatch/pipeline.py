@@ -238,12 +238,12 @@ def iterative_measure_and_fit(
         averaged = _average_measurements(all_results)
         save_fr_csv(output_dir / 'measurement_left.csv', averaged.freqs_hz, averaged.left_db)
         save_fr_csv(output_dir / 'measurement_right.csv', averaged.freqs_hz, averaged.right_db)
-        left_bands, right_bands, report = fit_from_measurement(averaged, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
+        left_bands, right_bands, report = fit_from_measurement(averaged, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)  # type: ignore[arg-type]
         run_summary = write_fit_artifacts(
             output_dir,
             kind='fit',
             result=averaged,
-            target=target_curve,
+            target=target_curve,  # type: ignore[arg-type]
             left_bands=left_bands,
             right_bands=right_bands,
             report=report,
@@ -256,12 +256,12 @@ def iterative_measure_and_fit(
     else:
         for i, result in enumerate(all_results, 1):
             iter_dir = output_dir / f'iter_{i:02d}'
-            left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
+            left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)  # type: ignore[arg-type]
             run_summary = write_fit_artifacts(
                 iter_dir,
                 kind='iteration',
                 result=result,
-                target=target_curve,
+                target=target_curve,  # type: ignore[arg-type]
                 left_bands=left_bands,
                 right_bands=right_bands,
                 report=report,

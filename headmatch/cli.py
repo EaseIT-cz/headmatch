@@ -192,6 +192,56 @@ def build_parser(config) -> argparse.ArgumentParser:
     )
 
 
+    p = sub.add_parser(
+        "batch-fit",
+        help="Fit multiple recordings from a batch manifest file.",
+        description=(
+            "Process every recording/target pair listed in a JSON manifest. "
+            "Each entry gets its own output folder with the standard EQ exports. "
+            "A consolidated batch_summary.json is written next to the manifest."
+        ),
+    )
+    add_common_sweep_args(p, config)
+    p.add_argument("--manifest", required=True, help="Path to a JSON batch manifest file.")
+    add_filter_budget_args(p, config)
+
+    p = sub.add_parser(
+        "batch-template",
+        help="Generate a starter batch manifest template.",
+        description="Write a batch_manifest.json template with placeholder entries to help first-time users.",
+    )
+    p.add_argument("--out", default="batch_manifest.json", help="Output path for the template file.")
+    p.add_argument("--entries", type=positive_int, default=3, help="Number of placeholder entries.")
+
+    p = sub.add_parser(
+        "history",
+        help="Browse recent fit/iteration runs and review results.",
+        description="List recent run summaries found under a folder tree.",
+    )
+    p.add_argument("--root", default=".", help="Root folder to search for run_summary.json files.")
+    p.add_argument("--limit", type=positive_int, default=10, help="Maximum number of runs to show.")
+
+    p = sub.add_parser(
+        "compare-runs",
+        help="Compare two recent runs side by side.",
+        description="Show a side-by-side comparison table of the two most recent runs.",
+    )
+    p.add_argument("--root", default=".", help="Root folder to search for run_summary.json files.")
+
+    p = sub.add_parser(
+        "compare-ab",
+        help="A/B compare two runs and export paired presets for quick switching.",
+        description=(
+            "Compare two run directories side by side and export both presets "
+            "into a single folder with A_/B_ prefixes for easy A/B testing."
+        ),
+    )
+    p.add_argument("--run-a", required=True, help="Path to the first run directory.")
+    p.add_argument("--run-b", required=True, help="Path to the second run directory.")
+    p.add_argument("--label-a", default="A", help="Label for the first run (default: A).")
+    p.add_argument("--label-b", default="B", help="Label for the second run (default: B).")
+    p.add_argument("--out-dir", required=True, help="Output directory for comparison presets.")
+
     sub.add_parser(
         "list-targets",
         help="List likely audio playback and capture targets.",
@@ -258,7 +308,7 @@ def _run_summary_path(cmd: str, args) -> Path | None:
     if not out_dir:
         return None
     base = Path(out_dir)
-    if cmd in {"fit", "fit"}:
+    if cmd in {"fit"}:
         return base / "run_summary.json"
     if cmd in {"start", "iterate"}:
         iteration_mode = getattr(args, "iteration_mode", "independent")
@@ -330,7 +380,7 @@ def print_clipping_summary(summary: FrontendRunSummary, *, detailed: bool = Fals
     preamp_db = assessment.get("preamp_db")
     if preamp_db is None:
         preamp_db = assessment.get("total_preamp_db")
-    print(f"Preamp recommendation: {float(preamp_db):.1f} dB")
+    print(f"Preamp recommendation: {float(preamp_db or 0):.1f} dB")
     peak_boost = max(float(assessment.get("left_peak_boost_db", 0.0)), float(assessment.get("right_peak_boost_db", 0.0)))
     print(f"Max boost level: {peak_boost:.1f} dB")
     headroom = float(assessment.get("headroom_loss_db", 0.0))
@@ -342,8 +392,8 @@ def print_clipping_summary(summary: FrontendRunSummary, *, detailed: bool = Fals
         print("Detailed clipping breakdown:")
         print(f"- Left peak boost: {float(assessment.get('left_peak_boost_db', 0.0)):+.1f} dB")
         print(f"- Right peak boost: {float(assessment.get('right_peak_boost_db', 0.0)):+.1f} dB")
-        print(f"- Left preamp: {float(assessment.get('left_preamp_db', preamp_db)):.1f} dB")
-        print(f"- Right preamp: {float(assessment.get('right_preamp_db', preamp_db)):.1f} dB")
+        print(f"- Left preamp: {float(assessment.get('left_preamp_db', preamp_db)):.1f} dB")  # type: ignore[arg-type]
+        print(f"- Right preamp: {float(assessment.get('right_preamp_db', preamp_db)):.1f} dB")  # type: ignore[arg-type]
         if assessment.get("quality_concern"):
             print(f"- Note: {assessment['quality_concern']}")
 
@@ -359,7 +409,7 @@ def print_next_steps(cmd: str, args) -> None:
     elif cmd == "measure":
         print()
         print(f"Measurement saved in {out_dir}.")
-        print(f"Next: headmatch fit --recording {Path(out_dir) / 'recording.wav'} --out-dir {Path(out_dir) / 'fit'}")
+        print(f"Next: headmatch fit --recording {Path(out_dir) / 'recording.wav'} --out-dir {Path(out_dir) / 'fit'}")  # type: ignore[arg-type]
     elif cmd == "prepare-offline":
         print()
         print(f"Offline package saved in {out_dir}.")
@@ -368,7 +418,7 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Analysis written to {out_dir}.")
         print("Review the CSVs, or run fit to build EQ.")
-    elif cmd in {"fit", "fit", "iterate"}:
+    elif cmd in {"fit", "iterate"}:
         print_run_confidence(cmd, args)
         summary_path = _run_summary_path(cmd, args)
         if summary_path is not None and summary_path.exists():
@@ -389,9 +439,9 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         result = getattr(args, "tui_result", None)
         if getattr(result, "workflow", None) == "history":
-            print(f"History browser finished. Review outputs in {result.out_dir}.")
+            print(f"History browser finished. Review outputs in {result.out_dir}.")  # type: ignore[union-attr]
             if getattr(result, "details", ""):
-                print(f"Guide: {result.details}")
+                print(f"Guide: {result.details}")  # type: ignore[union-attr]
         else:
             print("Wizard finished. Reopen 'headmatch tui' any time for another guided run.")
 
@@ -403,12 +453,12 @@ def format_user_error(cmd: str, exc: ValueError) -> str:
             f"clone-target failed: {message}\n"
             "Check that both input CSVs include frequency and response columns, span 1 kHz, and that --out points to a new file."
         )
-    if cmd in {"fit", "fit", "start", "iterate"} and 'Target curve' in message:
+    if cmd in {"fit", "start", "iterate"} and 'Target curve' in message:
         return (
             f"target CSV could not be used: {message}\n"
             "Use a target file that includes frequency + response data and spans 1 kHz."
         )
-    if cmd in {"fit", "fit", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
+    if cmd in {"fit", "start", "iterate"} and ('frequency column' in message or 'response column' in message):
         return (
             f"target CSV could not be read: {message}\n"
             "Expected a CSV with a frequency column such as frequency_hz/frequency/freq and a response column such as response_db/raw/target_db."
@@ -452,7 +502,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.cmd == "tui":
             from sys import stdin, stdout
-            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda path=None: load_or_create_config(bootstrap_args.config or path), config_path=bootstrap_args.config)
+            args.tui_result = run_tui(stdin=stdin, stdout=stdout, config_loader=lambda path=None: load_or_create_config(bootstrap_args.config or path), config_path=bootstrap_args.config)  # type: ignore[misc]
         elif args.cmd == "start":
             print(f"Starting guided measurement workflow in {args.out_dir} ...")
             iterative_measure_and_fit(
@@ -569,6 +619,67 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  Output: {args.out_dir}")
         elif args.cmd == "clone-target":
             build_clone_curve(args.source_csv, args.target_csv, args.out)
+        elif args.cmd == "batch-fit":
+            from .batch import run_batch_fit
+            def _batch_progress(current, total, label):
+                print(f"  [{current}/{total}] {label} ...")
+            print(f"Running batch fit from {args.manifest} ...")
+            results = run_batch_fit(  # type: ignore[assignment]
+                args.manifest,
+                spec_from_args(args),
+                max_filters=args.max_filters,
+                filter_budget=filter_budget_from_args(args),
+                on_progress=_batch_progress,
+            )
+            succeeded = sum(1 for r in results if r.success)  # type: ignore[attr-defined,misc]
+            failed = sum(1 for r in results if not r.success)  # type: ignore[attr-defined,misc]
+            print(f"Batch complete: {succeeded} succeeded, {failed} failed out of {len(results)}.")
+            for r in results:
+                if r.success:  # type: ignore[attr-defined]
+                    print(f"  ✓ {r.label}: L={r.predicted_left_rms_error_db:.2f} R={r.predicted_right_rms_error_db:.2f} dB RMS ({r.confidence_label})")  # type: ignore[attr-defined]
+                else:
+                    print(f"  ✗ {r.label}: {r.error}")  # type: ignore[attr-defined]
+        elif args.cmd == "batch-template":
+            from .batch import generate_manifest_template
+            out = generate_manifest_template(args.out, num_entries=args.entries)
+            print(f"Template written to {out}")
+            print("Edit the entries array with your recording paths, output folders, and target CSVs.")
+        elif args.cmd == "history":
+            from .history import load_recent_runs, format_run_entry
+            runs = load_recent_runs(args.root, limit=args.limit)
+            if not runs:
+                print(f"No run_summary.json files found under {args.root}.")
+                print("Run 'headmatch start' or 'headmatch fit' first.")
+            else:
+                print(f"Recent runs under {args.root}:")
+                print()
+                for i, entry in enumerate(runs, 1):  # type: ignore[assignment]
+                    print(format_run_entry(entry, i))  # type: ignore[arg-type]
+                    print()
+        elif args.cmd == "compare-runs":
+            from .history import load_recent_runs, build_run_comparison, format_comparison_table as format_run_comparison_table
+            runs = load_recent_runs(args.root, limit=2)
+            if len(runs) < 2:
+                print(f"Need at least 2 runs under {args.root} to compare. Found {len(runs)}.")
+            else:
+                comparison = build_run_comparison(runs)
+                if comparison is None:
+                    print("Could not build comparison.")
+                else:
+                    print(format_run_comparison_table(comparison))
+        elif args.cmd == "compare-ab":
+            from .ab_compare import build_comparison_pair, export_ab_comparison, format_comparison_table
+            pair = build_comparison_pair(
+                args.run_a, args.run_b,
+                label_a=args.label_a, label_b=args.label_b,
+            )
+            print(format_comparison_table(pair))
+            print()
+            export = export_ab_comparison(pair, args.out_dir)
+            print(f"Presets exported to {export.output_dir}")
+            print(f"  {export.preset_a_apo.name}, {export.preset_b_apo.name}")
+            print(f"  {export.preset_a_cdsp.name}, {export.preset_b_cdsp.name}")
+            print(f"  {export.comparison_json.name}")
         elif args.cmd == "iterate":
             iterative_measure_and_fit(
                 output_dir=args.out_dir,
