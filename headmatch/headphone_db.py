@@ -232,10 +232,21 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
     except (URLError, OSError) as e:
         raise ConnectionError(f"Failed to fetch {url}: {e}") from e
 
-    # Validate it's parseable
+    # Validate it's parseable and spans a usable frequency range
     freqs, values = _parse_autoeq_csv(text)
     if len(freqs) < 10:
         raise ValueError(f"Fetched CSV has only {len(freqs)} points — expected a frequency response")
+    freq_min, freq_max = float(freqs[0]), float(freqs[-1])
+    if freq_max < 1000.0:
+        raise ValueError(
+            f"Fetched CSV only covers up to {freq_max:.0f} Hz — "
+            "expected a full-range frequency response reaching at least 1 kHz"
+        )
+    if freq_min > 1000.0:
+        raise ValueError(
+            f"Fetched CSV starts at {freq_min:.0f} Hz — "
+            "expected a frequency response that includes frequencies below 1 kHz"
+        )
 
     # Write in HeadMatch's standard format
     with out_path.open("w", newline="") as f:
