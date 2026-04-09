@@ -192,6 +192,27 @@ def build_parser(config) -> argparse.ArgumentParser:
     )
 
 
+    p = sub.add_parser(
+        "batch-fit",
+        help="Fit multiple recordings from a batch manifest file.",
+        description=(
+            "Process every recording/target pair listed in a JSON manifest. "
+            "Each entry gets its own output folder with the standard EQ exports. "
+            "A consolidated batch_summary.json is written next to the manifest."
+        ),
+    )
+    add_common_sweep_args(p, config)
+    p.add_argument("--manifest", required=True, help="Path to a JSON batch manifest file.")
+    add_filter_budget_args(p, config)
+
+    p = sub.add_parser(
+        "batch-template",
+        help="Generate a starter batch manifest template.",
+        description="Write a batch_manifest.json template with placeholder entries to help first-time users.",
+    )
+    p.add_argument("--out", default="batch_manifest.json", help="Output path for the template file.")
+    p.add_argument("--entries", type=positive_int, default=3, help="Number of placeholder entries.")
+
     sub.add_parser(
         "list-targets",
         help="List likely audio playback and capture targets.",
@@ -569,6 +590,31 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  Output: {args.out_dir}")
         elif args.cmd == "clone-target":
             build_clone_curve(args.source_csv, args.target_csv, args.out)
+        elif args.cmd == "batch-fit":
+            from .batch import run_batch_fit
+            def _batch_progress(current, total, label):
+                print(f"  [{current}/{total}] {label} ...")
+            print(f"Running batch fit from {args.manifest} ...")
+            results = run_batch_fit(
+                args.manifest,
+                spec_from_args(args),
+                max_filters=args.max_filters,
+                filter_budget=filter_budget_from_args(args),
+                on_progress=_batch_progress,
+            )
+            succeeded = sum(1 for r in results if r.success)
+            failed = sum(1 for r in results if not r.success)
+            print(f"Batch complete: {succeeded} succeeded, {failed} failed out of {len(results)}.")
+            for r in results:
+                if r.success:
+                    print(f"  ✓ {r.label}: L={r.predicted_left_rms_error_db:.2f} R={r.predicted_right_rms_error_db:.2f} dB RMS ({r.confidence_label})")
+                else:
+                    print(f"  ✗ {r.label}: {r.error}")
+        elif args.cmd == "batch-template":
+            from .batch import generate_manifest_template
+            out = generate_manifest_template(args.out, num_entries=args.entries)
+            print(f"Template written to {out}")
+            print("Edit the entries array with your recording paths, output folders, and target CSVs.")
         elif args.cmd == "iterate":
             iterative_measure_and_fit(
                 output_dir=args.out_dir,
