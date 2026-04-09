@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from headmatch.ab_compare import (
-    ComparisonPair,
     build_comparison_pair,
     export_ab_comparison,
     format_comparison_table,
