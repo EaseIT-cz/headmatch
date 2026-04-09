@@ -125,3 +125,52 @@ def build_history_selection(search_root: str | Path, config_root: str | Path | N
         comparison=build_run_comparison(entries),
         items=tuple(entries),
     )
+
+
+# ── Display helpers ──
+
+_CONFIDENCE_ICONS = {
+    "high": "\u2713",   # ✓
+    "medium": "\u26A0", # ⚠
+    "low": "\u2717",    # ✗
+}
+
+
+def confidence_icon(label: str) -> str:
+    """Return a Unicode icon for the confidence level."""
+    return _CONFIDENCE_ICONS.get(label, "?")
+
+
+def format_run_entry(entry: RunHistoryEntry, index: int) -> str:
+    """Format a single run entry for CLI display."""
+    s = entry.summary
+    conf = s.confidence
+    icon = confidence_icon(conf.label)
+    err = s.predicted_error_db
+    lines = [
+        f"  {index}) {icon} [{conf.label.upper():>6s} {conf.score:3d}/100] {s.kind}",
+        f"     folder: {s.out_dir}",
+        f"     target: {s.target}  filters: L={s.filters.left} R={s.filters.right}",
+        f"     error:  L rms={err.left_rms:.2f}  R rms={err.right_rms:.2f}  "
+        f"L max={err.left_max:.2f}  R max={err.right_max:.2f} dB",
+    ]
+    if conf.headline:
+        lines.append(f"     note:   {conf.headline}")
+    return "\n".join(lines)
+
+
+def format_comparison_table(comparison: RunHistoryComparison) -> str:
+    """Format a comparison table for CLI display."""
+    lines = [
+        "Side-by-side comparison",
+        "=" * 60,
+        f"  A: {comparison.left_entry.summary.out_dir}",
+        f"  B: {comparison.right_entry.summary.out_dir}",
+        "",
+    ]
+    max_label = max(len(f.label) for f in comparison.fields)
+    for field in comparison.fields:
+        lines.append(f"  {field.label:<{max_label}s}  A: {field.left}")
+        lines.append(f"  {' ':<{max_label}s}  B: {field.right}")
+        lines.append("")
+    return "\n".join(lines)

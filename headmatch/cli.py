@@ -645,7 +645,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Template written to {out}")
             print("Edit the entries array with your recording paths, output folders, and target CSVs.")
         elif args.cmd == "history":
-            from .history import load_recent_runs, read_results_guide
+            from .history import load_recent_runs, format_run_entry
             runs = load_recent_runs(args.root, limit=args.limit)
             if not runs:
                 print(f"No run_summary.json files found under {args.root}.")
@@ -654,15 +654,10 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"Recent runs under {args.root}:")
                 print()
                 for i, entry in enumerate(runs, 1):
-                    s = entry.summary
-                    conf = s.confidence
-                    print(f"  {i}) [{conf.label.upper():>6s} {conf.score:3d}/100] {s.kind} | {s.out_dir}")
-                    print(f"     target={s.target} filters L/R={s.filters.left}/{s.filters.right}")
-                    err = s.predicted_error_db
-                    print(f"     error: L rms={err.left_rms:.2f} R rms={err.right_rms:.2f} dB")
+                    print(format_run_entry(entry, i))
                     print()
         elif args.cmd == "compare-runs":
-            from .history import load_recent_runs, build_run_comparison
+            from .history import load_recent_runs, build_run_comparison, format_comparison_table
             runs = load_recent_runs(args.root, limit=2)
             if len(runs) < 2:
                 print(f"Need at least 2 runs under {args.root} to compare. Found {len(runs)}.")
@@ -671,15 +666,7 @@ def main(argv: list[str] | None = None) -> None:
                 if comparison is None:
                     print("Could not build comparison.")
                 else:
-                    print(f"Comparing:")
-                    print(f"  A: {comparison.left_entry.summary.out_dir}")
-                    print(f"  B: {comparison.right_entry.summary.out_dir}")
-                    print()
-                    max_label = max(len(f.label) for f in comparison.fields)
-                    for field in comparison.fields:
-                        print(f"  {field.label:<{max_label}s}  A: {field.left}")
-                        print(f"  {' ':<{max_label}s}  B: {field.right}")
-                        print()
+                    print(format_comparison_table(comparison))
         elif args.cmd == "compare-ab":
             from .ab_compare import build_comparison_pair, export_ab_comparison, format_comparison_table
             pair = build_comparison_pair(
