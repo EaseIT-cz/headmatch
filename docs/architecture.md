@@ -382,7 +382,7 @@ See `docs/backlog.md` for prioritized task list.
 
 - **TASK-109: Decompose gui/shell.py** — At 1,011 lines, the main GUI file handles state management, rendering dispatch, event handling, and workflow coordination. Extract `GuiState` into its own module, break out Tkinter variable initialization.
 - **TASK-110: Standardize error hierarchy** — Define `HeadMatchError` base class with `MeasurementError`, `ConfigError`, `NetworkError` subclasses. Replace inconsistent ValueError/RuntimeError/ConnectionError usage.
-- **TASK-111: Add type checking CI** — Codebase uses type hints extensively but no mypy/pyright step. Would catch issues at development time.
+- **TASK-111: Add type checking CI** — Codebase uses type hints extensively but no mypy/pyright step. Would catch issues at development time. **DONE**: mypy CI added in 0.7.1.
 - **TASK-112: Add coverage CI gate** — Remove remaining `pragma: no-cover` markers, add CI step that fails if coverage drops below threshold (e.g., 80%).
 - **TASK-113: Document confidence scoring derivation** — `pipeline_confidence.py` uses magic numbers (ALIGNMENT_SCORE_WARN=0.85, etc.) without explaining derivation.
 - **TASK-114: Security: URL validation** — `fetch_curve_from_url` accepts any HTTPS URL. Consider domain allowlisting.

@@ -42,7 +42,7 @@
 
 ## Now
 
-Code review complete. 12 patches integrated. Ready for release.
+Released 0.7.1. See RELEASE_NOTES-0.7.1.md.
 
 ---
 
@@ -92,7 +92,6 @@ All prior tasks completed. See release notes.
 
 - **TASK-109: Decompose gui/shell.py** — Extract `GuiState` into its own module, break out Tkinter variable initialization
 - **TASK-110: Standardize error hierarchy** — Define `HeadMatchError` base class with `MeasurementError`, `ConfigError`, `NetworkError` subclasses
-- **TASK-111: Add type checking CI** — Add mypy/pyright step to catch type issues at development time
 - **TASK-112: Add coverage CI gate** — Fail CI if coverage drops below 80%
 - **TASK-113: Document confidence scoring derivation** — Add docstrings/design doc for `pipeline_confidence.py` magic numbers
 
