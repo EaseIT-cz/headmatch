@@ -213,6 +213,21 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--out", default="batch_manifest.json", help="Output path for the template file.")
     p.add_argument("--entries", type=positive_int, default=3, help="Number of placeholder entries.")
 
+    p = sub.add_parser(
+        "history",
+        help="Browse recent fit/iteration runs and review results.",
+        description="List recent run summaries found under a folder tree.",
+    )
+    p.add_argument("--root", default=".", help="Root folder to search for run_summary.json files.")
+    p.add_argument("--limit", type=positive_int, default=10, help="Maximum number of runs to show.")
+
+    p = sub.add_parser(
+        "compare-runs",
+        help="Compare two recent runs side by side.",
+        description="Show a side-by-side comparison table of the two most recent runs.",
+    )
+    p.add_argument("--root", default=".", help="Root folder to search for run_summary.json files.")
+
     sub.add_parser(
         "list-targets",
         help="List likely audio playback and capture targets.",
@@ -615,6 +630,42 @@ def main(argv: list[str] | None = None) -> None:
             out = generate_manifest_template(args.out, num_entries=args.entries)
             print(f"Template written to {out}")
             print("Edit the entries array with your recording paths, output folders, and target CSVs.")
+        elif args.cmd == "history":
+            from .history import load_recent_runs, read_results_guide
+            runs = load_recent_runs(args.root, limit=args.limit)
+            if not runs:
+                print(f"No run_summary.json files found under {args.root}.")
+                print("Run 'headmatch start' or 'headmatch fit' first.")
+            else:
+                print(f"Recent runs under {args.root}:")
+                print()
+                for i, entry in enumerate(runs, 1):
+                    s = entry.summary
+                    conf = s.confidence
+                    print(f"  {i}) [{conf.label.upper():>6s} {conf.score:3d}/100] {s.kind} | {s.out_dir}")
+                    print(f"     target={s.target} filters L/R={s.filters.left}/{s.filters.right}")
+                    err = s.predicted_error_db
+                    print(f"     error: L rms={err.left_rms:.2f} R rms={err.right_rms:.2f} dB")
+                    print()
+        elif args.cmd == "compare-runs":
+            from .history import load_recent_runs, build_run_comparison
+            runs = load_recent_runs(args.root, limit=2)
+            if len(runs) < 2:
+                print(f"Need at least 2 runs under {args.root} to compare. Found {len(runs)}.")
+            else:
+                comparison = build_run_comparison(runs)
+                if comparison is None:
+                    print("Could not build comparison.")
+                else:
+                    print(f"Comparing:")
+                    print(f"  A: {comparison.left_entry.summary.out_dir}")
+                    print(f"  B: {comparison.right_entry.summary.out_dir}")
+                    print()
+                    max_label = max(len(f.label) for f in comparison.fields)
+                    for field in comparison.fields:
+                        print(f"  {field.label:<{max_label}s}  A: {field.left}")
+                        print(f"  {' ':<{max_label}s}  B: {field.right}")
+                        print()
         elif args.cmd == "iterate":
             iterative_measure_and_fit(
                 output_dir=args.out_dir,
