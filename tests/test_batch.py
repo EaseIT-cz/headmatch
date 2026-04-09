@@ -156,6 +156,6 @@ def test_run_batch_fit_with_progress_callback(mock_process, tmp_path):
     ])
     spec = SweepSpec(sample_rate=48000, duration_s=3.0)
     progress_calls = []
-    results = run_batch_fit(manifest, spec, on_progress=lambda i, n, label: progress_calls.append((i, n, label)))
+    run_batch_fit(manifest, spec, on_progress=lambda i, n, label: progress_calls.append((i, n, label)))
     assert len(progress_calls) == 1
     assert progress_calls[0] == (1, 1, "Test")
