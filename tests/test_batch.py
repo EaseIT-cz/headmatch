@@ -1,6 +1,5 @@
 """Tests for the batch-fit workflow."""
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
