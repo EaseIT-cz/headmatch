@@ -64,7 +64,7 @@ def _run_summary(
     return FrontendRunSummary(
         schema_version=RUN_SUMMARY_SCHEMA_VERSION,
         generated_by=identity.as_metadata(),
-        kind=kind,
+        kind=kind,  # type: ignore[arg-type]
         out_dir=str(out_dir),
         sample_rate=sample_rate,
         frequency_points=int(len(result.freqs_hz)),
