@@ -46,6 +46,9 @@ def add_combobox_row(ttk, parent, row: int, label: str, variable, values: tuple[
     combo.grid(row=row, column=1, sticky="ew", pady=FIELD_PAD_Y)
     if not values and not variable.get().strip():
         combo.set("")
+        ttk.Label(parent, text=f"No devices found. {empty_label}", foreground="#cc6600").grid(
+            row=row + 100, column=1, sticky="w", pady=(0, 2),
+        )
 
 
 def add_entry_row(ttk, parent, row: int, label: str, variable) -> None:

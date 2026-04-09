@@ -18,6 +18,13 @@ def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on
     card.columnconfigure(1, weight=1)
 
     if current == 'target':
+        guidance = {
+            "flat": "Flat target: equalizes toward a neutral response. Good starting point if you have no preference.",
+            "csv": "CSV target: use a custom target curve file (e.g. Harman, Diffuse Field). Browse to a .csv file.",
+            "database": "Database target: search the AutoEQ community database for your headphone model.",
+        }
+        target_mode = variables.basic_target_mode_var.get().strip() or "flat"
+        ttk.Label(card, text=guidance.get(target_mode, guidance["flat"]), wraplength=DETAIL_WRAP, justify="left", foreground="#888888").grid(row=100, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(card, text="Target source").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=3)
         combo = ttk.Combobox(card, textvariable=variables.basic_target_mode_var, values=("flat", "csv", "database"), state="readonly")
         combo.grid(row=0, column=1, sticky="ew", pady=3)
@@ -46,7 +53,7 @@ def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on
                 row += 1
         ttk.Button(card, text="Next: Measurement", command=on_next).grid(row=row, column=0, sticky="w", pady=(10, 0))
     elif current == 'measure':
-        ttk.Label(card, text="Safe defaults: sample rate 48000 Hz, 3 iterations averaged, default playback/capture devices, max 10 PEQ filters.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(card, text="Safe defaults: 48 kHz sample rate, 3 averaged iterations, system default audio devices, up to 10 PEQ filters per channel. Ensure headphones are connected and the room is quiet before starting.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Label(card, textvariable=variables.basic_progress_var, wraplength=DETAIL_WRAP, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Button(card, text="Start Measurement", command=on_measure).grid(row=2, column=0, sticky="w", pady=(8, 0))
         ttk.Button(card, text="Back", command=on_back).grid(row=2, column=1, sticky="w", pady=(8, 0))
