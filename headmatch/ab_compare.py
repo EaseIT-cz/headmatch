@@ -10,7 +10,6 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .contracts import FrontendRunSummary
 from .io_utils import save_json
