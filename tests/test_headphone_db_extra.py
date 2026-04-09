@@ -91,3 +91,20 @@ def test_fetch_curve_from_url_rejects_small_csv(tmp_path, monkeypatch):
 
 def test_normalize_for_search_compacts_punctuation_and_case():
     assert _normalize_for_search("HD-650 / Special") == "hd 650   special"
+
+
+from unittest.mock import patch
+from headmatch.headphone_db import search_headphone
+
+MOCK_INDEX = [
+    {"name": "TestPhone", "source": "test", "form_factor": "over-ear",
+     "csv_path": "results/test/over-ear/TestPhone/TestPhone.csv"},
+]
+
+
+@patch("headmatch.headphone_db._get_index", return_value=MOCK_INDEX)
+def test_search_empty_query_returns_nothing(mock_idx):
+    """Empty or whitespace-only queries must not match every entry."""
+    assert search_headphone("") == []
+    assert search_headphone("   ") == []
+    assert search_headphone("  \t  ") == []

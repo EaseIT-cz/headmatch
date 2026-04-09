@@ -161,6 +161,8 @@ def search_headphone(query: str, database: str = "autoeq") -> list[HeadphoneEntr
             return []
 
     query_norm = _normalize_for_search(query)
+    if not query_norm:
+        return []
     query_tokens = query_norm.split()
 
     matches = []
