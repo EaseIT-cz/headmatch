@@ -130,6 +130,8 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     on_update : callable, optional
         Callback when curve is modified
     """
+    import tkinter as tk  # Canvas, DoubleVar are in tkinter, not ttk
+
     _vars = {"setup_done": False, "gain_scales": []}
 
     # Scrollable canvas for the curve preview
@@ -137,7 +139,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     preview_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     preview_frame.columnconfigure(0, weight=1)
 
-    canvas = ttk.tk.Canvas(preview_frame, width=560, height=200, bg="#1a1a2e", highlightthickness=0)
+    canvas = tk.Canvas(preview_frame, width=560, height=200, bg="#1a1a2e", highlightthickness=0)
     canvas.grid(row=0, column=0, sticky="ew")
 
     def _redraw():
@@ -214,7 +216,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
             ttk.Label(points_frame, text=f"{point.freq_hz:.1f}").grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
 
             # Gain scale
-            gain_var = ttk.tk.DoubleVar(value=point.gain_db)
+            gain_var = tk.DoubleVar(value=point.gain_db)
             gain_scale = ttk.Scale(points_frame, from_=-20, to=20, variable=gain_var, orient="horizontal")
             gain_scale.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=2)
             _vars["gain_scales"].append(gain_scale)
