@@ -7,15 +7,17 @@ from __future__ import annotations
 
 import csv
 import io
+import ipaddress
 import json
 import os
+import socket
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Tuple
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import numpy as np
 
@@ -25,6 +27,134 @@ AUTOEQ_TREE_API = "https://api.github.com/repos/jaakkopasanen/AutoEq/git/trees/m
 INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap
 _USER_AGENT = "headmatch/0.4.6"
+
+# Default allowlist of domains for EQ curve sources
+DEFAULT_ALLOWED_DOMAINS = frozenset([
+    "raw.githubusercontent.com",
+    "github.com",
+    "api.github.com",
+    "www.dropbox.com",
+    "dl.dropboxusercontent.com",
+    "drive.google.com",
+])
+
+# Environment variable to override the allowlist
+ALLOWED_DOMAINS_ENV = "HEADMATCH_ALLOWED_DOMAINS"
+
+
+class URLValidationError(ValueError):
+    """Raised when a URL fails validation for SSRF prevention."""
+    pass
+
+
+def _get_allowed_domains() -> frozenset:
+    """Get the allowed domains, checking for environment override."""
+    env_domains = os.environ.get(ALLOWED_DOMAINS_ENV, "")
+    if env_domains:
+        return frozenset(d.strip().lower() for d in env_domains.split(",") if d.strip())
+    return DEFAULT_ALLOWED_DOMAINS
+
+
+def _is_private_ip(ip_str: str) -> bool:
+    """Check if an IP address is in a private/reserved range.
+    
+    Covers:
+    - 127.0.0.0/8 (loopback)
+    - 10.0.0.0/8 (private)
+    - 172.16.0.0/12 (private)
+    - 192.168.0.0/16 (private)
+    - 169.254.0.0/16 (link-local)
+    - ::1 (IPv6 loopback)
+    - fc00::/7 (IPv6 unique local)
+    - fe80::/10 (IPv6 link-local)
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
+    except ValueError:
+        return True  # Treat invalid IPs as private/blocked
+
+
+def _resolve_hostname_to_ip(hostname: str) -> str | None:
+    """Resolve a hostname to its first IP address.
+    
+    Returns None if resolution fails.
+    """
+    try:
+        # getaddrinfo returns a list of (family, type, proto, canonname, sockaddr)
+        # sockaddr is (ip, port) for IPv4 or (ip, port, flow, scope) for IPv6
+        results = socket.getaddrinfo(hostname, None)
+        if results:
+            return results[0][4][0]
+    except (socket.gaierror, OSError):
+        pass
+    return None
+
+
+def validate_url_for_fetch(url: str, allowed_domains: frozenset | None = None) -> str:
+    """Validate a URL for SSRF prevention.
+    
+    Checks:
+    1. URL must use https scheme (http, file, data, etc. are blocked)
+    2. Domain must be in the allowlist
+    3. Resolved IP must not be a private/reserved address
+    
+    Returns the parsed hostname on success.
+    Raises URLValidationError on failure.
+    """
+    if allowed_domains is None:
+        allowed_domains = _get_allowed_domains()
+    
+    # Parse the URL
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        raise URLValidationError(f"Invalid URL format: {url}") from e
+    
+    # Check scheme - only HTTPS allowed
+    scheme = parsed.scheme.lower()
+    if scheme != "https":
+        raise URLValidationError(
+            f"URL scheme '{scheme}' is not allowed. Only HTTPS URLs are accepted."
+        )
+    
+    # Extract and validate hostname
+    hostname = parsed.hostname
+    if not hostname:
+        raise URLValidationError(f"URL has no hostname: {url}")
+    
+    hostname_lower = hostname.lower()
+    
+    # Check if hostname is an IP address (for SSRF via IP)
+    try:
+        ip = ipaddress.ip_address(hostname)
+        # It's a direct IP - check if private
+        if _is_private_ip(str(ip)):
+            raise URLValidationError(
+                f"Direct access to private IP addresses is blocked: {hostname}"
+            )
+        # Direct IP access - must still be in allowlist (unusual for EQ curves)
+        if hostname_lower not in allowed_domains:
+            raise URLValidationError(
+                f"Domain '{hostname}' is not in the allowed list. "
+                f"Allowed domains: {', '.join(sorted(allowed_domains))}"
+            )
+    except ValueError:
+        # Not an IP, it's a hostname - check domain allowlist
+        if hostname_lower not in allowed_domains:
+            raise URLValidationError(
+                f"Domain '{hostname}' is not in the allowed list. "
+                f"Allowed domains: {', '.join(sorted(allowed_domains))}"
+            )
+        
+        # DNS rebinding protection: resolve and check the IP
+        resolved_ip = _resolve_hostname_to_ip(hostname)
+        if resolved_ip and _is_private_ip(resolved_ip):
+            raise URLValidationError(
+                f"Domain '{hostname}' resolves to private IP {resolved_ip} - blocked for security"
+            )
+    
+    return hostname
 
 
 def _cache_dir() -> Path:
@@ -211,13 +341,28 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
     return np.array(freqs), np.array(values)
 
 
-def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
+def fetch_curve_from_url(url: str, out_path: str | Path, allowed_domains: frozenset | None = None) -> Path:
     """Download a frequency response CSV from a URL and save it locally.
 
-    Only HTTPS URLs are accepted. Response size is capped at 5 MB.
+    Only HTTPS URLs from allowed domains are accepted. Response size is capped at 5 MB.
+    
+    Args:
+        url: The HTTPS URL to fetch from.
+        out_path: Local path to save the CSV.
+        allowed_domains: Optional override for the domain allowlist. If None, uses
+                        the default allowlist or HEADMATCH_ALLOWED_DOMAINS env var.
+    
+    Returns:
+        Path to the saved file.
+        
+    Raises:
+        URLValidationError: If the URL fails SSRF validation.
+        ConnectionError: If the fetch fails due to network issues.
+        ValueError: If the fetched content is invalid.
     """
-    if not url.startswith("https://"):
-        raise ValueError(f"Only HTTPS URLs are accepted. Got: {url}")
+    # SSRF prevention: validate URL before fetching
+    validate_url_for_fetch(url, allowed_domains)
+    
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:

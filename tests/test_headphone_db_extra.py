@@ -79,14 +79,14 @@ def test_fetch_curve_from_url_wraps_network_errors(tmp_path, monkeypatch):
         raise URLError("offline")
     monkeypatch.setattr("headmatch.headphone_db.urlopen", boom)
     with pytest.raises(ConnectionError, match="Failed to fetch"):
-        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
+        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv", allowed_domains=frozenset(["example.com"]))
 
 
 def test_fetch_curve_from_url_rejects_small_csv(tmp_path, monkeypatch):
     text = "\n".join(["freq,val", "20,1", "30,2"]).encode("utf-8")
     monkeypatch.setattr("headmatch.headphone_db.urlopen", lambda *a, **k: DummyResponse(text))
     with pytest.raises(ValueError, match="expected a frequency response"):
-        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
+        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv", allowed_domains=frozenset(["example.com"]))
 
 
 def test_normalize_for_search_compacts_punctuation_and_case():

@@ -6,6 +6,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Protocol
 
+from ..utils import expanded_parent, expanded_dir
+
 
 class FileDialogProtocol(Protocol):
     def askdirectory(self, **kwargs):
@@ -28,52 +30,77 @@ class PickerOptions:
 
 
 class FilePickerService:
+    """Service for file and directory selection dialogs.
+    
+    Provides a clean interface over tkinter.filedialog with
+    centralized path expansion logic.
+    """
+    
     def __init__(self, filedialog: FileDialogProtocol | None, *, root=None):
         self._filedialog = filedialog
         self._root = root
 
-    @staticmethod
-    def _expanded_parent(value: str, fallback: str | Path) -> str:
-        raw = value.strip()
-        if raw:
-            return str(Path(raw).expanduser().parent)
-        return str(Path(fallback).expanduser())
-
-    @staticmethod
-    def _expanded_dir(value: str, fallback: str | Path) -> str:
-        raw = value.strip()
-        if raw:
-            return str(Path(raw).expanduser())
-        return str(Path(fallback).expanduser())
-
     def choose_file(self, current_value: str, *, title: str, filetypes, fallback: str | Path) -> str | None:
+        """Open file selection dialog.
+        
+        Args:
+            current_value: Current file path (used to determine initial directory)
+            title: Dialog title
+            filetypes: File type filters for the dialog
+            fallback: Default directory if current_value is empty
+            
+        Returns:
+            Selected file path or None if cancelled
+        """
         if self._filedialog is None:
             return None
         selected = self._filedialog.askopenfilename(
             title=title,
-            initialdir=self._expanded_parent(current_value, fallback),
+            initialdir=expanded_parent(current_value, fallback),
             parent=self._root,
             filetypes=filetypes,
         )
         return selected or None
 
     def choose_directory(self, current_value: str, *, title: str, fallback: str | Path) -> str | None:
+        """Open directory selection dialog.
+        
+        Args:
+            current_value: Current directory path
+            title: Dialog title
+            fallback: Default directory if current_value is empty
+            
+        Returns:
+            Selected directory path or None if cancelled
+        """
         if self._filedialog is None:
             return None
         selected = self._filedialog.askdirectory(
             title=title,
-            initialdir=self._expanded_dir(current_value, fallback),
+            initialdir=expanded_dir(current_value, fallback),
             parent=self._root,
             mustexist=False,
         )
         return selected or None
 
     def choose_save_file(self, current_value: str, *, title: str, filetypes, fallback: str | Path, defaultextension: str | None = None) -> str | None:
+        """Open save file dialog.
+        
+        Args:
+            current_value: Current file path (used to determine initial directory)
+            title: Dialog title
+            filetypes: File type filters for the dialog
+            fallback: Default directory if current_value is empty
+            defaultextension: Default file extension
+            
+        Returns:
+            Selected file path or None if cancelled
+        """
         if self._filedialog is None:
             return None
         selected = self._filedialog.asksaveasfilename(
             title=title,
-            initialdir=self._expanded_parent(current_value, fallback),
+            initialdir=expanded_parent(current_value, fallback),
             parent=self._root,
             filetypes=filetypes,
             defaultextension=defaultextension,
@@ -88,6 +115,12 @@ class BackgroundTaskResult:
 
 
 class BackgroundTaskService:
+    """Service for running background tasks with queue-based completion.
+    
+    Executes work in a background thread and posts results to a queue
+    for the main thread to poll.
+    """
+    
     def __init__(self, *, task_queue: queue.Queue[tuple[str, object]] | None = None, thread_factory: Callable[..., threading.Thread] = threading.Thread):
         self._task_queue = task_queue or queue.Queue()
         self._thread_factory = thread_factory
@@ -97,6 +130,13 @@ class BackgroundTaskService:
         return self._task_queue
 
     def start(self, worker: Callable[[], object]) -> None:
+        """Start a background task.
+        
+        Args:
+            worker: Callable to execute in background thread.
+                    Results are posted as ("success", result) to the queue.
+                    Exceptions are posted as ("error", exception).
+        """
         def target() -> None:
             try:
                 result = worker()

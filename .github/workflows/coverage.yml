@@ -13,7 +13,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     env:
-      MIN_COVERAGE: "75"
+      MIN_COVERAGE: "80"
 
     steps:
       - name: Check out repository

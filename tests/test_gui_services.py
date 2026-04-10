@@ -4,6 +4,7 @@ import queue
 from pathlib import Path
 
 from headmatch.gui.services import BackgroundTaskService, FilePickerService
+from headmatch.utils import ImmediateThread
 
 
 class DummyDialog:
@@ -24,15 +25,6 @@ class DummyDialog:
     def asksaveasfilename(self, **kwargs):
         self.calls.append(("save", kwargs))
         return self.save_result
-
-
-class ImmediateThread:
-    def __init__(self, *, target, daemon):
-        self.target = target
-        self.daemon = daemon
-
-    def start(self):
-        self.target()
 
 
 def test_file_picker_service_uses_parent_dir_for_files(tmp_path):

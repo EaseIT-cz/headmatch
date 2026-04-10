@@ -216,7 +216,7 @@ def test_fetch_utf8_error(tmp_path):
 
     with patch("headmatch.headphone_db.urlopen", return_value=mock_resp):
         with pytest.raises(ValueError, match="UTF-8"):
-            fetch_curve_from_url("https://example.com/bad.csv", str(tmp_path / "out.csv"))
+            fetch_curve_from_url("https://example.com/bad.csv", str(tmp_path / "out.csv"), allowed_domains=frozenset(["example.com"]))
 
 
 # ── HeadphoneEntry tests ──

@@ -114,7 +114,7 @@ def test_start_basic_measurement_uses_average_mode(tmp_path, monkeypatch):
     app = make_app(tmp_path)
     app.basic_target_mode_var.set("database")
     app.basic_target_csv_var.set(str(tmp_path / "target.csv"))
-    monkeypatch.setattr("headmatch.gui.controllers.iterative_measure_and_fit", lambda **kwargs: kwargs)
+    monkeypatch.setattr("headmatch.pipeline.iterative_measure_and_fit", lambda **kwargs: kwargs)
     controllers = WorkflowControllers(app)
 
     controllers.start_basic_measurement()
@@ -132,7 +132,7 @@ def test_start_basic_measurement_uses_average_mode(tmp_path, monkeypatch):
 def test_save_current_config_persists_mode_and_stripped_targets(tmp_path, monkeypatch):
     app = make_app(tmp_path)
     seen = {}
-    monkeypatch.setattr("headmatch.gui.controllers.save_config", lambda config, path: seen.update({"config": config, "path": path}))
+    monkeypatch.setattr("headmatch.settings.save_config", lambda config, path: seen.update({"config": config, "path": path}))
     controllers = WorkflowControllers(app)
 
     controllers.save_current_config()
@@ -165,8 +165,8 @@ def test_run_apo_refine_success_formats_status(tmp_path, monkeypatch):
     app.apo_preset_var.set("preset.txt")
     app.apo_refine_recording_var.set("recording.wav")
     app.apo_refine_output_var.set(str(tmp_path / "refined"))
-    monkeypatch.setattr("headmatch.gui.controllers.load_or_create_config", lambda _p: (SimpleNamespace(sample_rate=48000, duration_s=2.0), None, False))
-    monkeypatch.setattr("headmatch.gui.controllers.refine_apo_preset", lambda **_k: {"original_error": {"left_rms": 3.0, "right_rms": 4.0}, "predicted_left_rms_error_db": 1.0, "predicted_right_rms_error_db": 2.0})
+    monkeypatch.setattr("headmatch.settings.load_or_create_config", lambda _p: (SimpleNamespace(sample_rate=48000, duration_s=2.0), None, False))
+    monkeypatch.setattr("headmatch.apo_refine.refine_apo_preset", lambda **_k: {"original_error": {"left_rms": 3.0, "right_rms": 4.0}, "predicted_left_rms_error_db": 1.0, "predicted_right_rms_error_db": 2.0})
     controllers = WorkflowControllers(app)
 
     controllers.run_apo_refine()
@@ -178,7 +178,7 @@ def test_run_apo_import_success_exports_files(tmp_path, monkeypatch):
     app = make_app(tmp_path)
     app.apo_preset_var.set("preset.txt")
     app.apo_output_dir_var.set(str(tmp_path / "imported"))
-    monkeypatch.setattr("headmatch.gui.controllers.load_apo_preset", lambda _p: ([1, 2], [3]))
+    monkeypatch.setattr("headmatch.apo_import.load_apo_preset", lambda _p: ([1, 2], [3]))
     monkeypatch.setattr("headmatch.exporters.export_equalizer_apo_parametric_txt", lambda *a, **k: None)
     monkeypatch.setattr("headmatch.exporters.export_camilladsp_filters_yaml", lambda *a, **k: None)
     monkeypatch.setattr("headmatch.exporters.export_camilladsp_filter_snippet_yaml", lambda *a, **k: None)
@@ -198,11 +198,11 @@ def test_run_fetch_curve_success_and_failure(tmp_path, monkeypatch):
 
     app.fetch_url_var.set("https://example.com/a.csv")
     app.fetch_output_var.set(str(tmp_path / "a.csv"))
-    monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", lambda url, out: out)
+    monkeypatch.setattr("headmatch.headphone_db.fetch_curve_from_url", lambda url, out: out)
     controllers.run_fetch_curve()
     assert "Saved to" in app.status
 
-    monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr("headmatch.headphone_db.fetch_curve_from_url", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
     controllers.run_fetch_curve()
     assert "Fetch failed: boom" in app.status
 
@@ -232,7 +232,7 @@ def test_start_online_measurement_requires_output_dir(tmp_path):
 
 def test_start_offline_prepare_and_fit_validate_and_schedule(tmp_path, monkeypatch):
     app = make_app(tmp_path)
-    monkeypatch.setattr("headmatch.gui.controllers.prepare_offline_measurement", lambda *a, **k: {"prepared": True})
+    monkeypatch.setattr("headmatch.measure.prepare_offline_measurement", lambda *a, **k: {"prepared": True})
     controllers = WorkflowControllers(app)
 
     controllers.start_offline_prepare()

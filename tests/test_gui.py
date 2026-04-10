@@ -13,6 +13,7 @@ from tests.config_fixtures import varied_config
 from headmatch.gui import NAV_ITEMS, build_arg_parser, build_doctor_report, load_gui_state, main
 from headmatch.measure import PipeWireTargetSelection
 from headmatch.settings import save_config
+from headmatch.utils import ImmediateThread
 
 
 class DummyVar:
@@ -586,13 +587,6 @@ def test_create_app_keeps_manual_target_fields_usable_when_no_devices_are_detect
 def test_online_workflow_uses_shared_pipeline_and_sets_completion(tmp_path, fake_tk, monkeypatch):
     calls = {}
 
-    class ImmediateThread:
-        def __init__(self, *, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
-
     monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
 
     root = DummyRoot()
@@ -617,13 +611,6 @@ def test_online_workflow_uses_shared_pipeline_and_sets_completion(tmp_path, fake
 def test_offline_prepare_workflow_writes_package_plan(tmp_path, fake_tk, monkeypatch):
     calls = {}
 
-    class ImmediateThread:
-        def __init__(self, *, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
-
     monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
 
     root = DummyRoot()
@@ -645,13 +632,6 @@ def test_offline_prepare_workflow_writes_package_plan(tmp_path, fake_tk, monkeyp
 
 def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatch):
     calls = {}
-
-    class ImmediateThread:
-        def __init__(self, *, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
 
     monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
 
@@ -681,13 +661,6 @@ def test_offline_fit_workflow_uses_shared_pipeline(tmp_path, fake_tk, monkeypatc
 def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_path, fake_tk, monkeypatch):
     calls = {}
 
-    class ImmediateThread:
-        def __init__(self, *, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
-
     monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
 
     root = DummyRoot()
@@ -715,13 +688,6 @@ def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_p
 
 def test_basic_mode_measurement_uses_average_iteration_runner(tmp_path, fake_tk, monkeypatch):
     calls = {}
-
-    class ImmediateThread:
-        def __init__(self, *, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
 
     monkeypatch.setattr(fake_tk.threading, 'Thread', ImmediateThread)
 
@@ -1022,7 +988,7 @@ class TestPlotGeometry:
     """Verify freq/dB ↔ pixel coordinate conversions are invertible."""
 
     def test_freq_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for freq in [20.0, 100.0, 1000.0, 10000.0, 20000.0]:
             x = geom.freq_to_x(freq)
@@ -1030,7 +996,7 @@ class TestPlotGeometry:
             assert abs(recovered - freq) / freq < 0.01, f"freq round-trip failed for {freq}: got {recovered}"
 
     def test_db_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for db in [-20.0, -10.0, 0.0, 10.0, 20.0]:
             y = geom.db_to_y(db)
@@ -1038,7 +1004,7 @@ class TestPlotGeometry:
             assert abs(recovered - db) < 0.1, f"dB round-trip failed for {db}: got {recovered}"
 
     def test_x_to_freq_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         # Way outside the plot area should clamp, not crash
         f_left = geom.x_to_freq(-100)
@@ -1047,7 +1013,7 @@ class TestPlotGeometry:
         assert 20.0 <= f_right <= 20000.0
 
     def test_y_to_db_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         db_top = geom.y_to_db(-100)
         db_bot = geom.y_to_db(500)
