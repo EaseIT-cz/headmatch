@@ -9,9 +9,12 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
 
 from .signals import SweepSpec
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,15 @@ class AudioBackend(Protocol):
         device: DeviceConfig,
     ) -> Path:
         """Play sweep and record simultaneously. Returns path to recording WAV."""
+        ...
+
+    def play_tone(
+        self,
+        samples: "np.ndarray",
+        sample_rate: int,
+        device: Optional[str] = None,
+    ) -> None:
+        """Play a short audio buffer to the output device without recording."""
         ...
 
     def format_device_list(self, devices: list[AudioDevice]) -> str:

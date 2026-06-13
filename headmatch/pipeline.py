@@ -112,11 +112,17 @@ def _metrics(freqs_hz: np.ndarray, measured_db: np.ndarray, target_db: np.ndarra
     return rms, max_abs
 
 
-def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_rate: int, max_filters: int = 8, *, filter_budget: FilterBudget | None = None) -> tuple[list[PEQBand], list[PEQBand], dict]:
+def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_rate: int, max_filters: int = 8, *, filter_budget: FilterBudget | None = None, hearing_profile=None) -> tuple[list[PEQBand], list[PEQBand], dict]:
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
     resolved_target = _resolve_target_curves(result, target)
-    left_eq_target = resolved_target.left_values_db - result.left_db
-    right_eq_target = resolved_target.right_values_db - result.right_db
+    if hearing_profile is not None:
+        from .hearing_test import compute_compensation_curve
+        compensation = compute_compensation_curve(hearing_profile, result.freqs_hz)
+        left_eq_target = (resolved_target.left_values_db + compensation) - result.left_db
+        right_eq_target = (resolved_target.right_values_db + compensation) - result.right_db
+    else:
+        left_eq_target = resolved_target.left_values_db - result.left_db
+        right_eq_target = resolved_target.right_values_db - result.right_db
     left_bands = fit_peq(result.freqs_hz, left_eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
     right_bands = fit_peq(result.freqs_hz, right_eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
     left_pred = result.left_db + peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)
@@ -151,16 +157,17 @@ def fit_from_measurement(result: MeasurementResult, target: TargetCurve, sample_
         'quality_concern': clipping_assessment.quality_concern,
     }
     report['confidence'] = summarize_trustworthiness(result, report).to_dict()
+    report['hearing_compensation_applied'] = hearing_profile is not None
     return left_bands, right_bands, report
 
 
-def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, sweep_spec: SweepSpec, target_path: str | Path | None = None, max_filters: int = 8, *, filter_budget: FilterBudget | None = None) -> dict:
+def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, sweep_spec: SweepSpec, target_path: str | Path | None = None, max_filters: int = 8, *, filter_budget: FilterBudget | None = None, hearing_profile=None) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     result = analyze_measurement(recording_wav, sweep_spec, out_dir=out_dir)
     target = load_curve(target_path) if target_path else create_flat_target(result.freqs_hz)
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
-    left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)
+    left_bands, right_bands, report = fit_from_measurement(result, target, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget, hearing_profile=hearing_profile)
     write_fit_artifacts(
         out_dir,
         kind='fit',
@@ -178,6 +185,173 @@ def process_single_measurement(recording_wav: str | Path, out_dir: str | Path, s
 
 def build_clone_curve(source_curve_path: str | Path, target_curve_path: str | Path, out_path: str | Path) -> TargetCurve:
     return clone_target_from_source_target(source_curve_path, target_curve_path, out_path)
+
+
+def fit_from_hearing_profile(
+    profile,
+    sample_rate: int,
+    target_path: str | Path | None = None,
+    max_filters: int = 8,
+    *,
+    filter_budget: FilterBudget | None = None,
+) -> tuple[list[PEQBand], list[PEQBand], dict]:
+    """
+    Fit PEQ bands from a hearing profile alone — no headphone measurement needed.
+
+    Assumes the headphone has a flat frequency response. The combined EQ target is:
+        eq_target(f) = target(f) + hearing_compensation(f)
+    where compensation comes from the half-gain rule (Lybarger 1944).
+    """
+    from .hearing_test import compute_compensation_curve
+    from .signals import geometric_log_grid
+
+    filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
+    freqs = geometric_log_grid(20.0, 20000.0, 512)
+    flat = np.zeros(len(freqs))
+
+    if target_path:
+        target = load_curve(target_path)
+    else:
+        target = create_flat_target(freqs)
+    target_resampled = resample_curve(target, freqs)
+    if target_resampled.semantics == 'relative':
+        target_values = flat + target_resampled.values_db
+    else:
+        target_values = target_resampled.values_db.copy()
+
+    compensation = compute_compensation_curve(profile, freqs)
+    eq_target = target_values + compensation
+
+    left_bands = fit_peq(freqs, eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
+    right_bands = fit_peq(freqs, eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
+
+    left_pred = flat + peq_chain_response_db(freqs, sample_rate, left_bands)
+    right_pred = flat + peq_chain_response_db(freqs, sample_rate, right_bands)
+    l_rms, l_max = _metrics(freqs, left_pred, eq_target)
+    r_rms, r_max = _metrics(freqs, right_pred, eq_target)
+
+    identity = get_app_identity()
+    report = {
+        'generated_by': identity.as_metadata(),
+        'mode': 'hearing_only',
+        'target': target_resampled.name,
+        'predicted_left_rms_error_db': l_rms,
+        'predicted_right_rms_error_db': r_rms,
+        'predicted_left_max_error_db': l_max,
+        'predicted_right_max_error_db': r_max,
+        'hearing_compensation_applied': True,
+        'hearing_profile_summary': {
+            'tested_at': profile.tested_at,
+            'asymmetric_freqs': profile.asymmetric_freqs,
+        },
+        'filter_budget': {
+            'family': filter_budget.family,
+            'max_filters': filter_budget.max_filters,
+            'fill_policy': filter_budget.fill_policy,
+            'profile': filter_budget.profile,
+        },
+        'left_bands': [asdict(b) for b in left_bands],
+        'right_bands': [asdict(b) for b in right_bands],
+    }
+    clipping_assessment = assess_eq_clipping(freqs, sample_rate, left_bands, right_bands)
+    report['eq_clipping'] = {
+        'will_clip': clipping_assessment.will_clip,
+        'left_peak_boost_db': clipping_assessment.left_peak_boost_db,
+        'right_peak_boost_db': clipping_assessment.right_peak_boost_db,
+        'preamp_db': clipping_assessment.total_preamp_db,
+        'headroom_loss_db': clipping_assessment.headroom_loss_db,
+        'quality_concern': clipping_assessment.quality_concern,
+    }
+    return left_bands, right_bands, report
+
+
+def _write_hearing_fit_readme(out_dir: Path, report: dict) -> None:
+    target = report.get('target', 'flat')
+    l_rms = report.get('predicted_left_rms_error_db', 0.0)
+    r_rms = report.get('predicted_right_rms_error_db', 0.0)
+    lines = [
+        "headmatch hearing-fit results",
+        "==============================",
+        "",
+        "Generated by headmatch from a hearing profile only (no headphone measurement).",
+        "The EQ target is: target curve + hearing compensation (half-gain rule, Lybarger 1944).",
+        f"Target curve: {target}",
+        f"Predicted residual: L {l_rms:.2f} dB RMS, R {r_rms:.2f} dB RMS",
+        "",
+        "Files",
+        "-----",
+        "- equalizer_apo.txt: Equalizer APO parametric preset.",
+        "- equalizer_apo_graphiceq.txt: GraphicEQ-format preset.",
+        "- camilladsp_full.yaml: Full CamillaDSP config template.",
+        "- camilladsp_filters_only.yaml: Filters-only CamillaDSP snippet.",
+        "- hearing_fit_report.json: Full fit details and filter band list.",
+        "",
+        "Notes",
+        "-----",
+        "- This preset assumes a flat headphone frequency response.",
+        "- For a more accurate result, measure your headphones and use --with-hearing-compensation.",
+        "- Re-run the hearing test periodically or when your volume setting changes.",
+    ]
+    (out_dir / RESULTS_GUIDE_NAME).write_text('\n'.join(lines) + '\n', encoding="utf-8")
+
+
+def run_hearing_fit(
+    profile,
+    out_dir: str | Path,
+    sample_rate: int = 48000,
+    target_path: str | Path | None = None,
+    max_filters: int = 8,
+    *,
+    filter_budget: FilterBudget | None = None,
+) -> dict:
+    """
+    Equipment-free EQ pipeline: hearing profile → ready-to-load EQ preset files.
+
+    Writes equalizer_apo.txt, camilladsp_full.yaml, camilladsp_filters_only.yaml,
+    equalizer_apo_graphiceq.txt, hearing_fit_report.json, and README.txt to out_dir.
+    Returns the fit report dict.
+    """
+    from .exporters import (
+        export_camilladsp_filter_snippet_yaml,
+        export_camilladsp_filters_yaml,
+        export_equalizer_apo_graphiceq_txt,
+        export_equalizer_apo_parametric_txt,
+    )
+    from .signals import geometric_log_grid
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
+
+    left_bands, right_bands, report = fit_from_hearing_profile(
+        profile, sample_rate, target_path=target_path,
+        max_filters=max_filters, filter_budget=filter_budget,
+    )
+
+    clipping = report.get('eq_clipping') if isinstance(report.get('eq_clipping'), dict) else None
+    export_equalizer_apo_parametric_txt(
+        out_dir / 'equalizer_apo.txt',
+        left_bands,
+        right_bands,
+        preamp_db=(float(clipping['preamp_db']) if clipping and clipping.get('will_clip') else None),
+    )
+    export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
+    export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
+
+    freqs = geometric_log_grid(20.0, 20000.0, 512)
+    left_fitted_eq = peq_chain_response_db(freqs, sample_rate, left_bands)
+    right_fitted_eq = peq_chain_response_db(freqs, sample_rate, right_bands)
+    export_equalizer_apo_graphiceq_txt(
+        out_dir / 'equalizer_apo_graphiceq.txt',
+        freqs,
+        left_fitted_eq,
+        right_fitted_eq,
+    )
+
+    save_json(out_dir / 'hearing_fit_report.json', report)
+    _write_hearing_fit_readme(out_dir, report)
+
+    return report
 
 
 def _average_measurements(results: list[MeasurementResult]) -> MeasurementResult:
@@ -215,6 +389,7 @@ def iterative_measure_and_fit(
     *,
     filter_budget: FilterBudget | None = None,
     iteration_mode: str = 'independent',
+    hearing_profile=None,
 ) -> list[dict]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -238,7 +413,7 @@ def iterative_measure_and_fit(
         averaged = _average_measurements(all_results)
         save_fr_csv(output_dir / 'measurement_left.csv', averaged.freqs_hz, averaged.left_db)
         save_fr_csv(output_dir / 'measurement_right.csv', averaged.freqs_hz, averaged.right_db)
-        left_bands, right_bands, report = fit_from_measurement(averaged, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)  # type: ignore[arg-type]
+        left_bands, right_bands, report = fit_from_measurement(averaged, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget, hearing_profile=hearing_profile)  # type: ignore[arg-type]
         run_summary = write_fit_artifacts(
             output_dir,
             kind='fit',
@@ -256,7 +431,7 @@ def iterative_measure_and_fit(
     else:
         for i, result in enumerate(all_results, 1):
             iter_dir = output_dir / f'iter_{i:02d}'
-            left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget)  # type: ignore[arg-type]
+            left_bands, right_bands, report = fit_from_measurement(result, target_curve, sweep_spec.sample_rate, max_filters=max_filters, filter_budget=filter_budget, hearing_profile=hearing_profile)  # type: ignore[arg-type]
             run_summary = write_fit_artifacts(
                 iter_dir,
                 kind='iteration',

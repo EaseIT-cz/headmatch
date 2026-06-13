@@ -31,6 +31,7 @@ from .views import (
     render_clone_target_workflow,
     render_completion,
     render_fetch_curve,
+    render_hearing_test,
     render_history_page,
     render_import_apo,
     render_offline_wizard,
@@ -86,8 +87,8 @@ BASIC_NAV_ITEMS: tuple[NavigationItem, ...] = (
 )
 
 NAV_ITEMS: tuple[NavigationItem, ...] = (
-
     NavigationItem("measure-online", "Measure"),
+    NavigationItem("hearing-test", "Hearing Test"),
     NavigationItem("setup-check", "Setup Check"),
     NavigationItem("prepare-offline", "Prepare Offline"),
     NavigationItem("target-editor", "Target Editor"),
@@ -210,6 +211,7 @@ class HeadMatchGuiApp:
         self.basic_clone_source_var = tk.StringVar(master=root, value="")
         self.basic_clone_target_var = tk.StringVar(master=root, value="")
         self.basic_clone_output_var = tk.StringVar(master=root, value="")
+        self.hearing_profile = None  # HearingProfile | None; set after a successful test
         self.basic_progress_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
@@ -333,6 +335,9 @@ class HeadMatchGuiApp:
             return
         if key == "fetch-curve":
             self._render_fetch_curve()
+            return
+        if key == "hearing-test":
+            self._render_hearing_test()
             return
         if key == "history":
             self._render_history()
@@ -571,6 +576,86 @@ class HeadMatchGuiApp:
         status = self._ttk.Label(self.content, text=message, wraplength=560, justify="left")
         status.grid(row=99, column=0, sticky="w", pady=(12, 0))
         self.root.after(8000, status.destroy)
+
+    def _render_hearing_test(self) -> None:
+        from ..audio_backend import get_audio_backend
+        try:
+            backend = get_audio_backend()
+        except RuntimeError as exc:
+            self._show_status(f"Audio backend unavailable: {exc}")
+            return
+
+        output_device = self._strip_device_label(self.output_target_var.get()) or None
+
+        def _on_complete(profile) -> None:
+            self.hearing_profile = profile
+            self._show_hearing_followup(profile)
+
+        def _on_cancel() -> None:
+            self.show_view("measure-online")
+
+        render_hearing_test(
+            self._ttk,
+            self.content,
+            backend=backend,
+            output_device=output_device,
+            sample_rate=self.state.sample_rate,
+            on_complete=_on_complete,
+            on_cancel=_on_cancel,
+        )
+
+    def _show_hearing_followup(self, profile) -> None:
+        for child in self.content.winfo_children():  # type: ignore[attr-defined]
+            child.destroy()
+        ttk = self._ttk
+        self.content.columnconfigure(0, weight=1)  # type: ignore[attr-defined]
+        ttk.Label(self.content, text="Hearing Test Complete", style="Title.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        ttk.Label(
+            self.content,
+            text=(
+                "Your hearing profile has been saved. "
+                "Choose how to apply it: generate a standalone EQ preset now "
+                "(assumes a flat headphone response), or run a headphone measurement "
+                "first for a more accurate personalised fit."
+            ),
+            wraplength=560,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 16))
+
+        def _generate_now():
+            from pathlib import Path as _Path
+            out_dir = str(_Path(self.state.default_output_dir).expanduser().parent / "hearing_fit")
+            self._start_hearing_fit(profile, out_dir)
+
+        btn_frame = ttk.Frame(self.content)
+        btn_frame.grid(row=2, column=0, sticky="w")
+        ttk.Button(btn_frame, text="Generate EQ Preset Now", command=_generate_now).grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        ttk.Button(
+            btn_frame, text="Run a Measurement",
+            command=lambda: self.show_view("measure-online"),
+        ).grid(row=0, column=1)
+
+    def _start_hearing_fit(self, profile, out_dir: str) -> None:
+        from ..pipeline import run_hearing_fit
+        self._run_background_task(
+            task_name="hearing-fit",
+            progress_title="Generating EQ preset from hearing profile",
+            progress_body=f"Fitting EQ bands to your hearing compensation curve. Writing output to {out_dir}.",
+            worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate),
+            on_success=lambda _result: self._set_completion(
+                title="Hearing EQ preset ready",
+                summary=f"EQ preset written to {out_dir}.",
+                steps=(
+                    f"Load equalizer_apo.txt from {out_dir} in Equalizer APO.",
+                    "This preset corrects for your personal hearing thresholds (flat headphone assumed).",
+                    "For a more accurate fit, run a headphone measurement with Hearing Test compensation enabled.",
+                ),
+            ),
+        )
 
     def _render_history(self) -> None:
         def _browse_history():
@@ -821,6 +906,7 @@ class HeadMatchGuiApp:
         output_target = self._strip_device_label(self.output_target_var.get()) or None
         input_target = self._strip_device_label(self.input_target_var.get()) or None
 
+        hearing_profile = getattr(self, "hearing_profile", None)
         self._run_background_task(
             task_name="measure-online",
             progress_title="Running online measurement",
@@ -834,6 +920,7 @@ class HeadMatchGuiApp:
                 iterations=iterations,
                 max_filters=max_filters,
                 iteration_mode=self.iteration_mode_var.get().strip() or 'independent',
+                hearing_profile=hearing_profile,
             ),
             on_success=lambda result: self._set_completion(
                 title="Online measurement complete",

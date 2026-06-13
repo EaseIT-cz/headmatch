@@ -163,6 +163,37 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_filter_budget_args(p, config)
     p.add_argument("--json", action="store_true", help="Print the run summary as JSON instead of the human-readable terminal summary.")
     p.add_argument("--show-clipping", action="store_true", help="Show detailed clipping assessment information in the terminal output.")
+    p.add_argument("--with-hearing-compensation", action="store_true", help="Load the saved hearing profile and add compensation to the target curve before fitting.")
+
+    p = sub.add_parser(
+        "hearing-test",
+        help="Run a pure-tone hearing threshold test and save a personalised hearing profile.",
+        description=(
+            "Sweeps 7 frequencies per ear using the Modified Hughson-Westlake procedure "
+            "(Carhart & Jerger 1959). Saves a hearing profile to the config directory. "
+            "Use 'headmatch fit --with-hearing-compensation' to apply the profile to a fit."
+        ),
+    )
+    p.add_argument("--output-target", default=config.pipewire_output_target, help="Playback device to use for test tones. Run 'headmatch list-targets' to discover values.")
+    p.add_argument("--sample-rate", type=int, default=config.sample_rate)
+    p.add_argument("--json", action="store_true", help="Print the resulting hearing profile as JSON.")
+    p.add_argument("--fit", action="store_true", help="Generate an EQ preset immediately after the hearing test completes.")
+    p.add_argument("--out-dir", default=None, help="Output folder for EQ files when --fit is used. Defaults to ~/Documents/HeadMatch/hearing_fit.")
+
+    p = sub.add_parser(
+        "hearing-fit",
+        help="Generate an EQ preset from a saved hearing profile — no headphone measurement needed.",
+        description=(
+            "Load the saved hearing profile and fit PEQ bands that combine the target curve "
+            "with your personal hearing compensation (half-gain rule, Lybarger 1944). "
+            "Assumes a flat headphone response. For best results, run a headphone measurement "
+            "and use 'headmatch fit --with-hearing-compensation' instead."
+        ),
+    )
+    p.add_argument("--out-dir", required=True, help="Folder to write the EQ preset files.")
+    p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
+    add_filter_budget_args(p, config)
+    p.add_argument("--json", action="store_true", help="Print the fit report as JSON.")
 
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
@@ -431,6 +462,11 @@ def print_next_steps(cmd: str, args) -> None:
         print()
         print(f"Done. Review outputs in {out_dir}.")
         print("Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.")
+    elif cmd == "hearing-fit":
+        print()
+        print(f"Hearing fit complete. Review outputs in {args.out_dir}.")
+        print("Load equalizer_apo.txt in Equalizer APO or camilladsp_full.yaml in CamillaDSP.")
+        print("For better accuracy, measure your headphones and use 'headmatch fit --with-hearing-compensation'.")
     elif cmd == "clone-target":
         print()
         print(f"Clone target written to {args.out}.")
@@ -561,8 +597,62 @@ def main(argv: list[str] | None = None) -> None:
             )
         elif args.cmd == "analyze":
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
+        elif args.cmd == "hearing-test":
+            from .hearing_test import (
+                load_hearing_profile,
+                run_cli_hearing_test,
+                save_hearing_profile,
+                hearing_profile_path,
+            )
+            from .audio_backend import get_audio_backend
+            backend = get_audio_backend()
+            output_device = getattr(args, "output_target", None) or None
+            profile = run_cli_hearing_test(backend, output_device, sample_rate=args.sample_rate)
+            path = save_hearing_profile(profile)
+            if getattr(args, "json", False):
+                print(json.dumps(profile.to_dict(), indent=2))
+            else:
+                print(f"\nHearing profile saved to {path}")
+                if profile.asymmetric_freqs:
+                    freq_strs = ", ".join(str(f) for f in profile.asymmetric_freqs)
+                    print(f"Warning: large L/R difference at {freq_strs} Hz — consider consulting an audiologist.")
+                print("Run 'headmatch fit --with-hearing-compensation' to apply this profile to a fit.")
+            if getattr(args, "fit", False):
+                from .pipeline import run_hearing_fit
+                from pathlib import Path as _Path
+                out_dir = getattr(args, "out_dir", None) or str(_Path.home() / "Documents" / "HeadMatch" / "hearing_fit")
+                print(f"\nGenerating EQ preset in {out_dir} ...")
+                run_hearing_fit(profile, out_dir, sample_rate=args.sample_rate)
+                print(f"Done. EQ files written to {out_dir}.")
+        elif args.cmd == "hearing-fit":
+            from .hearing_test import load_hearing_profile, hearing_profile_path
+            from .pipeline import run_hearing_fit
+            profile = load_hearing_profile()
+            if profile is None:
+                parser.exit(2, f"Error: no hearing profile found at {hearing_profile_path()}.\nRun 'headmatch hearing-test' first.\n")
+            run_hearing_fit(
+                profile,
+                args.out_dir,
+                sample_rate=config.sample_rate,
+                target_path=getattr(args, "target_csv", None) or None,
+                max_filters=args.max_filters,
+                filter_budget=filter_budget_from_args(args),
+            )
+            if getattr(args, "json", False):
+                import json as _json
+                report_path = Path(args.out_dir) / "hearing_fit_report.json"
+                try:
+                    print(_json.dumps(_json.loads(report_path.read_text(encoding="utf-8")), indent=2, sort_keys=True))
+                except Exception:
+                    pass
         elif args.cmd == "fit":
-            process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args))
+            hearing_profile = None
+            if getattr(args, "with_hearing_compensation", False):
+                from .hearing_test import load_hearing_profile, hearing_profile_path
+                hearing_profile = load_hearing_profile()
+                if hearing_profile is None:
+                    parser.exit(2, f"Error: no hearing profile found at {hearing_profile_path()}.\nRun 'headmatch hearing-test' first.\n")
+            process_single_measurement(args.recording, args.out_dir, spec_from_args(args), target_path=args.target_csv, max_filters=args.max_filters, filter_budget=filter_budget_from_args(args), hearing_profile=hearing_profile)
             if getattr(args, "json", False):
                 summary_path = Path(args.out_dir) / "run_summary.json"
                 try:
@@ -695,7 +785,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.exit(2, f"Error: {format_user_error(args.cmd, exc)}\n")
 
-    if args.cmd not in {'doctor', 'tui', 'list-targets'} and not (args.cmd == "fit" and getattr(args, "json", False)):
+    if args.cmd not in {'doctor', 'tui', 'list-targets', 'hearing-test', 'hearing-fit'} and not (args.cmd == "fit" and getattr(args, "json", False)):
         try:
             save_config(update_config_from_args(args, existing=config), config_path)
         except OSError:

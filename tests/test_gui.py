@@ -209,6 +209,7 @@ def test_load_gui_state_uses_safe_defaults_when_config_is_empty(tmp_path):
 def test_navigation_items_cover_shell_sections():
     assert [item.key for item in NAV_ITEMS] == [
         "measure-online",
+        "hearing-test",
         "setup-check",
         "prepare-offline",
         "target-editor",
@@ -217,7 +218,7 @@ def test_navigation_items_cover_shell_sections():
         "history",
     ]
     assert [item.label for item in NAV_ITEMS] == [
-        "Measure", "Setup Check", "Prepare Offline",
+        "Measure", "Hearing Test", "Setup Check", "Prepare Offline",
         "Target Editor", "Import APO", "Fetch Curve", "Results",
     ]
 
@@ -489,7 +490,7 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
-    assert nav_labels == ['Measure', 'Setup Check', 'Prepare Offline', 'Target Editor', 'Import APO', 'Fetch Curve', 'Results']
+    assert nav_labels == ['Measure', 'Hearing Test', 'Setup Check', 'Prepare Offline', 'Target Editor', 'Import APO', 'Fetch Curve', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
 
@@ -1116,3 +1117,139 @@ class TestCurvePreviewWithAddedPoints:
         _render_curve_preview(canvas, editor)
         ovals = [i for i in canvas.items if i[0] == 'oval']
         assert len(ovals) == 2
+
+
+# ── _show_hearing_followup / _start_hearing_fit ───────────────────────────────
+
+def _make_hearing_profile_for_gui():
+    from headmatch.hearing_test import (
+        NORMAL_HEARING_REFERENCE,
+        TEST_FREQUENCIES,
+        FrequencyThreshold,
+        HearingProfile,
+    )
+    side = {
+        f: FrequencyThreshold(
+            freq_hz=f,
+            level_dbfs=NORMAL_HEARING_REFERENCE[f],
+            ascending_runs=3,
+            determined=True,
+        )
+        for f in TEST_FREQUENCIES
+    }
+    return HearingProfile(
+        left=dict(side),
+        right=dict(side),
+        tested_at="2026-01-01T00:00:00+00:00",
+        asymmetric_freqs=[],
+    )
+
+
+def test_show_hearing_followup_renders_two_buttons():
+    from headmatch.gui.shell import HeadMatchGuiApp
+
+    profile = _make_hearing_profile_for_gui()
+    ttk = RecordingTtk()
+    content = DummyWidget()
+    commands = {}
+
+    app = SimpleNamespace(
+        hearing_profile=None,
+        content=content,
+        _ttk=ttk,
+        state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        show_view=lambda key: commands.setdefault("show_view", key),
+        _start_hearing_fit=lambda p, out: commands.update({"start_fit": out}),
+    )
+
+    HeadMatchGuiApp._show_hearing_followup(app, profile)
+
+    buttons = [w for w in ttk.created if getattr(w, "kind", None) == "Button"]
+    assert len(buttons) >= 2
+    labels = [w.kwargs.get("text", "") for w in buttons]
+    assert any("Generate" in lbl or "EQ" in lbl for lbl in labels)
+    assert any("Measurement" in lbl or "Measure" in lbl for lbl in labels)
+
+
+def test_show_hearing_followup_generate_button_calls_start_hearing_fit():
+    from headmatch.gui.shell import HeadMatchGuiApp
+
+    profile = _make_hearing_profile_for_gui()
+    ttk = RecordingTtk()
+    content = DummyWidget()
+    calls = {}
+
+    app = SimpleNamespace(
+        content=content,
+        _ttk=ttk,
+        state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        show_view=lambda key: None,
+        _start_hearing_fit=lambda p, out: calls.update({"profile": p, "out": out}),
+    )
+
+    HeadMatchGuiApp._show_hearing_followup(app, profile)
+
+    generate_btn = next(
+        (w for w in ttk.created if getattr(w, "kind", None) == "Button"
+         and ("Generate" in (w.kwargs.get("text") or "") or "EQ" in (w.kwargs.get("text") or ""))),
+        None,
+    )
+    assert generate_btn is not None
+    generate_btn.command()
+
+    assert "out" in calls
+    assert "hearing_fit" in calls["out"]
+
+
+def test_show_hearing_followup_measure_button_navigates_to_measure_online():
+    from headmatch.gui.shell import HeadMatchGuiApp
+
+    profile = _make_hearing_profile_for_gui()
+    ttk = RecordingTtk()
+    content = DummyWidget()
+    navigated = {}
+
+    app = SimpleNamespace(
+        content=content,
+        _ttk=ttk,
+        state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        show_view=lambda key: navigated.update({"key": key}),
+        _start_hearing_fit=lambda *a: None,
+    )
+
+    HeadMatchGuiApp._show_hearing_followup(app, profile)
+
+    measure_btn = next(
+        (w for w in ttk.created if getattr(w, "kind", None) == "Button"
+         and ("Measurement" in (w.kwargs.get("text") or "") or "Measure" in (w.kwargs.get("text") or ""))),
+        None,
+    )
+    assert measure_btn is not None
+    measure_btn.command()
+
+    assert navigated.get("key") == "measure-online"
+
+
+def test_start_hearing_fit_runs_background_task(monkeypatch):
+    from headmatch.gui.shell import HeadMatchGuiApp
+
+    profile = _make_hearing_profile_for_gui()
+    fit_calls = {}
+
+    monkeypatch.setattr(
+        "headmatch.pipeline.run_hearing_fit",
+        lambda p, out_dir, **kw: fit_calls.update({"out_dir": out_dir}) or {},
+    )
+
+    bg_calls = {}
+
+    app = SimpleNamespace(
+        state=SimpleNamespace(sample_rate=48000),
+        _run_background_task=lambda **kw: bg_calls.update(kw) or kw["worker"](),
+        _set_completion=lambda **kw: None,
+    )
+
+    HeadMatchGuiApp._start_hearing_fit(app, profile, "/tmp/hearing_fit")
+
+    assert fit_calls.get("out_dir") == "/tmp/hearing_fit"
+    assert bg_calls.get("task_name") == "hearing-fit"

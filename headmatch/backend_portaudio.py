@@ -250,6 +250,17 @@ class PortAudioBackend:
             )
         return paths.recording_wav
 
+    def play_tone(self, samples, sample_rate: int, device: Optional[str] = None) -> None:
+        sd = _import_sd()
+        output_device = None
+        if device:
+            try:
+                output_device = int(device)
+            except ValueError:
+                output_device = device  # type: ignore[assignment]
+        sd.play(samples, samplerate=sample_rate, device=output_device, blocking=True)
+        sd.wait()
+
     def format_device_list(self, devices: list[AudioDevice]) -> str:
         lines = [
             "Audio targets you can pass to --output-target / --input-target",
