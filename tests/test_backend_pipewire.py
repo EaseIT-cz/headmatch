@@ -23,6 +23,20 @@ from headmatch.backend_pipewire import (
 
 # ── Classification ──
 
+@pytest.mark.parametrize(
+    ("media_class", "expected"),
+    [
+        pytest.param("Audio/Sink", "playback", id="case_1_audio_sink_playback"),
+        pytest.param("Audio/Source", "capture", id="case_2_audio_source_capture"),
+        pytest.param("Audio/Source/Virtual", "capture", id="case_3_audio_source_virtual_capture"),
+        pytest.param("Video/Source", None, id="case_4_video_source_ignored"),
+        pytest.param("", None, id="case_5_empty_string_ignored"),
+    ],
+)
+def test_classify_media_class_pinned_cases(media_class, expected):
+    assert _classify_media_class(media_class) == expected
+
+
 def test_classify_sink():
     assert _classify_media_class("Audio/Sink") == "playback"
 
