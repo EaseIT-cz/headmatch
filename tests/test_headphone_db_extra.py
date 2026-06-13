@@ -52,7 +52,7 @@ def test_load_cached_index_returns_none_for_bad_json(tmp_path, monkeypatch):
 
 
 def test_fetch_and_cache_index_writes_cache(tmp_path, monkeypatch):
-    payload = json.dumps({"tree": [{"path": "results/oratory1990/over-ear/HD 650/HD 650.csv"}] }).encode("utf-8")
+    payload = json.dumps({"tree": [{"path": "results/oratory1990/over-ear/HD 650/HD 650.csv"}]}).encode("utf-8")
     monkeypatch.setattr("headmatch.headphone_db.urlopen", lambda *a, **k: DummyResponse(payload))
     cache = tmp_path / "autoeq_index.json"
     monkeypatch.setattr("headmatch.headphone_db._index_cache_path", lambda: cache)
@@ -108,3 +108,53 @@ def test_search_empty_query_returns_nothing(mock_idx):
     assert search_headphone("") == []
     assert search_headphone("   ") == []
     assert search_headphone("  \t  ") == []
+
+
+# ========== New test cases for _parse_autoeq_csv ==========
+
+def test_parse_autoeq_csv_valid_csv():
+    csv_content = """frequency,response
+10,0.5
+100,1.2
+500,2.1
+1000,2.5"""
+    freqs, values = _parse_autoeq_csv(csv_content)
+    assert np.allclose(freqs, [10.0, 100.0, 500.0, 1000.0])
+    assert np.allclose(values, [0.5, 1.2, 2.1, 2.5])
+
+
+def test_parse_autoeq_csv_empty_rows_skipped():
+    csv_content = """frequency,response
+
+10,0.5
+
+100,1.2
+"""
+    freqs, values = _parse_autoeq_csv(csv_content)
+    assert np.allclose(freqs, [10.0, 100.0])
+    assert np.allclose(values, [0.5, 1.2])
+
+
+def test_parse_autoeq_csv_non_numeric_values_skipped():
+    csv_content = """frequency,response
+10,abc
+foo,20
+20,3.0
+30,def
+40,4.5
+"""
+    freqs, values = _parse_autoeq_csv(csv_content)
+    assert np.allclose(freqs, [20.0, 40.0])
+    assert np.allclose(values, [3.0, 4.5])
+
+
+def test_parse_autoeq_csv_empty_csv_raises_valueerror():
+    csv_content = ""
+    with pytest.raises(ValueError, match="No valid frequency/response data found in CSV"):
+        _parse_autoeq_csv(csv_content)
+
+
+def test_parse_autoeq_csv_only_header_raises_valueerror():
+    csv_content = "frequency,response"
+    with pytest.raises(ValueError, match="No valid frequency/response data found in CSV"):
+        _parse_autoeq_csv(csv_content)
