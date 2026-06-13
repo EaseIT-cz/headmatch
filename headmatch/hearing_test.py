@@ -274,7 +274,7 @@ def compute_compensation_curve(profile: HearingProfile, freq_grid: np.ndarray) -
 
     # 1-octave Gaussian smoothing to prevent sharp EQ transitions
     smoothed = fractional_octave_smoothing(freq_grid, raw, fraction=1.0)
-    return np.maximum(smoothed, 0.0)
+    return np.maximum(smoothed, 0.0)  # type: ignore[no-any-return]
 
 
 def detect_asymmetric_frequencies(profile_left: dict[int, FrequencyThreshold],

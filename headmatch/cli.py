@@ -620,18 +620,19 @@ def main(argv: list[str] | None = None) -> None:
             if getattr(args, "fit", False):
                 from .pipeline import run_hearing_fit
                 from pathlib import Path as _Path
-                out_dir = getattr(args, "out_dir", None) or str(_Path.home() / "Documents" / "HeadMatch" / "hearing_fit")
-                print(f"\nGenerating EQ preset in {out_dir} ...")
-                run_hearing_fit(profile, out_dir, sample_rate=args.sample_rate)
-                print(f"Done. EQ files written to {out_dir}.")
+                fit_out_dir: str = getattr(args, "out_dir", None) or str(_Path.home() / "Documents" / "HeadMatch" / "hearing_fit")
+                print(f"\nGenerating EQ preset in {fit_out_dir} ...")
+                run_hearing_fit(profile, fit_out_dir, sample_rate=args.sample_rate)
+                print(f"Done. EQ files written to {fit_out_dir}.")
         elif args.cmd == "hearing-fit":
             from .hearing_test import load_hearing_profile, hearing_profile_path
             from .pipeline import run_hearing_fit
-            profile = load_hearing_profile()
-            if profile is None:
+            hf_profile = load_hearing_profile()
+            if hf_profile is None:
                 parser.exit(2, f"Error: no hearing profile found at {hearing_profile_path()}.\nRun 'headmatch hearing-test' first.\n")
+                raise SystemExit(2)
             run_hearing_fit(
-                profile,
+                hf_profile,
                 args.out_dir,
                 sample_rate=config.sample_rate,
                 target_path=getattr(args, "target_csv", None) or None,

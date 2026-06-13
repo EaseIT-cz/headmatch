@@ -437,7 +437,7 @@ def _draw_threshold_chart(ttk, frame, *, left, right, width=500, height=160):
 
     def _y(level_dbfs: float) -> float:
         frac = (level_dbfs - y_min) / y_range
-        return margin_t + plot_h * (1.0 - frac)
+        return float(margin_t + plot_h * (1.0 - frac))
 
     # Axes
     canvas.create_line(margin_l, margin_t, margin_l, margin_t + plot_h, fill="#888888")
