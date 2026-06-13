@@ -6,6 +6,7 @@ from ...history import build_history_selection
 import subprocess
 import sys
 from ...troubleshooting import confidence_troubleshooting_steps
+from ..widgets import theme_background
 
 
 ONLINE_STEPS = (
@@ -177,7 +178,7 @@ def render_setup_check(ttk, frame, *, report: str, on_refresh, on_measure) -> No
     frame.rowconfigure(3, weight=1)
     try:
         import tkinter as tk
-        text_widget = tk.Text(report_card, wrap="word", height=12, relief="flat", bg=report_card.cget("background") if hasattr(report_card, 'cget') else "#ffffff")
+        text_widget = tk.Text(report_card, wrap="word", height=12, relief="flat", bg=theme_background(ttk, fallback="#ffffff"))
         text_widget.insert("1.0", report)
         text_widget.config(state="disabled")
         scrollbar = ttk.Scrollbar(report_card, orient="vertical", command=text_widget.yview)

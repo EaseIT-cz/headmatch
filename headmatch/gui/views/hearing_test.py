@@ -20,6 +20,7 @@ from ...hearing_test import (
     generate_tone,
     save_hearing_profile,
 )
+from ..widgets import theme_background
 
 from datetime import datetime, timezone
 
@@ -127,7 +128,7 @@ def render_hearing_test(
         )
         info_text = tk.Text(
             frame, height=10, width=62, state="normal",
-            relief="flat", background=frame.cget("background") if hasattr(frame, "cget") else "#f0f0f0",
+            relief="flat", background=theme_background(ttk),
             wrap="word",
         )
         info_text.insert("1.0", "\n".join(instructions))
