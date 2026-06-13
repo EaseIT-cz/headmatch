@@ -138,7 +138,7 @@ def test_export_equalizer_apo_orders_filters_by_frequency(tmp_path):
     filter_lines = [line for line in lines if line.startswith('Filter ')]
 
     assert filter_lines == [
-        'Filter 1: ON LS Fc 105.00 Hz Gain 4.73 dB Q 0.70',
+        'Filter 1: ON LS Fc 105.00 Hz Gain 4.73 dB Q 0.59',
         'Filter 2: ON PK Fc 155.68 Hz Gain 1.44 dB Q 0.45',
         'Filter 3: ON PK Fc 3055.84 Hz Gain 1.91 dB Q 0.66',
     ]
@@ -157,11 +157,11 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
     assert '; headmatch Equalizer APO parametric preset' in text
     assert 'Channel: L' in text
     assert 'Preamp: -3.50 dB' in text
-    assert 'Filter 1: ON LS Fc 105.00 Hz Gain 3.50 dB Q 0.70' in text
+    assert 'Filter 1: ON LS Fc 105.00 Hz Gain 3.50 dB Q 0.59' in text
     assert 'Filter 2: ON PK Fc 2500.00 Hz Gain -2.00 dB Q 1.23' in text
     assert 'Channel: R' in text
     assert 'Preamp: 0.00 dB' in text
-    assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.70' in text
+    assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.59' in text
 
 
 def test_export_equalizer_apo_parametric_txt_keeps_channel_numbering_independent_and_trailing_newline(tmp_path):
@@ -183,7 +183,7 @@ def test_export_equalizer_apo_parametric_txt_keeps_channel_numbering_independent
     assert right_section[:4] == [
         'Channel: R',
         'Preamp: -2.00 dB',
-        'Filter 1: ON LS Fc 90.00 Hz Gain 2.00 dB Q 0.70',
+        'Filter 1: ON LS Fc 90.00 Hz Gain 2.00 dB Q 0.59',
         'Filter 2: ON PK Fc 3000.00 Hz Gain 1.50 dB Q 1.10',
     ]
 

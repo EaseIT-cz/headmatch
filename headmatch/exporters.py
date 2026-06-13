@@ -149,9 +149,12 @@ def _apo_preamp_db(bands: Iterable[PEQBand], preamp_db: float | None = None) -> 
 def _format_apo_channel(channel: str, bands: List[PEQBand], *, preamp_db: float | None = None) -> list[str]:
     lines = [f'Channel: {channel}', f'Preamp: {_apo_preamp_db(bands, preamp_db):.2f} dB']
     for index, band in enumerate(_bands_sorted_by_frequency(bands), 1):
+        # APO's LS/HS Q field expects the standard shelf Q (≈ 0.707 for maximum slope),
+        # not the RBJ slope S stored in band.q. Use band.shelf_q for shelf filters.
+        q_out = band.q if band.kind == 'peaking' else band.shelf_q
         lines.append(
             f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} '
-            f'Fc {band.freq:.2f} Hz Gain {band.gain_db:.2f} dB Q {band.q:.2f}'
+            f'Fc {band.freq:.2f} Hz Gain {band.gain_db:.2f} dB Q {q_out:.2f}'
         )
     return lines
 
@@ -177,6 +180,18 @@ def _format_graphiceq_series(freqs_hz: Iterable[float], gains_db: Iterable[float
     return 'GraphicEQ: ' + '; '.join(entries)
 
 
+def _graphiceq_preamp_db(gains_db: list[float]) -> float:
+    """Return the preamp needed for a GraphicEQ channel, including interpolation headroom.
+
+    Headroom only applies when there is a positive boost — if all gains are cuts,
+    no headroom is needed and the preamp is 0.0 dB.
+    """
+    peak = max(gains_db, default=0.0)
+    if peak <= 0:
+        return 0.0
+    return round(-(peak + GRAPHICEQ_INTERPOLATION_HEADROOM_DB), 2)
+
+
 def export_equalizer_apo_graphiceq_txt(
     path: str | Path,
     freqs_hz: Iterable[float],
@@ -195,11 +210,11 @@ def export_equalizer_apo_graphiceq_txt(
         comment,
         '',
         'Channel: L',
-        f'Preamp: {round(-max(0.0, max(gains_left_db, default=0.0)) - GRAPHICEQ_INTERPOLATION_HEADROOM_DB, 2):.2f} dB',
+        f'Preamp: {_graphiceq_preamp_db(gains_left_db):.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_left_db),
         '',
         'Channel: R',
-        f'Preamp: {round(-max(0.0, max(gains_right_db, default=0.0)) - GRAPHICEQ_INTERPOLATION_HEADROOM_DB, 2):.2f} dB',
+        f'Preamp: {_graphiceq_preamp_db(gains_right_db):.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_right_db),
         '',
     ]

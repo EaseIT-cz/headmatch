@@ -57,7 +57,7 @@ def refine_apo_preset(
     # Refine each channel
     left_bands = _refine_channel(
         result.freqs_hz, result.left_db, resolved.left_values_db,
-        left_bands_orig, result.sample_rate if hasattr(result, 'sample_rate') else sweep_spec.sample_rate,
+        left_bands_orig, sweep_spec.sample_rate,
         max_gain_db, max_q,
     )
     right_bands = _refine_channel(
