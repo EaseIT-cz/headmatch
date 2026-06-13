@@ -78,8 +78,8 @@ class WorkflowControllers:
             )
             orig = report.get('original_error', {})
             self.app._show_status(
-                f"Refined: L {orig.get('left_rms', 0):.1f}→{report['predicted_left_rms_error_db']:.1f} dB, "
-                f"R {orig.get('right_rms', 0):.1f}→{report['predicted_right_rms_error_db']:.1f} dB → {out_dir}"
+                f"Refined: L {orig.get('left_rms', 0):.1f}→{report.get('predicted_left_rms_error_db', 0):.1f} dB, "
+                f"R {orig.get('right_rms', 0):.1f}→{report.get('predicted_right_rms_error_db', 0):.1f} dB → {out_dir}"
             )
         except Exception as exc:
             self.app._show_status(f"Refine failed: {exc}")

@@ -646,9 +646,10 @@ class HeadMatchGuiApp:
             progress_title="Generating EQ preset from hearing profile",
             progress_body=f"Fitting EQ bands to your hearing compensation curve. Writing output to {out_dir}.",
             worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate),
-            on_success=lambda _result: self._set_completion(
+            on_success=lambda result: self._set_completion(
                 title="Hearing EQ preset ready",
                 summary=f"EQ preset written to {out_dir}.",
+                result=result,
                 steps=(
                     f"Load equalizer_apo.txt from {out_dir} in Equalizer APO.",
                     "This preset corrects for your personal hearing thresholds (flat headphone assumed).",

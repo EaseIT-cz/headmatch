@@ -361,7 +361,7 @@ def _average_measurements(results: list[MeasurementResult]) -> MeasurementResult
     left_raw_db = np.mean([r.left_raw_db for r in results], axis=0)
     right_raw_db = np.mean([r.right_raw_db for r in results], axis=0)
     avg_diagnostics: Dict[str, float] = {}
-    all_keys = results[0].diagnostics.keys()
+    all_keys = set().union(*(r.diagnostics.keys() for r in results))
     for key in all_keys:
         values = [r.diagnostics.get(key, 0.0) for r in results]
         avg_diagnostics[key] = float(np.mean(values))
