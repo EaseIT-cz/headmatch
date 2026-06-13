@@ -20,6 +20,8 @@ WorkflowName = Literal[
     "fit",
     "iterate",
     "clone-target",
+    "hearing-test",
+    "hearing-fit",
 ]
 
 RunMode = Literal["online", "offline", "analysis-only", "clone-target"]

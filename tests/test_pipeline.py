@@ -262,7 +262,7 @@ def test_average_iteration_mode_runs_passes_consecutively_before_averaging(monke
             diagnostics={'alignment_score': float(index)},
         )
 
-    def fake_fit_from_measurement(result, target, sample_rate, *, max_filters, filter_budget):
+    def fake_fit_from_measurement(result, target, sample_rate, *, max_filters, filter_budget, hearing_profile=None):
         call_order.append(('fit', int(result.left_db[0])))
         return [], [], {'predicted_error_db': {'left_rms': 0.1, 'right_rms': 0.1, 'left_max': 0.2, 'right_max': 0.2}}
 

@@ -243,6 +243,23 @@ class PipeWireBackend:
             )
         return paths.recording_wav
 
+    def play_tone(self, samples, sample_rate: int, device: Optional[str] = None) -> None:
+        import tempfile
+        from .measure import require_executable
+        from .io_utils import write_wav
+
+        require_executable("pw-play")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = Path(f.name)
+        try:
+            write_wav(tmp_path, samples, sample_rate)
+            cmd = ["pw-play", "--rate", str(sample_rate), "--channels", "2", str(tmp_path)]
+            if device:
+                cmd.extend(["--target", device])
+            subprocess.run(cmd, capture_output=True, check=False)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
     def format_device_list(self, devices: list[AudioDevice]) -> str:
         lines = [
             'Audio targets you can pass to --output-target / --input-target',

@@ -575,3 +575,142 @@ def test_clone_target_and_offline_commands(monkeypatch, capsys, tmp_path):
     cli.main(["analyze", "--recording", "r.wav", "--out-dir", str(tmp_path / "analysis")])
     out = capsys.readouterr().out
     assert "Analysis written" in out
+
+
+# ── hearing-fit and hearing-test --fit ───────────────────────────────────────
+
+def _make_hearing_profile():
+    from headmatch.hearing_test import (
+        NORMAL_HEARING_REFERENCE,
+        TEST_FREQUENCIES,
+        FrequencyThreshold,
+        HearingProfile,
+    )
+    side = {
+        f: FrequencyThreshold(
+            freq_hz=f,
+            level_dbfs=NORMAL_HEARING_REFERENCE[f],
+            ascending_runs=3,
+            determined=True,
+        )
+        for f in TEST_FREQUENCIES
+    }
+    return HearingProfile(
+        left=dict(side),
+        right=dict(side),
+        tested_at="2026-01-01T00:00:00+00:00",
+        asymmetric_freqs=[],
+    )
+
+
+def test_hearing_fit_command_dispatches_run_hearing_fit(monkeypatch, capsys, tmp_path):
+    profile = _make_hearing_profile()
+    calls = {}
+
+    monkeypatch.setattr("headmatch.hearing_test.load_hearing_profile", lambda: profile)
+    monkeypatch.setattr(
+        "headmatch.pipeline.run_hearing_fit",
+        lambda p, out_dir, **kw: calls.update({"out_dir": out_dir}) or {},
+    )
+
+    cli.main(["hearing-fit", "--out-dir", str(tmp_path / "fit")])
+
+    assert calls["out_dir"] == str(tmp_path / "fit")
+    out = capsys.readouterr().out
+    assert "hearing fit complete" in out.lower()
+
+
+def test_hearing_fit_command_json_output(monkeypatch, capsys, tmp_path):
+    profile = _make_hearing_profile()
+    out_dir = tmp_path / "fit"
+    out_dir.mkdir()
+    report = {"mode": "hearing_only", "hearing_compensation_applied": True}
+    (out_dir / "hearing_fit_report.json").write_text(
+        __import__("json").dumps(report), encoding="utf-8"
+    )
+
+    monkeypatch.setattr("headmatch.hearing_test.load_hearing_profile", lambda: profile)
+    monkeypatch.setattr("headmatch.pipeline.run_hearing_fit", lambda *a, **kw: {})
+
+    cli.main(["hearing-fit", "--out-dir", str(out_dir), "--json"])
+
+    out = capsys.readouterr().out
+    assert '"mode"' in out
+    assert "hearing_only" in out
+
+
+def test_hearing_fit_exits_when_no_saved_profile(monkeypatch, tmp_path):
+    monkeypatch.setattr("headmatch.hearing_test.load_hearing_profile", lambda: None)
+    monkeypatch.setattr(
+        "headmatch.hearing_test.hearing_profile_path",
+        lambda: tmp_path / "hearing_profile.json",
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["hearing-fit", "--out-dir", str(tmp_path)])
+    assert exc.value.code == 2
+
+
+def test_hearing_fit_next_steps_message(capsys, tmp_path):
+    import types
+    args = types.SimpleNamespace(out_dir=str(tmp_path), cmd="hearing-fit")
+    cli.print_next_steps("hearing-fit", args)
+    out = capsys.readouterr().out
+    assert "hearing fit complete" in out.lower()
+    assert "equalizer_apo.txt" in out
+
+
+def test_hearing_test_fit_flag_runs_run_hearing_fit(monkeypatch, capsys, tmp_path):
+    profile = _make_hearing_profile()
+    fit_calls = {}
+
+    class FakeBackend:
+        def play_tone(self, *a, **kw):
+            pass
+
+    monkeypatch.setattr("headmatch.audio_backend.get_audio_backend", lambda: FakeBackend())
+    monkeypatch.setattr(
+        "headmatch.hearing_test.run_cli_hearing_test",
+        lambda *a, **kw: profile,
+    )
+    monkeypatch.setattr(
+        "headmatch.hearing_test.save_hearing_profile",
+        lambda p: tmp_path / "hearing_profile.json",
+    )
+    monkeypatch.setattr(
+        "headmatch.pipeline.run_hearing_fit",
+        lambda p, out_dir, **kw: fit_calls.update({"out_dir": out_dir}) or {},
+    )
+
+    out_dir = str(tmp_path / "eq")
+    cli.main(["hearing-test", "--fit", "--out-dir", out_dir])
+
+    assert fit_calls.get("out_dir") == out_dir
+    out = capsys.readouterr().out
+    assert "Generating EQ preset" in out
+    assert "Done. EQ files written" in out
+
+
+def test_hearing_test_fit_flag_uses_default_out_dir_when_omitted(monkeypatch, capsys, tmp_path):
+    profile = _make_hearing_profile()
+    fit_calls = {}
+
+    class FakeBackend:
+        def play_tone(self, *a, **kw):
+            pass
+
+    monkeypatch.setattr("headmatch.audio_backend.get_audio_backend", lambda: FakeBackend())
+    monkeypatch.setattr("headmatch.hearing_test.run_cli_hearing_test", lambda *a, **kw: profile)
+    monkeypatch.setattr(
+        "headmatch.hearing_test.save_hearing_profile",
+        lambda p: tmp_path / "hearing_profile.json",
+    )
+    monkeypatch.setattr(
+        "headmatch.pipeline.run_hearing_fit",
+        lambda p, out_dir, **kw: fit_calls.update({"out_dir": out_dir}) or {},
+    )
+
+    cli.main(["hearing-test", "--fit"])
+
+    assert "out_dir" in fit_calls
+    assert "hearing_fit" in fit_calls["out_dir"]

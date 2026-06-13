@@ -1,0 +1,215 @@
+"""Tests for the equipment-free hearing-fit pipeline."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from headmatch.hearing_test import (
+    NORMAL_HEARING_REFERENCE,
+    TEST_FREQUENCIES,
+    FrequencyThreshold,
+    HearingProfile,
+)
+from headmatch.pipeline import fit_from_hearing_profile, run_hearing_fit
+
+
+def _make_profile(loss_db: float = 0.0) -> HearingProfile:
+    side = {
+        f: FrequencyThreshold(
+            freq_hz=f,
+            level_dbfs=NORMAL_HEARING_REFERENCE[f] + loss_db,
+            ascending_runs=3,
+            determined=True,
+        )
+        for f in TEST_FREQUENCIES
+    }
+    return HearingProfile(
+        left=dict(side),
+        right=dict(side),
+        tested_at="2026-01-01T00:00:00+00:00",
+        asymmetric_freqs=[],
+    )
+
+
+class TestFitFromHearingProfile:
+    def test_returns_band_lists_and_report(self):
+        profile = _make_profile(loss_db=10.0)
+        left_bands, right_bands, report = fit_from_hearing_profile(
+            profile, sample_rate=48000, max_filters=4
+        )
+        assert isinstance(left_bands, list)
+        assert isinstance(right_bands, list)
+        assert isinstance(report, dict)
+
+    def test_mode_is_hearing_only(self):
+        profile = _make_profile()
+        _, _, report = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=4)
+        assert report["mode"] == "hearing_only"
+
+    def test_compensation_flag_set(self):
+        profile = _make_profile()
+        _, _, report = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=4)
+        assert report["hearing_compensation_applied"] is True
+
+    def test_report_has_predicted_error(self):
+        profile = _make_profile(loss_db=10.0)
+        _, _, report = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=4)
+        assert "predicted_left_rms_error_db" in report
+        assert "predicted_right_rms_error_db" in report
+        assert isinstance(report["predicted_left_rms_error_db"], float)
+
+    def test_report_has_eq_clipping(self):
+        profile = _make_profile(loss_db=10.0)
+        _, _, report = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=4)
+        assert "eq_clipping" in report
+        assert "will_clip" in report["eq_clipping"]
+
+    def test_report_has_hearing_profile_summary(self):
+        profile = _make_profile()
+        _, _, report = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=4)
+        assert "hearing_profile_summary" in report
+        assert report["hearing_profile_summary"]["tested_at"] == "2026-01-01T00:00:00+00:00"
+
+    def test_normal_hearing_gives_small_boost(self):
+        """Normal hearing → near-zero compensation → near-flat EQ with flat target."""
+        from headmatch.peq import peq_chain_response_db
+        from headmatch.signals import geometric_log_grid
+        profile = _make_profile(loss_db=0.0)
+        left_bands, _, _ = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=8)
+        grid = geometric_log_grid(200.0, 8000.0, 48)
+        resp = peq_chain_response_db(grid, 48000, left_bands)
+        assert float(np.max(np.abs(resp))) < 2.0  # very near flat
+
+    def test_20dB_loss_produces_boost(self):
+        """20 dB hearing loss → ~10 dB half-gain compensation → EQ bands with positive gain."""
+        from headmatch.peq import peq_chain_response_db
+        from headmatch.signals import geometric_log_grid
+        profile = _make_profile(loss_db=20.0)
+        left_bands, _, _ = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=8)
+        grid = geometric_log_grid(500.0, 8000.0, 48)
+        resp = peq_chain_response_db(grid, 48000, left_bands)
+        assert float(np.mean(resp)) > 1.0
+
+    def test_symmetric_left_right_bands(self):
+        """Symmetric hearing profile → left and right bands identical."""
+        profile = _make_profile(loss_db=15.0)
+        left_bands, right_bands, _ = fit_from_hearing_profile(
+            profile, sample_rate=48000, max_filters=4
+        )
+        assert len(left_bands) == len(right_bands)
+        for lb, rb in zip(left_bands, right_bands):
+            assert lb.freq == pytest.approx(rb.freq, abs=0.1)
+            assert lb.gain_db == pytest.approx(rb.gain_db, abs=0.01)
+
+    def test_with_target_csv(self, tmp_path):
+        """Passing a target CSV path is accepted and runs without error."""
+        csv = tmp_path / "target.csv"
+        csv.write_text("frequency_hz,response_db\n20,0\n1000,0\n20000,0\n", encoding="utf-8")
+        profile = _make_profile(loss_db=10.0)
+        left_bands, _, report = fit_from_hearing_profile(
+            profile, sample_rate=48000, max_filters=4, target_path=csv
+        )
+        assert isinstance(left_bands, list)
+        assert isinstance(report["target"], str)
+
+    def test_filter_budget_respected(self):
+        from headmatch.peq import FilterBudget
+        profile = _make_profile(loss_db=20.0)
+        budget = FilterBudget(max_filters=2, fill_policy="exact_n")
+        left_bands, right_bands, _ = fit_from_hearing_profile(
+            profile, sample_rate=48000, max_filters=2, filter_budget=budget
+        )
+        assert len(left_bands) <= 2
+        assert len(right_bands) <= 2
+
+
+class TestRunHearingFit:
+    def _profile(self, loss_db: float = 10.0) -> HearingProfile:
+        return _make_profile(loss_db=loss_db)
+
+    def test_writes_all_expected_files(self, tmp_path):
+        profile = self._profile()
+        run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        assert (tmp_path / "equalizer_apo.txt").exists()
+        assert (tmp_path / "equalizer_apo_graphiceq.txt").exists()
+        assert (tmp_path / "camilladsp_full.yaml").exists()
+        assert (tmp_path / "camilladsp_filters_only.yaml").exists()
+        assert (tmp_path / "hearing_fit_report.json").exists()
+        assert (tmp_path / "README.txt").exists()
+
+    def test_report_json_valid(self, tmp_path):
+        profile = self._profile()
+        run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        data = json.loads((tmp_path / "hearing_fit_report.json").read_text(encoding="utf-8"))
+        assert data["mode"] == "hearing_only"
+        assert data["hearing_compensation_applied"] is True
+        assert "left_bands" in data
+        assert "right_bands" in data
+        assert "eq_clipping" in data
+
+    def test_returns_report_dict(self, tmp_path):
+        profile = self._profile()
+        result = run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        assert isinstance(result, dict)
+        assert "mode" in result
+
+    def test_creates_output_dir(self, tmp_path):
+        profile = self._profile()
+        out = tmp_path / "nested" / "hearing_fit"
+        run_hearing_fit(profile, out, sample_rate=48000)
+        assert out.is_dir()
+        assert (out / "equalizer_apo.txt").exists()
+
+    def test_readme_contains_key_info(self, tmp_path):
+        profile = self._profile(loss_db=20.0)
+        run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        readme = (tmp_path / "README.txt").read_text(encoding="utf-8")
+        assert "hearing_only" in readme or "hearing-fit" in readme or "hearing profile" in readme.lower()
+        assert "equalizer_apo.txt" in readme
+
+    def test_with_target_csv(self, tmp_path):
+        csv = tmp_path / "target.csv"
+        csv.write_text("frequency_hz,response_db\n20,0\n1000,0\n20000,0\n", encoding="utf-8")
+        out = tmp_path / "fit"
+        profile = self._profile()
+        run_hearing_fit(profile, out, sample_rate=48000, target_path=csv)
+        assert (out / "equalizer_apo.txt").exists()
+
+    def test_equalizer_apo_parametric_format(self, tmp_path):
+        profile = self._profile(loss_db=15.0)
+        run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        content = (tmp_path / "equalizer_apo.txt").read_text(encoding="utf-8")
+        assert "Filter" in content or "Preamp" in content
+
+
+class TestFitFromHearingProfileRelativeTarget:
+    """Cover the 'relative' semantics branch in fit_from_hearing_profile."""
+
+    def test_relative_semantics_target_csv(self, tmp_path):
+        csv = tmp_path / "clone_something_to_other.csv"
+        csv.write_text(
+            "# headmatch_target_semantics=relative\nfrequency_hz,response_db\n20,0\n1000,0\n20000,0\n",
+            encoding="utf-8",
+        )
+        side = {
+            f: FrequencyThreshold(
+                freq_hz=f,
+                level_dbfs=NORMAL_HEARING_REFERENCE[f] + 10.0,
+                ascending_runs=3,
+                determined=True,
+            )
+            for f in TEST_FREQUENCIES
+        }
+        profile = HearingProfile(
+            left=dict(side), right=dict(side),
+            tested_at="2026-01-01T00:00:00+00:00",
+            asymmetric_freqs=[],
+        )
+        left_bands, right_bands, report = fit_from_hearing_profile(
+            profile, sample_rate=48000, max_filters=4, target_path=csv
+        )
+        assert isinstance(left_bands, list)
+        assert report["hearing_compensation_applied"] is True
