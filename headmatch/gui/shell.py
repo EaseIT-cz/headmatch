@@ -251,18 +251,8 @@ class HeadMatchGuiApp:
         self.input_target_var.set(self._resolve_device_display(selection.selected_capture, self.input_target_options))
 
     def _configure_theme_defaults(self) -> None:
-        style_factory = getattr(self._ttk, "Style", None)
-        if style_factory is None:
-            return
-        styles = style_factory(self.root)
-        try:
-            current_theme = styles.theme_use()
-        except Exception:
-            current_theme = None
-        if current_theme:
-            styles.theme_use(current_theme)
-        styles.configure("Title.TLabel", font=("TkDefaultFont", 14, "bold"))
-        styles.configure("Heading.TLabel", font=("TkDefaultFont", 10, "bold"))
+        from .theme import apply_theme
+        apply_theme(self._ttk, self.root)
 
     def _build_shell(self) -> None:
         ttk = self._ttk
@@ -631,7 +621,7 @@ class HeadMatchGuiApp:
 
         btn_frame = ttk.Frame(self.content)
         btn_frame.grid(row=2, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Generate EQ Preset Now", command=_generate_now).grid(
+        ttk.Button(btn_frame, text="Generate EQ Preset Now", command=_generate_now, style="Accent.TButton").grid(
             row=0, column=0, padx=(0, 8)
         )
         ttk.Button(

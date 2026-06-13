@@ -137,7 +137,7 @@ def render_hearing_test(
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=3, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Start Test", command=_begin_left).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Start Test", command=_begin_left, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Cancel", command=on_cancel).grid(row=0, column=1)
 
     def _begin_left():
@@ -164,7 +164,7 @@ def render_hearing_test(
             text=f"Cover or plug your {cover} ear. Click Ready when set.",
             wraplength=560,
         ).grid(row=1, column=0, sticky="w", pady=(0, 16))
-        ttk.Button(frame, text="Ready — Start", command=callback).grid(row=2, column=0, sticky="w")
+        ttk.Button(frame, text="Ready — Start", command=callback, style="Accent.TButton").grid(row=2, column=0, sticky="w")
         ttk.Button(frame, text="Stop Test", command=_stop_test).grid(row=3, column=0, sticky="w", pady=(8, 0))
 
     # ── test loop ─────────────────────────────────────────────────────────────
@@ -406,7 +406,7 @@ def render_hearing_test(
             save_hearing_profile(profile)
             on_cancel()
 
-        ttk.Button(btn_frame, text="Save & Use for EQ", command=_save_and_apply).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Save & Use for EQ", command=_save_and_apply, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Save Without Applying", command=_save_only).grid(row=0, column=1, padx=(0, 8))
         ttk.Button(btn_frame, text="Discard", command=on_cancel).grid(row=0, column=2)
 
