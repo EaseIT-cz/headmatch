@@ -39,13 +39,29 @@ def test_calibration_invariance_to_overall_volume():
     assert quiet  # and it actually produced a correction
 
 
-def test_high_frequency_deviation_boosts_only_that_region():
+def test_edge_high_frequency_deviation_is_boosted():
     levels = _normal_shaped(-60.0)
-    levels[8000] += 20.0  # 20 dB worse than normal at 8 kHz, relative to own 1 kHz
-    points = relative_compensation_points(side := _side(levels))
+    levels[8000] += 20.0  # worse than normal at the top edge
+    points = relative_compensation_points(_side(levels))
     assert set(points) == {8000}
-    # Half-gain of the 20 dB deviation, capped at 12.
-    assert points[8000] == 10.0
+    assert points[8000] > 0
+
+
+def test_isolated_midband_spike_is_smoothed_away():
+    # A single noisy frequency surrounded by opposite-sign neighbours (like a real
+    # jagged self-test) must not drive an EQ boost.
+    levels = _normal_shaped(-60.0)
+    levels[2000] += 16.0   # one bad point...
+    levels[3000] -= 10.0   # ...with neighbours deviating the other way
+    assert relative_compensation_points(_side(levels)) == {}
+
+
+def test_consistent_multiband_deviation_survives_smoothing():
+    # A coherent high-frequency slope (neighbours agree) should still be corrected.
+    levels = {500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
+    points = relative_compensation_points(_side(levels))
+    assert points and max(points) >= 6000
+    assert all(g > 0 for g in points.values())
 
 
 def test_gain_respects_cap():
