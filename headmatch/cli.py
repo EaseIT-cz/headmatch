@@ -611,16 +611,16 @@ def main(argv: list[str] | None = None) -> None:
             profile = run_cli_hearing_test(backend, output_device, sample_rate=args.sample_rate)
             path = save_hearing_profile(profile)
             if getattr(args, "json", False):
-                out = profile.to_dict()
-                out["hearing_summary"] = compute_hearing_summary(profile)
-                print(json.dumps(out, indent=2))
+                profile_json = profile.to_dict()
+                profile_json["hearing_summary"] = compute_hearing_summary(profile)
+                print(json.dumps(profile_json, indent=2))
             else:
                 print(f"\nHearing profile saved to {path}")
-                summary = compute_hearing_summary(profile)
-                if summary["who_grade"] is not None:
+                hearing_summary = compute_hearing_summary(profile)
+                if hearing_summary["who_grade"] is not None:
                     print(
-                        f"Estimated hearing: {summary['who_grade']} "
-                        f"(better-ear average {summary['better_ear_pta_db']:.0f} dB). "
+                        f"Estimated hearing: {hearing_summary['who_grade']} "
+                        f"(better-ear average {hearing_summary['better_ear_pta_db']:.0f} dB). "
                         "Estimate from an uncalibrated self-test — not a medical diagnosis."
                     )
                 if profile.unreliable_ears:

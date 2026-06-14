@@ -120,7 +120,10 @@ NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 # about 30 dB above the expected threshold for a normal-hearing listener.
 
 NORMAL_HEARING_REFERENCE: dict[int, float] = {
-    250:  -45.0,   # 250 Hz: less sensitive than 500 Hz (ISO 7029 median trend)
+    250:  -45.0,   # heuristic dBFS mapping (this whole table is softened, not raw
+                   # RETSPL); ~3 dB less sensitive than 500 Hz, matching the curve's
+                   # own LF compression. Not used by PTA4 (250 is excluded), so it
+                   # only affects the legacy absolute compensation path.
     500:  -48.0,
     1000: -50.0,
     2000: -50.0,
@@ -142,8 +145,11 @@ HEARING_PROFILE_FILENAME = "hearing_profile.json"
 NORMAL_RELATIVE_SHAPE_DB: dict[int, float] = {
     250: 12.5, 500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 8.7, 8000: 12.0,
 }
-# 250 Hz value = ISO 389-8 (HDA200) RETSPL(250) − RETSPL(1000) ≈ 18.0 − 5.5 dB,
-# consistent with the 500 Hz entry's derivation.
+# 250 Hz value verified against ISO 389-8:2004 Table 1 (HDA 200): RETSPL(250) −
+# RETSPL(1000) = 18.0 − 5.5 = 12.5 dB exactly. (Likewise 500/2000/3000/4000/8000
+# match the standard exactly. NOTE: the pre-existing 6000 Hz entry, 8.7, disagrees
+# with ISO 389-8 Table 1, which lists RETSPL(6000)=17.0 → 11.5 dB; left unchanged
+# here as it predates this work and changing it would shift existing EQ output.)
 
 # WHO 2021 grades of hearing loss, keyed by better-ear pure-tone average (dB).
 # Each entry is (exclusive upper bound, label); the last bound is +inf.
@@ -699,7 +705,8 @@ def eq_bands_from_gain_points(
 
     target = [float(points[f]) for f in freqs]
     if sample_rate:
-        gains = solve_band_gains_lsq(freqs, target, sample_rate, freqs, qs, max_gain_db=max_gain_db)
+        freqs_f = [float(f) for f in freqs]
+        gains = solve_band_gains_lsq(freqs_f, target, sample_rate, freqs_f, qs, max_gain_db=max_gain_db)
     else:
         gains = [float(np.clip(g, -max_gain_db, max_gain_db)) for g in target]
 
