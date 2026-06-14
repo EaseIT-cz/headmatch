@@ -94,6 +94,17 @@ NORMAL_HEARING_REFERENCE: dict[int, float] = {
 
 HEARING_PROFILE_FILENAME = "hearing_profile.json"
 
+# Normal threshold shape, relative to 1 kHz, at the audiometric test frequencies.
+# Derived from ISO 389-8:2004 RETSPL (HDA 200 circumaural earphone) — reference
+# threshold-of-hearing levels, i.e. the *threshold* shape appropriate for a
+# threshold-based test (not ISO 226 supra-threshold loudness contours). Subtracting
+# this isolates the listener's deviation from a normal ear's natural frequency
+# response so we don't over-correct the extremes. 6 kHz is log-f interpolated (not
+# in the ISO 389-8 table). See docs/designs/calibration-robust-hearing.md.
+NORMAL_RELATIVE_SHAPE_DB: dict[int, float] = {
+    500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 8.7, 8000: 12.0,
+}
+
 
 # ── Data structures ───────────────────────────────────────────────────────────
 
@@ -295,6 +306,44 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
 
 
 # ── Compensation curve ────────────────────────────────────────────────────────
+
+def relative_compensation_points(
+    side: dict[int, FrequencyThreshold],
+    *,
+    fraction: float = GAIN_FRACTION,
+    deadband_db: float = HEARING_DEADBAND_DB,
+    max_gain_db: float = MAX_COMPENSATION_DB,
+) -> dict[int, float]:
+    """Per-frequency EQ gain (dB) for one ear from a RELATIVE, calibration-invariant
+    reading of its thresholds.
+
+    Each determined threshold is referenced to the ear's own 1 kHz threshold (or the
+    most sensitive determined frequency if 1 kHz is missing), the normal threshold
+    shape (``NORMAL_RELATIVE_SHAPE_DB``) is subtracted to isolate the listener's
+    deviation, and a fraction of any deviation beyond the noise deadband becomes a
+    capped boost. Adding a constant to every threshold (a volume change) leaves the
+    result unchanged — the absolute level cancels.
+    """
+    thr = {
+        f: t.level_dbfs
+        for f, t in side.items()
+        if t is not None and t.determined and t.level_dbfs is not None
+    }
+    if len(thr) < 2:
+        return {}
+    ref = thr.get(1000)
+    if ref is None:
+        ref = min(thr.values())  # most sensitive determined frequency
+
+    points: dict[int, float] = {}
+    for freq_hz, level in thr.items():
+        rel = level - ref  # how much louder than the reference the listener needed
+        dev = rel - NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
+        if dev < deadband_db:
+            continue  # within a normal ear / within self-test noise
+        points[freq_hz] = round(float(np.clip(dev * fraction, 0.0, max_gain_db)), 2)
+    return points
+
 
 def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:
     """Half-gain EQ compensation (dB) at each *determined* audiometric frequency.
