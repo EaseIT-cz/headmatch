@@ -197,6 +197,16 @@ class TestRunHearingFit:
         assert "right_bands" in data
         assert "eq_clipping" in data
 
+    def test_writes_run_summary_discoverable_in_history(self, tmp_path):
+        from headmatch.ab_compare import load_run_summary
+        from headmatch.history import load_recent_runs
+        out = tmp_path / "run"
+        run_hearing_fit(self._profile(loss_db=20.0), out, sample_rate=48000)
+        assert (out / "run_summary.json").exists()
+        summary = load_run_summary(out)  # parses cleanly
+        assert summary.kind in ("fit", "iteration")
+        assert any(r.summary_path.parent == out for r in load_recent_runs(tmp_path))
+
     def test_returns_report_dict(self, tmp_path):
         profile = self._profile()
         result = run_hearing_fit(profile, tmp_path, sample_rate=48000)
