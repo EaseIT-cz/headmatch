@@ -1297,8 +1297,10 @@ def test_show_hearing_followup_generate_button_calls_start_hearing_fit():
         mode_var=DummyVar(value="basic"),
         hearing_target_var=DummyVar(value="Flat (default)"),
         _resolve_hearing_target_path=lambda out: None,
+        _resolve_hearing_flatten=lambda: 0.0,
         show_view=lambda key: None,
-        _start_hearing_fit=lambda p, out, target_path=None: calls.update({"profile": p, "out": out, "target": target_path}),
+        _start_hearing_fit=lambda p, out, target_path=None, flatten=0.0: calls.update(
+            {"profile": p, "out": out, "target": target_path, "flatten": flatten}),
     )
 
     HeadMatchGuiApp._show_hearing_followup(app, profile)

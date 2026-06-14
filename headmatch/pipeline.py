@@ -194,6 +194,7 @@ def fit_from_hearing_profile(
     max_filters: int = 8,
     *,
     filter_budget: FilterBudget | None = None,
+    flatten: float = 0.0,
 ) -> tuple[list[PEQBand], list[PEQBand], dict]:
     """
     Fit PEQ bands from a hearing profile alone — no headphone measurement needed.
@@ -201,6 +202,9 @@ def fit_from_hearing_profile(
     Assumes the headphone has a flat frequency response. The combined EQ target is:
         eq_target(f) = target(f) + hearing_compensation(f)
     where compensation comes from the half-gain rule (Lybarger 1944).
+
+    ``flatten`` (0..1) trades compensate-to-normal (0, default) for
+    flatten-the-perceived-response (1); see ``compute_relative_compensation``.
     """
     from .hearing_test import (
         compute_hearing_summary,
@@ -227,7 +231,7 @@ def fit_from_hearing_profile(
     # Per-ear, calibration-invariant relative compensation (Part B): reference each
     # ear's thresholds to its own 1 kHz and subtract the normal threshold shape.
     # See docs/designs/calibration-robust-hearing.md.
-    left_comp, right_comp = compute_relative_compensation(profile)
+    left_comp, right_comp = compute_relative_compensation(profile, flatten=flatten)
     target_grid = np.interp(np.log10(freqs), np.log10(tfreqs), tvals, left=float(tvals[0]), right=float(tvals[-1]))
     target_is_flat = not bool(np.any(np.abs(tvals) > 0.05))
 
@@ -257,6 +261,7 @@ def fit_from_hearing_profile(
         'generated_by': identity.as_metadata(),
         'mode': 'hearing_only',
         'target': target_resampled.name,
+        'flatten': float(min(1.0, max(0.0, flatten))),
         'predicted_left_rms_error_db': l_rms,
         'predicted_right_rms_error_db': r_rms,
         'predicted_left_max_error_db': l_max,
@@ -332,6 +337,7 @@ def run_hearing_fit(
     max_filters: int = 8,
     *,
     filter_budget: FilterBudget | None = None,
+    flatten: float = 0.0,
 ) -> dict:
     """
     Equipment-free EQ pipeline: hearing profile → ready-to-load EQ preset files.
@@ -354,7 +360,7 @@ def run_hearing_fit(
 
     left_bands, right_bands, report = fit_from_hearing_profile(
         profile, sample_rate, target_path=target_path,
-        max_filters=max_filters, filter_budget=filter_budget,
+        max_filters=max_filters, filter_budget=filter_budget, flatten=flatten,
     )
 
     # Per-channel preamp (preamp_db=None): a channel with no boost is not attenuated,
