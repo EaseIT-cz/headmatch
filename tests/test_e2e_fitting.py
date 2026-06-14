@@ -22,14 +22,24 @@ from headmatch.hearing_test import (
     FrequencyThreshold,
     HearingProfile,
 )
+import json
+
 from headmatch.io_utils import load_fr_csv, write_wav
-from headmatch.pipeline import process_single_measurement, run_hearing_fit
+from headmatch.peq import PEQBand, peq_chain_response_db
+from headmatch.pipeline import (
+    iterative_measure_and_fit,
+    process_single_measurement,
+    run_hearing_fit,
+)
 from headmatch.signals import generate_log_sweep
+from headmatch.targets import clone_target_from_source_target
 
 from tests.test_integration_cli import _predicted_errors, _synthetic_sweep_spec
 
 REPO = Path(__file__).resolve().parent.parent
-HD650_CSV = REPO / "docs" / "examples" / "clone-targets" / "hd650_published.csv"
+CLONE_DIR = REPO / "docs" / "examples" / "clone-targets"
+HD650_CSV = CLONE_DIR / "hd650_published.csv"
+HD800S_CSV = CLONE_DIR / "hd800s_published.csv"
 
 
 def _apply_fr(signal_mono: np.ndarray, freqs_hz: np.ndarray, gains_db: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -45,20 +55,24 @@ def _apply_fr(signal_mono: np.ndarray, freqs_hz: np.ndarray, gains_db: np.ndarra
     return np.fft.irfft(spectrum * (10.0 ** (g_db / 20.0)), n=n)
 
 
-def _build_real_headset_recording(tmp_path: Path, csv_path: Path):
-    spec = _synthetic_sweep_spec()
+def _inject_headset_channels(spec, csv_path: Path):
+    """Synthesise a stereo recording = analysis sweep colored by a real
+    published headphone response, with per-channel latency + noise."""
     stereo, _ = generate_log_sweep(spec)
     freqs, gains = load_fr_csv(csv_path)
-
     left = _apply_fr(stereo[:, 0], freqs, gains, spec.sample_rate)
     right = _apply_fr(stereo[:, 1], freqs, gains, spec.sample_rate)
-    # Small per-channel latency + measurement noise, like a real capture.
     left = np.concatenate([np.zeros(90), left[:-90]]) + 0.00015 * np.random.default_rng(0).standard_normal(len(left))
     right = np.concatenate([np.zeros(120), right[:-120]]) + 0.00015 * np.random.default_rng(1).standard_normal(len(right))
+    return np.column_stack([left, right]), (freqs, gains)
 
+
+def _build_real_headset_recording(tmp_path: Path, csv_path: Path):
+    spec = _synthetic_sweep_spec()
+    recording, curve = _inject_headset_channels(spec, csv_path)
     recording_path = tmp_path / "recording.wav"
-    write_wav(recording_path, np.column_stack([left, right]), spec.sample_rate)
-    return recording_path, spec, (freqs, gains)
+    write_wav(recording_path, recording, spec.sample_rate)
+    return recording_path, spec, curve
 
 
 def _normalize_at_1k(freqs: np.ndarray, values: np.ndarray) -> np.ndarray:
@@ -89,6 +103,76 @@ def test_offline_fit_e2e_recovers_real_headset_and_corrects_it(tmp_path):
     assert errs["left_after"] < errs["left_before"]
     assert errs["right_after"] < errs["right_before"]
     assert "left_bands" in report and report["left_bands"]
+
+
+def test_clone_target_e2e_makes_hd650_sound_like_hd800s(tmp_path):
+    # End-to-end clone workflow on real published curves: a clone target built
+    # from HD 650 -> HD 800S, applied as a relative target while fitting a
+    # synthesised HD 650 recording, should correct the HD 650 toward the HD 800S.
+    clone_csv = tmp_path / "hd650_to_hd800s.csv"
+    clone_target_from_source_target(HD650_CSV, HD800S_CSV, clone_csv)
+
+    recording, spec, _ = _build_real_headset_recording(tmp_path, HD650_CSV)
+    out = tmp_path / "clone_fit"
+    process_single_measurement(recording, out, spec, target_path=clone_csv)
+
+    freqs, left = load_fr_csv(out / "measurement_left.csv")
+    report = json.loads((out / "fit_report.json").read_text())
+    bands = [PEQBand(**b) for b in report["left_bands"]]
+    corrected = left + peq_chain_response_db(freqs, spec.sample_rate, bands)
+
+    f8, g8 = load_fr_csv(HD800S_CSV)
+    hd800s = np.interp(np.log10(freqs), np.log10(f8), g8, left=g8[0], right=g8[-1])
+
+    band = (freqs >= 120) & (freqs <= 7000)
+    rms = float(np.sqrt(np.mean(
+        (_normalize_at_1k(freqs, corrected)[band] - _normalize_at_1k(freqs, hd800s)[band]) ** 2
+    )))
+    assert rms < 4.0, f"cloned HD650 deviates {rms:.2f} dB RMS from HD800S target"
+
+
+def _mock_capture_with(csv_path: Path):
+    """Return a run_pipewire_measurement replacement that writes a synthetic
+    recording (real headset response injected) instead of capturing hardware."""
+    def _fake(spec, paths, _device):
+        recording, _ = _inject_headset_channels(spec, csv_path)
+        write_wav(paths.recording_wav, recording, spec.sample_rate)
+        return paths.recording_wav
+    return _fake
+
+
+def test_iterative_measure_and_fit_e2e_average_mode(monkeypatch, tmp_path):
+    monkeypatch.setattr("headmatch.pipeline.run_pipewire_measurement", _mock_capture_with(HD650_CSV))
+    spec = _synthetic_sweep_spec()
+
+    summaries = iterative_measure_and_fit(
+        tmp_path, spec, target_path=None, output_target=None, input_target=None,
+        iterations=2, iteration_mode="average",
+    )
+
+    assert summaries
+    for name in ("measurement_left.csv", "equalizer_apo.txt", "fit_report.json", "target_curve.csv"):
+        assert (tmp_path / name).exists(), f"missing {name}"
+    errs = _predicted_errors(tmp_path, spec.sample_rate)
+    assert errs["left_after"] < errs["left_before"]
+    assert errs["right_after"] < errs["right_before"]
+
+
+def test_iterative_measure_and_fit_e2e_independent_mode(monkeypatch, tmp_path):
+    monkeypatch.setattr("headmatch.pipeline.run_pipewire_measurement", _mock_capture_with(HD650_CSV))
+    spec = _synthetic_sweep_spec()
+
+    summaries = iterative_measure_and_fit(
+        tmp_path, spec, target_path=None, output_target=None, input_target=None,
+        iterations=2, iteration_mode="independent",
+    )
+
+    # One summary + artifact folder per iteration.
+    assert len(summaries) == 2
+    for i in (1, 2):
+        iter_dir = tmp_path / f"iter_{i:02d}"
+        assert (iter_dir / "equalizer_apo.txt").exists()
+        assert (iter_dir / "fit_report.json").exists()
 
 
 # A representative middle-aged (presbycusis) audiogram: gentle low-frequency
