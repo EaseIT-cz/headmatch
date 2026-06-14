@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 APP_NAME = 'headmatch'
 APP_DISPLAY_NAME = 'HeadMatch'
-_VERSION = '0.8.3'
+_VERSION = '0.8.4'
 
 
 @dataclass(frozen=True)

@@ -46,9 +46,9 @@ only needs headphones.
 
 ## Hearing test (equipment-free EQ)
 
-The hearing test plays pure tones and asks you to click **"I hear it"**. From your responses
-it builds a personalised EQ — **no measurement microphone required**, so it works on any
-machine that can play sound.
+The hearing test plays short **bursts of pure tones** and asks you to click **"I hear it"**.
+From your responses it builds a personalised EQ — **no measurement microphone required**, so
+it works on any machine that can play sound.
 
 **Run it:**
 
@@ -59,21 +59,30 @@ machine that can play sound.
   headmatch hearing-test            # run the test and save your hearing profile
   headmatch hearing-fit --out-dir out/hearing_fit   # generate an EQ from the saved profile
   headmatch hearing-test --fit --out-dir out/hearing_fit   # do both in one go
+  headmatch hearing-test --extended-hf   # also test 10/12.5/16 kHz (shapes the "air band")
+  headmatch hearing-fit --out-dir out/hearing_fit --flatten 0.4   # lift the high-frequency air band
   ```
 
 In the GUI you can **reuse a saved profile** ("Use Saved Profile") to regenerate an EQ
 without re-testing, and in **Advanced mode** layer a tonal **target curve** (Harman / free
-field / diffuse field / custom CSV) on top of the hearing correction.
+field / diffuse field / custom CSV) on top of the hearing correction and choose an
+**air-band shaping** strength.
 
 **How it works (and its limits):**
 
-- Each ear is measured **independently** and referenced to your own 1 kHz, so the result is
-  **calibration-invariant** — your volume knob doesn't decide the outcome — and captures real
-  **left/right differences**.
+- Tones play as a **random short pulse train** so you can tell a real tone from imagination;
+  **silent catch trials** and **jittered timing** catch false responses and flag an
+  unreliable ear.
+- Each ear is measured **independently** across **250 Hz – 8 kHz** (optionally up to
+  **16 kHz**) and referenced to your own 1 kHz, so the result is **calibration-invariant** —
+  your volume knob doesn't decide the outcome — and captures real **left/right differences**.
 - The test repeats only the frequencies that look deviant (**adaptive**, so a clean ear
   finishes fast), and **rejects measurement noise** rather than correcting it.
-- It runs a **volume check** (you should *not* hear the faint tone) and an **L/R channel
-  check** before starting.
+- It runs a **volume check** and an **L/R channel check** before starting, and reports a
+  plain-language **hearing summary** (a pure-tone average and WHO grade — an estimate, not a
+  diagnosis).
+- By default it corrects only where you're **worse than a normal ear**; **`--flatten`** (0–1)
+  lets you also lift the natural high-frequency rolloff to shape the "air band".
 
 > **This is a personalisation aid, not a clinical audiogram.** It's uncalibrated and measures
 > your perceived response *through your headphones*. For near-normal hearing it will
