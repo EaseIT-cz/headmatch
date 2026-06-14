@@ -78,9 +78,10 @@ def test_reference_frequency_never_self_compensates():
 
 
 def test_lower_deadband_corrects_moderate_consistent_deviation():
-    # A consistent, moderate HF slope that the old 10 dB deadband ignored is now
-    # corrected with the lowered deadband (noise is handled by smoothing).
-    levels = {500: -60, 1000: -60, 2000: -57, 3000: -54, 4000: -51, 6000: -48, 8000: -45}
+    # A consistent, moderate HF slope whose per-frequency deviations all stay below
+    # the old 10 dB deadband (here at most ~9 dB beyond the ISO 389-8 normal shape)
+    # is now corrected with the lowered relative deadband (noise handled by smoothing).
+    levels = {500: -60, 1000: -60, 2000: -58, 3000: -54, 4000: -50, 6000: -44, 8000: -41}
     assert relative_compensation_points(_side(levels))  # non-empty
 
 

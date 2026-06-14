@@ -57,11 +57,12 @@ NORMAL_RELATIVE_SHAPE_DB[250]   # provisional ≈ +11.0  dB relative to 1 kHz
 >   (to within ~0.5 dB). It is **not** used by PTA4 (250 Hz is excluded), so it
 >   only affects the legacy absolute-compensation path.
 >
-> **Incidental finding (pre-existing, NOT changed here):** `NORMAL_RELATIVE_SHAPE_DB[6000]`
-> is 8.7 in the code, but ISO 389-8 Table 1 lists RETSPL(6000) = 17.0 → 11.5 dB.
-> The code comment incorrectly claims 6 kHz is absent from the table. Left as-is
-> because it predates this work and changing it would shift existing EQ output;
-> worth a follow-up.
+> **Incidental fix (pre-existing bug, corrected here):** `NORMAL_RELATIVE_SHAPE_DB[6000]`
+> was 8.7, but ISO 389-8 Table 1 lists RETSPL(6000) = 17.0 → 11.5 dB (the old code
+> comment wrongly claimed 6 kHz was absent from the table). Corrected to 11.5. The
+> higher normal-shape value means a gentle HF slope at 6 kHz is correctly treated as
+> mostly the ear's natural rise, yielding slightly less 6 kHz boost; one relative-
+> compensation test fixture was re-calibrated to a genuine moderate deviation.
 
 **Decoupling note:** 250 Hz is *not* used by PTA4 (which is 500/1k/2k/4k), so
 Parts A and B stay independent. 250 Hz participates in the EQ compensation curve
