@@ -581,18 +581,20 @@ def relative_compensation_points(
     fraction: float = GAIN_FRACTION,
     deadband_db: float = RELATIVE_DEADBAND_DB,
     max_gain_db: float = MAX_COMPENSATION_DB,
+    flatten: float = 0.0,
 ) -> dict[int, float]:
     """Per-frequency EQ gain (dB) for one ear from a RELATIVE, calibration-invariant
     reading of its thresholds.
 
     Each determined threshold is referenced to the ear's own 1 kHz threshold (or the
-    most sensitive determined frequency if 1 kHz is missing), the normal threshold
-    shape (``NORMAL_RELATIVE_SHAPE_DB``) is subtracted to isolate the listener's
-    deviation, and a fraction of any deviation beyond the noise deadband becomes a
-    capped boost. Adding a constant to every threshold (a volume change) leaves the
-    result unchanged — the absolute level cancels.
+    most sensitive determined frequency if 1 kHz is missing), a fraction of the
+    normal threshold shape (``NORMAL_RELATIVE_SHAPE_DB``, scaled by ``1 - flatten``)
+    is subtracted to isolate the deviation, and a fraction of any deviation beyond
+    the noise deadband becomes a capped boost. ``flatten`` (0..1) trades
+    compensate-to-normal (0) for flatten-the-perceived-response (1). Adding a
+    constant to every threshold (a volume change) leaves the result unchanged.
     """
-    return _smooth_and_gate(_ear_deviations(side), fraction, deadband_db, max_gain_db)
+    return _smooth_and_gate(_ear_deviations(side, flatten), fraction, deadband_db, max_gain_db)
 
 
 def compute_relative_compensation(
@@ -601,8 +603,12 @@ def compute_relative_compensation(
     fraction: float = GAIN_FRACTION,
     deadband_db: float = RELATIVE_DEADBAND_DB,
     max_gain_db: float = MAX_COMPENSATION_DB,
+    flatten: float = 0.0,
 ) -> tuple[dict[int, float], dict[int, float]]:
-    """Per-ear EQ gains using per-point uncertainty (from repeated passes):
+    """Per-ear EQ gains using per-point uncertainty (from repeated passes).
+
+    ``flatten`` (0..1) trades compensate-to-normal (0, default) for
+    flatten-the-perceived-response (1); see ``_ear_deviations``.
 
     - A1 variance gate: a correction must exceed the deadband AND the point's own
       (smoothed) measured noise — so noisy points are not corrected.
@@ -612,8 +618,8 @@ def compute_relative_compensation(
     - C4 uncertainty-weighted smoothing: neighbouring frequencies are blended with
       inverse-variance weights, so reliable points dominate noisy ones.
     """
-    left = _ear_deviations(profile.left)
-    right = _ear_deviations(profile.right)
+    left = _ear_deviations(profile.left, flatten)
+    right = _ear_deviations(profile.right, flatten)
 
     pooled_left: dict[int, tuple[float, float]] = {}
     pooled_right: dict[int, tuple[float, float]] = {}
@@ -639,9 +645,18 @@ def compute_relative_compensation(
     )
 
 
-def _ear_deviations(side: dict[int, FrequencyThreshold]) -> dict[int, tuple[float, float]]:
+def _ear_deviations(side: dict[int, FrequencyThreshold],
+                    flatten: float = 0.0) -> dict[int, tuple[float, float]]:
     """{freq: (deviation_db, noise_db)} for one ear — relative to its own 1 kHz,
-    normal shape subtracted, with the combined measurement noise."""
+    with the combined measurement noise.
+
+    ``flatten`` (0..1) controls how much of the natural ISO-normal threshold shape
+    is *also* corrected: at 0 only the listener's excess over a normal ear is a
+    deviation (compensate-to-normal); at 1 the full deviation from a flat response
+    relative to 1 kHz is corrected (flatten the perceived response). In between it
+    interpolates, so a fraction of the natural rolloff is lifted.
+    """
+    flatten = min(1.0, max(0.0, flatten))
     determined = {
         f: (t.level_dbfs, getattr(t, 'spread_db', 0.0) or 0.0)
         for f, t in side.items()
@@ -657,7 +672,7 @@ def _ear_deviations(side: dict[int, FrequencyThreshold]) -> dict[int, tuple[floa
 
     out: dict[int, tuple[float, float]] = {}
     for freq_hz, (level, spread) in determined.items():
-        dev = (level - ref_level) - NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
+        dev = (level - ref_level) - (1.0 - flatten) * NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
         noise = math.sqrt(spread ** 2 + NOISE_FLOOR_DB ** 2 + ref_noise_sq)
         out[freq_hz] = (dev, noise)
     return out
@@ -685,6 +700,8 @@ def _smooth_and_gate(dn: dict[int, tuple[float, float]], fraction, deadband_db, 
     for i, fi in enumerate(freqs):
         num = 0.0
         den = 0.0
+        has_low = False
+        has_high = False
         for j, fj in enumerate(freqs):
             oct_dist = abs(math.log2(fi / fj))
             if oct_dist > 1.5:
@@ -692,8 +709,24 @@ def _smooth_and_gate(dn: dict[int, tuple[float, float]], fraction, deadband_db, 
             w = math.exp(-(oct_dist ** 2) / two_sigma_sq) / (noises[j] ** 2)
             num += w * devs[j]
             den += w
-        sdev.append(num / den if den else devs[i])
-        snoise.append((1.0 / den) ** 0.5 if den else noises[i])
+            if fj < fi:
+                has_low = True
+            elif fj > fi:
+                has_high = True
+        # Smoothing rejects isolated spikes — a point that disagrees with neighbours
+        # on BOTH sides is likely noise. That test is undefined at a spectral edge:
+        # the top/bottom determined frequency has neighbours on only one side, so a
+        # genuine edge deviation (e.g. an EHF rolloff cliff whose next frequency up
+        # was undetermined) would be wrongly dragged toward its one-sided neighbours
+        # and gated out. An edge point therefore keeps its own measured value; the
+        # variance gate below (and repeated measurement passes for deviant points)
+        # still guard against a noisy reading.
+        if has_low and has_high:
+            sdev.append(num / den if den else devs[i])
+            snoise.append((1.0 / den) ** 0.5 if den else noises[i])
+        else:
+            sdev.append(devs[i])
+            snoise.append(noises[i])
 
     points: dict[int, float] = {}
     for freq_hz, d, n in zip(freqs, sdev, snoise):

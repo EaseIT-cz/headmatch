@@ -110,6 +110,16 @@ def build_doctor_report(config_path: Path, config: FrontendConfig) -> str:
 
 _LEGACY_OUTPUT_DIRS = {"out/session_01", "out\\session_01"}
 
+# Advanced-mode "air-band shaping" presets -> flatten knob (0..1). 0 compensates
+# only where the listener is worse than a normal ear; higher values correct more
+# of the natural HF rolloff (1.0 = flatten the perceived response toward 1 kHz).
+_HEARING_FLATTEN_PRESETS: dict[str, float] = {
+    "Off — compensate to normal": 0.0,
+    "Gentle air-band lift": 0.35,
+    "Medium air-band lift": 0.6,
+    "Full flatten (to 1 kHz)": 1.0,
+}
+
 
 def _resolve_default_output_dir(saved: str | None) -> str:
     """Return a sensible default output dir, ignoring legacy defaults."""
@@ -215,6 +225,7 @@ class HeadMatchGuiApp:
         self.hearing_profile = None  # HearingProfile | None; set after a successful test
         self._force_new_hearing_test = False  # skip the saved-profile landing once
         self.hearing_target_var = tk.StringVar(master=root, value="Flat (default)")  # advanced-mode tonal target
+        self.hearing_flatten_var = tk.StringVar(master=root, value="Off — compensate to normal")  # advanced-mode flatten knob
         self.basic_progress_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
@@ -683,13 +694,29 @@ class HeadMatchGuiApp:
             ).grid(row=0, column=1, sticky="w")
             ttk.Button(target_frame, text="Browse…", command=self.choose_target_csv).grid(row=0, column=2, padx=(8, 0))
 
+            flatten_frame = ttk.Frame(self.content)
+            flatten_frame.grid(row=3, column=0, sticky="w", pady=(0, 12))
+            ttk.Label(flatten_frame, text="Air-band shaping:").grid(row=0, column=0, sticky="w", padx=(0, 8))
+            ttk.Combobox(
+                flatten_frame, textvariable=self.hearing_flatten_var,
+                values=list(_HEARING_FLATTEN_PRESETS), state="readonly", width=28,
+            ).grid(row=0, column=1, sticky="w")
+            ttk.Label(
+                self.content,
+                text=("Higher settings lift your high-frequency 'air band' by correcting more of "
+                      "the natural rolloff (not just where you're worse than a normal ear). Full "
+                      "flatten also lifts bass."),
+                wraplength=560, justify="left",
+            ).grid(row=4, column=0, sticky="w", pady=(0, 12))
+
         def _generate_now():
             from pathlib import Path as _Path
             out_dir = str(_Path(self.state.default_output_dir).expanduser().parent / "hearing_fit")
-            self._start_hearing_fit(profile, out_dir, target_path=self._resolve_hearing_target_path(out_dir))
+            self._start_hearing_fit(profile, out_dir, target_path=self._resolve_hearing_target_path(out_dir),
+                                    flatten=self._resolve_hearing_flatten())
 
         btn_frame = ttk.Frame(self.content)
-        btn_frame.grid(row=3, column=0, sticky="w")
+        btn_frame.grid(row=5, column=0, sticky="w")
         ttk.Button(btn_frame, text="Generate EQ Preset Now", command=_generate_now, style="Accent.TButton").grid(
             row=0, column=0, padx=(0, 8)
         )
@@ -697,6 +724,12 @@ class HeadMatchGuiApp:
             btn_frame, text="Run a Measurement",
             command=lambda: self.show_view("measure-online"),
         ).grid(row=0, column=1)
+
+    def _resolve_hearing_flatten(self) -> float:
+        """Map the advanced-mode air-band shaping selection to a flatten value (0..1)."""
+        if self.mode_var.get() != "advanced":
+            return 0.0
+        return _HEARING_FLATTEN_PRESETS.get(self.hearing_flatten_var.get().strip(), 0.0)
 
     def _resolve_hearing_target_path(self, out_dir: str) -> str | None:
         """Resolve the advanced-mode tonal target selection to a CSV path.
@@ -718,13 +751,14 @@ class HeadMatchGuiApp:
             return None
         return str(materialize_builtin_target(name, out_dir))
 
-    def _start_hearing_fit(self, profile, out_dir: str, target_path: str | None = None) -> None:
+    def _start_hearing_fit(self, profile, out_dir: str, target_path: str | None = None,
+                           flatten: float = 0.0) -> None:
         from ..pipeline import run_hearing_fit
         self._run_background_task(
             task_name="hearing-fit",
             progress_title="Generating EQ preset from hearing profile",
             progress_body=f"Fitting EQ bands to your hearing compensation curve. Writing output to {out_dir}.",
-            worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate, target_path=target_path),
+            worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate, target_path=target_path, flatten=flatten),
             on_success=lambda result: self._set_completion(
                 title="Hearing EQ preset ready",
                 summary=f"EQ preset written to {out_dir}.",
