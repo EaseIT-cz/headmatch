@@ -37,7 +37,7 @@ def _make_profile(loss_db: float = 0.0) -> HearingProfile:
 def _sloping_profile() -> HearingProfile:
     # Progressively worse than 1 kHz at high frequency, beyond the normal shape ->
     # a relative high-frequency deviation that should be compensated.
-    levels = {500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
+    levels = {250: -60, 500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
     side = {f: FrequencyThreshold(f, levels[f], 3, True) for f in TEST_FREQUENCIES}
     return HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
 
@@ -200,7 +200,7 @@ class TestRunHearingFit:
         # A channel with no boost must not get a preamp (no L/R imbalance).
         from headmatch.hearing_test import NORMAL_RELATIVE_SHAPE_DB
         left = {f: FrequencyThreshold(f, -60.0 + NORMAL_RELATIVE_SHAPE_DB[f], 3, True) for f in TEST_FREQUENCIES}
-        right_levels = {500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
+        right_levels = {250: -60, 500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
         right = {f: FrequencyThreshold(f, right_levels[f], 3, True) for f in TEST_FREQUENCIES}
         profile = HearingProfile(left=left, right=right, tested_at="t", asymmetric_freqs=[])
         run_hearing_fit(profile, tmp_path, sample_rate=48000)

@@ -202,7 +202,11 @@ def fit_from_hearing_profile(
         eq_target(f) = target(f) + hearing_compensation(f)
     where compensation comes from the half-gain rule (Lybarger 1944).
     """
-    from .hearing_test import compute_relative_compensation, eq_bands_from_gain_points
+    from .hearing_test import (
+        compute_hearing_summary,
+        compute_relative_compensation,
+        eq_bands_from_gain_points,
+    )
     from .signals import geometric_log_grid
 
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
@@ -261,7 +265,10 @@ def fit_from_hearing_profile(
         'hearing_profile_summary': {
             'tested_at': profile.tested_at,
             'asymmetric_freqs': profile.asymmetric_freqs,
+            'catch_stats': getattr(profile, 'catch_stats', None),
+            'unreliable_ears': getattr(profile, 'unreliable_ears', None),
         },
+        'hearing_summary': compute_hearing_summary(profile),
         'filter_budget': {
             'family': filter_budget.family,
             'max_filters': filter_budget.max_filters,

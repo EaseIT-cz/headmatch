@@ -42,8 +42,14 @@ no proprietary algorithm is used.
 Frequencies follow **ISO 8253-1** (Pure tone audiometry — basic pure-tone
 air and bone conduction threshold audiometry; public international standard):
 
-- **Test frequencies**: 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz
-- **Test order**: 1000 → 2000 → 3000 → 4000 → 6000 → 8000 → 1000 → 500 Hz
+- **Test frequencies**: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz
+- **Test order**: 1000 → 2000 → 3000 → 4000 → 6000 → 8000 → 1000 → 500 → 250 Hz
+
+250 Hz is included for a fuller low-frequency audiogram and low-end EQ coverage;
+it is **not** part of the PTA4 average (§3a). The ceiling stays at 8 kHz: above
+~8 kHz, headphone FR and seat/seal variance dominate the measurement and our
+public reference data (ISO 389-8 HDA200) stops at 8 kHz, so extending would
+equalize headphone coloration rather than hearing.
 
 The 1 kHz frequency is visited twice to provide an inter-run reliability check.
 Both measurements are reconciled by using only the first visit in the threshold
@@ -82,6 +88,28 @@ NORMAL_HEARING_REFERENCE = {
 **Reference:**
 > ISO 7029:2017. *Acoustics — Statistical distribution of hearing thresholds
 > related to age and gender.* International Organization for Standardization.
+
+### 2.4 False-Positive Control (Catch Trials + Jitter)
+
+Self-administered tests are prone to *false-positive* ("phantom") responses —
+the listener expects a tone and responds without actually hearing one. Two
+standard countermeasures are applied at the **runner** level (the
+`ThresholdEngine` staircase stays pure detection logic):
+
+1. **Silent catch trials** — before a real tone, with probability
+   `CATCH_TRIAL_PROB` (0.2, capped at `MAX_CATCH_TRIALS_PER_FREQ`=4 per
+   frequency), a *silent* buffer is presented with the same response window. A
+   response to silence is a measured false positive. Catch trials do **not**
+   advance the staircase.
+2. **Timing jitter** — the pre-tone interval is drawn uniformly from
+   `[JITTER_MIN_S, JITTER_MAX_S]` = [0.5, 2.0] s so the listener cannot
+   anticipate a predictable rhythm.
+
+Per ear, `catch` and `false_positive` counts are accumulated. An ear is flagged
+**unreliable** when `is_unreliable(catch, fp)` — at least 3 catch trials and a
+false-positive rate above `FP_RATE_WARN` (1/3). Flagged results are surfaced to
+the user with a retest suggestion but are **not** auto-discarded. The counts are
+persisted on the profile (`catch_stats`, `unreliable_ears`).
 
 ---
 
@@ -140,6 +168,30 @@ curve on the analysis frequency grid:
    function. This eliminates sharp EQ peaks that could arise from noisy threshold
    estimates at individual frequencies.
 3. Gain values are clamped to [0, MAX_COMPENSATION_DB] after smoothing.
+
+---
+
+## 3a. Hearing Summary (PTA4 + WHO Grade)
+
+For a legible, user-facing result, `compute_hearing_summary(profile)` derives a
+**pure-tone average** and a **WHO 2021 hearing grade**.
+
+```
+est_HL(f)  = threshold_dbfs(f) − NORMAL_HEARING_REFERENCE[f]   # positive = worse
+PTA4(ear)  = mean( est_HL(f) for f in {500, 1000, 2000, 4000} )
+```
+
+- PTA4 requires ≥ 3 of the 4 frequencies determined, else `None`.
+- The **better-ear** PTA (`min(left, right)`) selects the WHO grade band
+  (`WHO_GRADE_BANDS`): < 20 No impairment, 20–35 Mild, 35–50 Moderate, 50–65
+  Moderately severe, 65–80 Severe, 80–95 Profound, ≥ 95 Complete.
+
+This is an **estimate** — our scale is uncalibrated relative dBFS, not clinical
+dB HL — and is always surfaced with a "not a medical diagnosis" disclaimer. The
+summary appears in `hearing_fit_report.json`, the CLI output, and the GUI
+results screen.
+
+**Reference:** World Health Organization (2021). *World Report on Hearing.*
 
 ---
 

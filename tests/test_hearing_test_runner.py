@@ -44,6 +44,8 @@ def _patch_fast(monkeypatch):
     monkeypatch.setattr(ht_mod, "ThresholdEngine", _FakeEngine)
     monkeypatch.setattr(ht_mod, "RESPONSE_WINDOW_S", 0.01)
     monkeypatch.setattr(ht_mod, "generate_tone", lambda *a, **k: [0.0])
+    monkeypatch.setattr(ht_mod, "generate_silence", lambda *a, **k: [0.0])
+    monkeypatch.setattr(ht_mod.time, "sleep", lambda *_: None)  # skip jitter delay
     monkeypatch.setattr("builtins.input", lambda *a, **k: "")
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
 

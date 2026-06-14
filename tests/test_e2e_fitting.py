@@ -177,7 +177,7 @@ def test_iterative_measure_and_fit_e2e_independent_mode(monkeypatch, tmp_path):
 
 # A representative middle-aged (presbycusis) audiogram: gentle low-frequency
 # loss sloping to a moderate high-frequency loss (dB above the normal reference).
-_PRESBYCUSIS_LOSS_DB = {500: 5, 1000: 8, 2000: 13, 3000: 22, 4000: 32, 6000: 40, 8000: 48}
+_PRESBYCUSIS_LOSS_DB = {250: 4, 500: 5, 1000: 8, 2000: 13, 3000: 22, 4000: 32, 6000: 40, 8000: 48}
 
 
 def _presbycusis_profile() -> HearingProfile:

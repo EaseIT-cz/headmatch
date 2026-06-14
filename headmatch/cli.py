@@ -169,7 +169,7 @@ def build_parser(config) -> argparse.ArgumentParser:
         "hearing-test",
         help="Run a pure-tone hearing threshold test and save a personalised hearing profile.",
         description=(
-            "Sweeps 7 frequencies per ear using the Modified Hughson-Westlake procedure "
+            "Sweeps 8 frequencies per ear using the Modified Hughson-Westlake procedure "
             "(Carhart & Jerger 1959). Saves a hearing profile to the config directory. "
             "Use 'headmatch fit --with-hearing-compensation' to apply the profile to a fit."
         ),
@@ -599,6 +599,7 @@ def main(argv: list[str] | None = None) -> None:
             analyze_measurement(args.recording, spec_from_args(args), out_dir=args.out_dir)
         elif args.cmd == "hearing-test":
             from .hearing_test import (
+                compute_hearing_summary,
                 load_hearing_profile,
                 run_cli_hearing_test,
                 save_hearing_profile,
@@ -610,9 +611,22 @@ def main(argv: list[str] | None = None) -> None:
             profile = run_cli_hearing_test(backend, output_device, sample_rate=args.sample_rate)
             path = save_hearing_profile(profile)
             if getattr(args, "json", False):
-                print(json.dumps(profile.to_dict(), indent=2))
+                out = profile.to_dict()
+                out["hearing_summary"] = compute_hearing_summary(profile)
+                print(json.dumps(out, indent=2))
             else:
                 print(f"\nHearing profile saved to {path}")
+                summary = compute_hearing_summary(profile)
+                if summary["who_grade"] is not None:
+                    print(
+                        f"Estimated hearing: {summary['who_grade']} "
+                        f"(better-ear average {summary['better_ear_pta_db']:.0f} dB). "
+                        "Estimate from an uncalibrated self-test — not a medical diagnosis."
+                    )
+                if profile.unreliable_ears:
+                    ears = ", ".join(profile.unreliable_ears)
+                    print(f"Warning: high false-positive rate on the {ears} ear(s) — results may be "
+                          "unreliable; consider retesting in a quiet room.")
                 if profile.asymmetric_freqs:
                     freq_strs = ", ".join(str(f) for f in profile.asymmetric_freqs)
                     print(f"Warning: large L/R difference at {freq_strs} Hz — consider consulting an audiologist.")

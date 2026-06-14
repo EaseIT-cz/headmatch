@@ -130,7 +130,7 @@ def test_lsq_band_gains_realize_target_accounting_for_interaction():
     )
     from headmatch.peq import peq_chain_response_db
 
-    loss = {500: 5, 1000: 8, 2000: 13, 3000: 22, 4000: 32, 6000: 40, 8000: 48}
+    loss = {250: 4, 500: 5, 1000: 8, 2000: 13, 3000: 22, 4000: 32, 6000: 40, 8000: 48}
     side = {f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f] + loss[f], 3, True) for f in TEST_FREQUENCIES}
     profile = HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
     points = compute_compensation_points(profile)

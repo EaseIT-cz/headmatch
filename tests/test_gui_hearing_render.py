@@ -221,8 +221,8 @@ def test_full_flow_timeout_path_reaches_results_and_completes(harness):
     assert len(harness.events["complete"]) == 1
     profile = harness.events["complete"][0]
     assert isinstance(profile, HearingProfile)
-    # Both ears measured across all seven unique frequencies.
-    assert len(profile.left) == 7 and len(profile.right) == 7
+    # Both ears measured across all eight unique frequencies.
+    assert len(profile.left) == 8 and len(profile.right) == 8
 
 
 def test_heard_response_path(harness):
