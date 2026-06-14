@@ -202,11 +202,7 @@ def fit_from_hearing_profile(
         eq_target(f) = target(f) + hearing_compensation(f)
     where compensation comes from the half-gain rule (Lybarger 1944).
     """
-    from .hearing_test import (
-        compute_compensation_curve,
-        compute_compensation_points,
-        eq_bands_from_gain_points,
-    )
+    from .hearing_test import eq_bands_from_gain_points, relative_compensation_points
     from .signals import geometric_log_grid
 
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
@@ -215,45 +211,45 @@ def fit_from_hearing_profile(
     # ~7 measured points, so the EQ is built directly from those (see
     # docs/designs/measurement-resolution-eq.md).
     freqs = geometric_log_grid(20.0, 20000.0, 48)
-    flat = np.zeros(len(freqs))
 
     if target_path:
         target = load_curve(target_path)
     else:
         target = create_flat_target(freqs)
     target_resampled = resample_curve(target, freqs)
-    if target_resampled.semantics == 'relative':
-        target_values = flat + target_resampled.values_db
-    else:
-        target_values = target_resampled.values_db.copy()
-
-    compensation = compute_compensation_curve(profile, freqs)
-    eq_target = target_values + compensation
-
-    # Build the EQ directly from the measured audiometric frequencies: combine
-    # per-frequency hearing compensation with the target sampled at those same
-    # frequencies, then place one peaking filter per point (Q from spacing).
-    comp_points = compute_compensation_points(profile)
-    # Control points = the measured audiometric frequencies (hearing comp) UNION the
-    # target curve's own frequencies where it deviates from neutral. The target is
-    # known independently of the hearing test, so it must apply even when there is
-    # no measurable hearing loss. gain(f) = compensation(f) + target(f).
     tfreqs = np.asarray(target.freqs_hz, dtype=float)
     tvals = np.asarray(target.values_db, dtype=float)
-    control = set(comp_points)
-    control.update(int(round(f)) for f, v in zip(tfreqs, tvals) if abs(v) > 0.05)
-    eq_points = {
-        f: round(comp_points.get(f, 0.0) + float(np.interp(f, tfreqs, tvals)), 2)
-        for f in sorted(control)
-    }
-    bands = eq_bands_from_gain_points(eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
-    left_bands = bands
-    right_bands = list(bands)
 
-    left_pred = flat + peq_chain_response_db(freqs, sample_rate, left_bands)
-    right_pred = flat + peq_chain_response_db(freqs, sample_rate, right_bands)
-    l_rms, l_max = _metrics(freqs, left_pred, eq_target)
-    r_rms, r_max = _metrics(freqs, right_pred, eq_target)
+    # Per-ear, calibration-invariant relative compensation (Part B): reference each
+    # ear's thresholds to its own 1 kHz, subtract the normal threshold shape, then
+    # combine with the (independent) target curve and place one peaking filter per
+    # control point. See docs/designs/calibration-robust-hearing.md.
+    def _combine_with_target(comp_points: dict) -> dict:
+        # Control points = the ear's measured frequencies UNION the target's own
+        # non-neutral frequencies (the target applies even with no hearing deviation).
+        control = set(comp_points)
+        control.update(int(round(f)) for f, v in zip(tfreqs, tvals) if abs(v) > 0.05)
+        return {
+            f: round(comp_points.get(f, 0.0) + float(np.interp(f, tfreqs, tvals)), 2)
+            for f in sorted(control)
+        }
+
+    def _grid_curve(eq_points: dict) -> np.ndarray:
+        if not eq_points:
+            return np.zeros(len(freqs))
+        fs = sorted(eq_points)
+        gs = [eq_points[f] for f in fs]
+        return np.interp(np.log10(freqs), np.log10(fs), gs, left=gs[0], right=gs[-1])
+
+    left_eq_points = _combine_with_target(relative_compensation_points(profile.left))
+    right_eq_points = _combine_with_target(relative_compensation_points(profile.right))
+    left_bands = eq_bands_from_gain_points(left_eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
+    right_bands = eq_bands_from_gain_points(right_eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
+
+    left_pred = peq_chain_response_db(freqs, sample_rate, left_bands)
+    right_pred = peq_chain_response_db(freqs, sample_rate, right_bands)
+    l_rms, l_max = _metrics(freqs, left_pred, _grid_curve(left_eq_points))
+    r_rms, r_max = _metrics(freqs, right_pred, _grid_curve(right_eq_points))
 
     identity = get_app_identity()
     report = {
@@ -277,7 +273,10 @@ def fit_from_hearing_profile(
         },
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
-        'hearing_eq_points': {str(f): g for f, g in eq_points.items()},
+        'hearing_eq_points': {
+            'left': {str(f): g for f, g in left_eq_points.items()},
+            'right': {str(f): g for f, g in right_eq_points.items()},
+        },
     }
     clipping_assessment = assess_eq_clipping(freqs, sample_rate, left_bands, right_bands)
     report['eq_clipping'] = {
