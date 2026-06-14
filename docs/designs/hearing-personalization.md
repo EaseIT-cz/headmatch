@@ -190,17 +190,23 @@ mid/high hearing and a steep top-edge rolloff could get an empty preset.
 ### 3.4 Flatten knob (perceived-response shaping)
 
 `flatten` (0..1) controls how much of the *natural* ISO-normal rolloff is also
-corrected, anchored at the listener's own 1 kHz:
+corrected, **only above the 1 kHz anchor** (air-band shaping — bass is never
+touched, so a listener's typically-normal bass is not boosted):
 
 ```
-dev(f) = (threshold(f) − threshold_1k) − (1 − flatten) · NORMAL_RELATIVE_SHAPE_DB[f]
+shape_coeff(f) = (1 − flatten) if f > 1000 else 1.0
+dev(f) = (threshold(f) − threshold_1k) − shape_coeff(f) · NORMAL_RELATIVE_SHAPE_DB[f]
 ```
 
 - `flatten = 0` (default): compensate-to-normal — boost only where the listener
   is worse than a normal ear.
-- `flatten = 1`: flatten the perceived response toward 1 kHz — lifts the whole
-  rolloff (including the air band, and bass), capped at MAX_COMPENSATION_DB.
+- `flatten = 1`: fully correct the high-frequency rolloff relative to 1 kHz —
+  lifts the air band, capped at MAX_COMPENSATION_DB.
 - In between: dial the air-band lift to taste.
+
+Because the lift only applies above 1 kHz, a profile with no determined
+extended-high frequencies (and at/better-than-normal mid hearing) correctly
+yields little or nothing — you cannot shape an air band you did not measure.
 
 It is purely a **fit-time** parameter (it does not change the test). Exposed as
 `--flatten` on `hearing-test --fit` / `hearing-fit`, and as an advanced-mode

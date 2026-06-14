@@ -704,8 +704,8 @@ class HeadMatchGuiApp:
             ttk.Label(
                 self.content,
                 text=("Higher settings lift your high-frequency 'air band' by correcting more of "
-                      "the natural rolloff (not just where you're worse than a normal ear). Full "
-                      "flatten also lifts bass."),
+                      "the natural rolloff above 1 kHz (not just where you're worse than a normal "
+                      "ear). Bass is left untouched."),
                 wraplength=560, justify="left",
             ).grid(row=4, column=0, sticky="w", pady=(0, 12))
 

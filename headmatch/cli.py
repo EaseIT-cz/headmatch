@@ -180,7 +180,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--fit", action="store_true", help="Generate an EQ preset immediately after the hearing test completes.")
     p.add_argument("--out-dir", default=None, help="Output folder for EQ files when --fit is used. Defaults to ~/Documents/HeadMatch/hearing_fit.")
     p.add_argument("--extended-hf", action="store_true", help="Also test extended high frequencies (10, 12.5, 16 kHz). These are dominated by the headphone's response and fit, so enabling them shapes the 'air band'/coloration, not just hearing.")
-    p.add_argument("--flatten", type=float, default=0.0, metavar="0..1", help="Used with --fit. How much of the natural high-frequency rolloff to also correct: 0 = compensate only where you're worse than a normal ear (default); 1 = flatten your perceived response toward 1 kHz (lifts the air band, and bass). Try 0.3-0.6 to shape the air band.")
+    p.add_argument("--flatten", type=float, default=0.0, metavar="0..1", help="Used with --fit. How much of the natural high-frequency rolloff to also correct: 0 = compensate only where you're worse than a normal ear (default); 1 = fully correct the high-frequency rolloff relative to 1 kHz (lifts the air band; bass is never touched). Try 0.3-0.6 to shape the air band.")
 
     p = sub.add_parser(
         "hearing-fit",
@@ -194,7 +194,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     )
     p.add_argument("--out-dir", required=True, help="Folder to write the EQ preset files.")
     p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV. If omitted, fit toward flat.")
-    p.add_argument("--flatten", type=float, default=0.0, metavar="0..1", help="How much of the natural high-frequency rolloff to also correct: 0 = compensate only where you're worse than a normal ear (default); 1 = flatten your perceived response toward 1 kHz (lifts the air band, and bass). Try 0.3-0.6 to shape the air band.")
+    p.add_argument("--flatten", type=float, default=0.0, metavar="0..1", help="How much of the natural high-frequency rolloff to also correct: 0 = compensate only where you're worse than a normal ear (default); 1 = fully correct the high-frequency rolloff relative to 1 kHz (lifts the air band; bass is never touched). Try 0.3-0.6 to shape the air band.")
     add_filter_budget_args(p, config)
     p.add_argument("--json", action="store_true", help="Print the fit report as JSON.")
 
