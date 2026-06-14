@@ -1,8 +1,9 @@
 # Design: Calibration-robust hearing measurement (0.8.3)
 
-Status: Targets 0.8.3. **Part A (guards) and Part D (basic-nav) shipped; the focused
-literature review for Part B is complete (folded into Part B below); Part B + the A3
-volume pre-check are the remaining implementation.**
+Status: Targets 0.8.3. **Shipped: Part A guards, Part D basic-nav, the focused review
+(folded into Part B), Part B core (per-ear relative compensation), and the A3 pre-checks
+(L/R channel check + volume/floor check). Remaining (optional): user adjustment of the
+proposed correction before export.**
 
 ## Problem
 
@@ -173,11 +174,13 @@ worth doing in 0.8.3.
 
 ## Sequencing
 
-1. ✅ Part A (guards) — honest `determined` + flooring detection (shipped).
+1. ✅ Part A (guards) — honest `determined` + flooring detection.
 2. ✅ Focused review for `normal_rel_shape` + `dev`→gain mapping (folded in above).
-3. Part B (relative-threshold measurement at a fixed reference + ISO 389-8 normal-shape
-   subtraction + fractional/capped/deadbanded mapping + per-ear EQ + user adjustment).
-4. Part C wiring + ✅ Part D basic-nav (shipped) + A3 volume pre-check (with Part B).
+3. ✅ Part B core — per-ear relative compensation (ISO 389-8 normal-shape subtraction,
+   fractional/capped/deadbanded), feeding the measured-resolution EQ realisation.
+4. ✅ Part D basic-nav + A3 pre-checks (L/R channel check + volume/floor check).
+5. ⏳ Optional: user adjustment of the proposed per-region correction before export
+   (the comparison studies all let listeners adjust; deferred enhancement).
 
 ## References
 
