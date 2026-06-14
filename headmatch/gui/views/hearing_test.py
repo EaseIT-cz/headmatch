@@ -8,6 +8,7 @@ from ...hearing_test import (
     ASYMMETRY_WARNING_DB,
     GAIN_FRACTION,
     MAX_COMPENSATION_DB,
+    MEASUREMENT_REPEATS,
     MIN_LEVEL_DBFS,
     NORMAL_HEARING_REFERENCE,
     RESPONSE_WINDOW_S,
@@ -15,6 +16,7 @@ from ...hearing_test import (
     TEST_FREQUENCIES,
     TEST_ORDER,
     FrequencyThreshold,
+    averaged_frequency_threshold,
     HearingProfile,
     ThresholdEngine,
     detect_asymmetric_frequencies,
@@ -292,6 +294,10 @@ def render_hearing_test(
 
         freq_hz = order[idx]
         _state["processed_freqs"].add(freq_hz)
+        # Repeat-measurement state for this frequency (averaged across passes).
+        _state["freq_levels"] = []
+        _state["freq_floored"] = False
+        _state["repeat"] = 0
         _state["engine"] = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
         _show_test_screen(freq_hz, idx)
         _next_tone()
@@ -391,17 +397,24 @@ def render_hearing_test(
     def _on_freq_done():
         engine: ThresholdEngine = _state["engine"]
         freq_hz = engine.freq_hz
-        threshold = engine.threshold
-        result = FrequencyThreshold(
-            freq_hz=freq_hz,
-            level_dbfs=threshold,
-            ascending_runs=engine.ascending_run_count,
-            determined=engine.converged,
-            floored=engine.floored,
-        )
-        _state[_state["ear"]][freq_hz] = result
+        if engine.floored:
+            _state["freq_floored"] = True
+        elif engine.converged and engine.threshold is not None:
+            _state["freq_levels"].append(engine.threshold)
+        _state["repeat"] += 1
 
-        # Advance freq_index past the current entry
+        # Repeat this frequency until we have MEASUREMENT_REPEATS passes (unless
+        # it floored), then average the converged passes.
+        if _state["repeat"] < MEASUREMENT_REPEATS and not _state["freq_floored"]:
+            _state["engine"] = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
+            _next_tone()
+            return
+
+        _state[_state["ear"]][freq_hz] = averaged_frequency_threshold(
+            freq_hz, _state["freq_levels"],
+            floored=_state["freq_floored"],
+            ascending_runs=engine.ascending_run_count,
+        )
         _state["freq_index"] += 1
         _advance_to_next_freq()
 

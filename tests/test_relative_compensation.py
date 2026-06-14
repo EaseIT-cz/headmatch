@@ -76,6 +76,13 @@ def test_reference_frequency_never_self_compensates():
     assert 1000 not in points
 
 
+def test_lower_deadband_corrects_moderate_consistent_deviation():
+    # A consistent, moderate HF slope that the old 10 dB deadband ignored is now
+    # corrected with the lowered deadband (noise is handled by smoothing).
+    levels = {500: -60, 1000: -60, 2000: -57, 3000: -54, 4000: -51, 6000: -48, 8000: -45}
+    assert relative_compensation_points(_side(levels))  # non-empty
+
+
 def test_too_few_determined_yields_nothing():
     side = {1000: FrequencyThreshold(1000, -60.0, 3, True)}
     assert relative_compensation_points(side) == {}

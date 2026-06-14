@@ -66,6 +66,14 @@ MAX_COMPENSATION_DB: float = 12.0
 # losses (Schwartz et al. 1980). Ignore measured "loss" below this deadband so
 # we don't EQ within-noise differences. See docs/designs/measurement-resolution-eq.md.
 HEARING_DEADBAND_DB: float = 10.0
+# Deadband for the relative model: applied to the *smoothed* per-frequency
+# deviation. Lower than the absolute deadband because smoothing already rejects
+# single-point noise, so a smaller bar catches mild-but-consistent deviations.
+RELATIVE_DEADBAND_DB: float = 6.0
+# Each frequency is measured this many times and the converged thresholds are
+# averaged, to cut the per-point self-test variability that makes a single pass
+# jagged (Saliba et al. 2022: within-5 dB agreement only 60-77% per frequency).
+MEASUREMENT_REPEATS: int = 2
 ASYMMETRY_WARNING_DB: float = 15.0
 NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 
@@ -307,11 +315,28 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
 
 # ── Compensation curve ────────────────────────────────────────────────────────
 
+def averaged_frequency_threshold(
+    freq_hz: int,
+    levels: list[float],
+    *,
+    floored: bool,
+    ascending_runs: int,
+) -> "FrequencyThreshold":
+    """Combine the converged thresholds from repeated passes at one frequency.
+
+    Determined only if at least one pass converged and none floored; the level is
+    the mean of the converged passes (finer than the 5 dB staircase grid).
+    """
+    if floored or not levels:
+        return FrequencyThreshold(freq_hz, None, ascending_runs, False, floored)
+    return FrequencyThreshold(freq_hz, round(float(np.mean(levels)), 2), ascending_runs, True, False)
+
+
 def relative_compensation_points(
     side: dict[int, FrequencyThreshold],
     *,
     fraction: float = GAIN_FRACTION,
-    deadband_db: float = HEARING_DEADBAND_DB,
+    deadband_db: float = RELATIVE_DEADBAND_DB,
     max_gain_db: float = MAX_COMPENSATION_DB,
 ) -> dict[int, float]:
     """Per-frequency EQ gain (dB) for one ear from a RELATIVE, calibration-invariant
@@ -579,31 +604,33 @@ def run_cli_hearing_test(
                 continue
             processed.add(freq_hz)
 
-            engine = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
             _status(f"\n  {ear_label} ear — {freq_hz} Hz")
+            levels: list[float] = []
+            floored = False
+            runs = 0
+            for _rep in range(MEASUREMENT_REPEATS):
+                engine = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
+                while not engine.done:
+                    level = engine.current_level_dbfs
+                    samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
+                    backend.play_tone(samples, sample_rate, output_device)
+                    heard = _ask_heard(RESPONSE_WINDOW_S)
+                    engine.record_response(heard)
+                runs = max(runs, engine.ascending_run_count)
+                if engine.floored:
+                    floored = True
+                    break  # volume too high — no point repeating
+                if engine.converged and engine.threshold is not None:
+                    levels.append(engine.threshold)
 
-            while not engine.done:
-                level = engine.current_level_dbfs
-                samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
-                backend.play_tone(samples, sample_rate, output_device)
-                heard = _ask_heard(RESPONSE_WINDOW_S)
-                engine.record_response(heard)
-
-            threshold = engine.threshold
-            determined = engine.converged
-            thresholds[freq_hz] = FrequencyThreshold(
-                freq_hz=freq_hz,
-                level_dbfs=threshold,
-                ascending_runs=engine.ascending_run_count,
-                determined=determined,
-                floored=engine.floored,
-            )
-            if determined:
-                _status(f"    threshold: {threshold:.1f} dBFS after {engine.ascending_run_count} runs")
-            elif engine.floored:
+            result = averaged_frequency_threshold(freq_hz, levels, floored=floored, ascending_runs=runs)
+            thresholds[freq_hz] = result
+            if result.determined:
+                _status(f"    threshold: {result.level_dbfs:.1f} dBFS (avg of {len(levels)})")
+            elif floored:
                 _status("    floored — volume too high to measure; lower it and retest")
             else:
-                _status(f"    threshold undetermined after {engine.ascending_run_count} runs")
+                _status(f"    threshold undetermined after {runs} runs")
 
         return thresholds
 

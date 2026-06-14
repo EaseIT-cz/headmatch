@@ -68,6 +68,27 @@ def test_safety_cap_allows_real_convergence():
     assert eng.converged is True and n < MAX_PRESENTATIONS
 
 
+def test_measurement_repeats_is_at_least_two():
+    from headmatch.hearing_test import MEASUREMENT_REPEATS
+    assert MEASUREMENT_REPEATS >= 2
+
+
+def test_averaged_threshold_averages_converged_levels():
+    from headmatch.hearing_test import averaged_frequency_threshold
+    t = averaged_frequency_threshold(1000, [-50.0, -60.0], floored=False, ascending_runs=3)
+    assert t.determined is True
+    assert t.level_dbfs == -55.0
+    assert t.floored is False
+
+
+def test_averaged_threshold_floored_is_undetermined():
+    from headmatch.hearing_test import averaged_frequency_threshold
+    t = averaged_frequency_threshold(1000, [-50.0], floored=True, ascending_runs=2)
+    assert t.determined is False
+    assert t.floored is True
+    assert t.level_dbfs is None
+
+
 def test_frequency_threshold_has_floored_field_default_false():
     t = FrequencyThreshold(freq_hz=1000, level_dbfs=-45.0, ascending_runs=3, determined=True)
     assert t.floored is False
