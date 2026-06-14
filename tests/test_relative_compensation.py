@@ -66,7 +66,8 @@ def test_consistent_multiband_deviation_survives_smoothing():
 
 def test_gain_respects_cap():
     levels = _normal_shaped(-60.0)
-    levels[8000] += 40.0  # huge deviation
+    for f in (4000, 6000, 8000):
+        levels[f] += 40.0  # huge, consistent HF deviation -> survives smoothing -> caps
     points = relative_compensation_points(_side(levels))
     assert points[8000] == MAX_COMPENSATION_DB
 
@@ -81,6 +82,15 @@ def test_lower_deadband_corrects_moderate_consistent_deviation():
     # corrected with the lowered deadband (noise is handled by smoothing).
     levels = {500: -60, 1000: -60, 2000: -57, 3000: -54, 4000: -51, 6000: -48, 8000: -45}
     assert relative_compensation_points(_side(levels))  # non-empty
+
+
+def test_deviation_survives_when_intervening_frequencies_missing():
+    # 2 kHz is +11 dB deviant; 3/4/6 kHz are missing (floored), so the next
+    # determined frequency is 8 kHz — two octaves away. The 2 kHz deficit must NOT
+    # be smoothed away by that distant point (smoothing is by log-freq distance).
+    side = _side({500: -55, 1000: -60, 2000: -50, 8000: -55})
+    points = relative_compensation_points(side)
+    assert points.get(2000, 0) > 0
 
 
 def test_too_few_determined_yields_nothing():
