@@ -37,11 +37,36 @@ TEST_ORDER: tuple[int, ...] = (1000, 2000, 3000, 4000, 6000, 8000, 1000, 500, 25
 # average). 250 Hz is measured for the audiogram and EQ but is NOT part of PTA4.
 PTA4_FREQS: tuple[int, ...] = (500, 1000, 2000, 4000)
 
+# Extended high frequencies (ISO 389-5 range), opt-in only. Above 8 kHz the
+# headphone's response and fit dominate, so these shape the "air band"/coloration
+# rather than pure hearing — enabled deliberately, never by default. Excluded
+# from PTA4/WHO grading.
+EXTENDED_HF_FREQUENCIES: tuple[int, ...] = (10000, 12500, 16000)
+
+
+def build_test_order(extended_hf: bool = False) -> tuple[int, ...]:
+    """Frequency presentation order. With ``extended_hf`` the opt-in EHF set is
+    inserted right after 8 kHz (so the ascending sweep continues into the EHF
+    band before the 1 kHz re-check and the low-frequency descent)."""
+    if not extended_hf:
+        return TEST_ORDER
+    idx = TEST_ORDER.index(8000) + 1
+    return TEST_ORDER[:idx] + EXTENDED_HF_FREQUENCIES + TEST_ORDER[idx:]
+
 # ── Tone stimulus parameters ──────────────────────────────────────────────────
 
 TONE_DURATION_S: float = 0.8
 INTER_TONE_SILENCE_S: float = 0.5
 RAMP_DURATION_S: float = 0.03       # 30 ms raised-cosine onset/offset
+
+# Pulsed-tone stimulus: each staircase presentation is a rapid train of a random
+# number of pulses (gives the listener confidence they truly heard the tone).
+# Pulsed pure tones are the ASHA-recommended audiometric stimulus. Pulse duration
+# stays >= 0.20 s so temporal integration does not elevate the threshold.
+PULSE_DURATION_S: float = 0.22
+PULSE_GAP_S: float = 0.15
+PULSE_COUNT_MIN: int = 2
+PULSE_COUNT_MAX: int = 4
 
 # False-positive control: silent catch trials measure how often the listener
 # responds when no tone is present, and jittered timing breaks the predictable
@@ -131,6 +156,12 @@ NORMAL_HEARING_REFERENCE: dict[int, float] = {
     4000: -47.0,
     6000: -44.0,
     8000: -42.0,
+    # Extended high frequencies (opt-in). Anchored at 8 kHz (-42.0) plus the raw
+    # ISO 389-5:2006 RETSPL increment over 8 kHz (RETSPL(8000)=17.5): the steep,
+    # physically-real EHF rise is kept un-softened. RETSPL(10k/12.5k/16k)=22.0/27.5/53.0.
+    10000: -37.5,  # -42.0 + (22.0 - 17.5)
+    12500: -32.0,  # -42.0 + (27.5 - 17.5)
+    16000: -6.5,   # -42.0 + (53.0 - 17.5)
 }
 
 HEARING_PROFILE_FILENAME = "hearing_profile.json"
@@ -144,10 +175,14 @@ HEARING_PROFILE_FILENAME = "hearing_profile.json"
 # See docs/designs/calibration-robust-hearing.md.
 NORMAL_RELATIVE_SHAPE_DB: dict[int, float] = {
     250: 12.5, 500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 11.5, 8000: 12.0,
+    # Extended high frequencies (opt-in), from ISO 389-5:2006 Table 1 (HDA 200,
+    # IEC 60318-1): RETSPL(10k/12.5k/16k)=22.0/27.5/53.0 dB SPL, minus 5.5.
+    10000: 16.5, 12500: 22.0, 16000: 47.5,
 }
-# Every entry = ISO 389-8:2004 Table 1 RETSPL(f) − RETSPL(1000), where
-# RETSPL(1000) = 5.5 dB. Verified against the standard:
-#   250→18.0  500→11.0  2000→4.5  3000→2.5  4000→9.5  6000→17.0  8000→17.5 dB SPL.
+# Every entry = ISO 389-8:2004 (≤8 kHz) / ISO 389-5:2006 (>8 kHz) Table 1 RETSPL(f)
+# − RETSPL(1000), where RETSPL(1000) = 5.5 dB. Verified against the standards:
+#   250→18.0  500→11.0  2000→4.5  3000→2.5  4000→9.5  6000→17.0  8000→17.5
+#   10000→22.0  12500→27.5  16000→53.0 dB SPL.
 
 # WHO 2021 grades of hearing loss, keyed by better-ear pure-tone average (dB).
 # Each entry is (exclusive upper bound, label); the last bound is +inf.
@@ -379,6 +414,50 @@ def generate_silence(sample_rate: int = 48000) -> np.ndarray:
     """
     n_total = int(round(TONE_DURATION_S * sample_rate))
     return np.zeros((n_total, 2), dtype=np.float64)
+
+
+def generate_tone_train(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
+                        ear: str = "both", rng: Optional[random.Random] = None) -> np.ndarray:
+    """Return a stereo (N, 2) buffer of a *pulsed* tone: a random number of pulses
+    (PULSE_COUNT_MIN..PULSE_COUNT_MAX) at ``freq_hz``/``level_dbfs``, each
+    PULSE_DURATION_S long with 30 ms raised-cosine ramps, separated by
+    PULSE_GAP_S of silence.
+
+    The random pulse count lets the listener confirm "I heard N beeps". Each pulse
+    stays >= 0.20 s so temporal integration does not raise the threshold, and the
+    whole train fits inside RESPONSE_WINDOW_S. ``ear`` routes exactly like
+    ``generate_tone``. ``rng`` is injected for deterministic tests.
+    """
+    rng = rng or random.Random()
+    n_pulses = rng.randint(PULSE_COUNT_MIN, PULSE_COUNT_MAX)
+
+    n_pulse = int(round(PULSE_DURATION_S * sample_rate))
+    n_gap = int(round(PULSE_GAP_S * sample_rate))
+    n_ramp = int(round(RAMP_DURATION_S * sample_rate))
+
+    t = np.arange(n_pulse, dtype=np.float64) / sample_rate
+    pulse = np.sin(2.0 * np.pi * freq_hz * t)
+    if n_ramp > 0 and 2 * n_ramp <= n_pulse:
+        ramp = 0.5 * (1.0 - np.cos(np.pi * np.arange(n_ramp) / n_ramp))
+        pulse[:n_ramp] *= ramp
+        pulse[-n_ramp:] *= ramp[::-1]
+    pulse *= 10.0 ** (level_dbfs / 20.0)
+
+    gap = np.zeros(n_gap, dtype=np.float64)
+    segments: list[np.ndarray] = []
+    for i in range(n_pulses):
+        segments.append(pulse)
+        if i < n_pulses - 1:
+            segments.append(gap)
+    mono = np.concatenate(segments)
+    silent = np.zeros_like(mono)
+
+    side = (ear or "both").lower()
+    if side == "left":
+        return np.column_stack([mono, silent])
+    if side == "right":
+        return np.column_stack([silent, mono])
+    return np.column_stack([mono, mono])
 
 
 # ── False-positive control (catch trials + jitter) ─────────────────────────────
@@ -629,14 +708,16 @@ def _smooth_and_gate(dn: dict[int, tuple[float, float]], fraction, deadband_db, 
 def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:
     """Half-gain EQ compensation (dB) at each *determined* audiometric frequency.
 
-    Returns ``{freq_hz: gain_db}`` keyed by the ISO 8253 test frequencies. L/R
-    thresholds are averaged; undetermined frequencies are omitted. This is the
-    raw, measurement-resolution compensation — the hearing test has only these
-    ~7 degrees of freedom, so the EQ is built directly from these points rather
-    than from a dense interpolated grid.
+    Returns ``{freq_hz: gain_db}`` keyed by the frequencies actually present in
+    the profile. L/R thresholds are averaged; undetermined frequencies are
+    omitted. This is the raw, measurement-resolution compensation — the hearing
+    test has only these few degrees of freedom, so the EQ is built directly from
+    these points rather than from a dense interpolated grid. Iterating the
+    profile's own frequencies (rather than a fixed list) lets opt-in extended
+    high frequencies flow through when present.
     """
     points: dict[int, float] = {}
-    for freq_hz in TEST_FREQUENCIES:
+    for freq_hz in sorted(set(profile.left) | set(profile.right)):
         left_t = profile.left.get(freq_hz)
         right_t = profile.right.get(freq_hz)
 
@@ -801,19 +882,22 @@ def run_cli_hearing_test(
     *,
     on_status=None,
     rng: random.Random | None = None,
+    extended_hf: bool = False,
 ) -> HearingProfile:
     """
     Headless hearing test runner for CLI / TUI use.
 
-    Plays each tone via backend.play_tone(). The user presses Enter to
-    indicate they heard the tone; a response window timer handles silence.
+    Plays each pulsed tone train via backend.play_tone(). The user presses Enter
+    to indicate they heard the tone; a response window timer handles silence.
     Silent catch trials and jittered timing suppress and measure false-positive
-    ("phantom") responses. Returns a completed HearingProfile.
+    ("phantom") responses. With ``extended_hf`` the opt-in 10/12.5/16 kHz set is
+    also measured. Returns a completed HearingProfile.
     """
     import sys
     import threading
 
     rng = rng or random.Random()
+    test_order = build_test_order(extended_hf)
 
     def _status(msg: str) -> None:
         if on_status:
@@ -843,7 +927,7 @@ def run_cli_hearing_test(
         catch_count = 0          # silent trials presented for this ear
         false_positive_count = 0  # responses during a silent trial
 
-        for freq_hz in TEST_ORDER:
+        for freq_hz in test_order:
             if freq_hz in processed:
                 continue
             processed.add(freq_hz)
@@ -868,7 +952,7 @@ def run_cli_hearing_test(
                             false_positive_count += 1
                     time.sleep(jittered_delay(rng))  # break the predictable rhythm
                     level = engine.current_level_dbfs
-                    samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
+                    samples = generate_tone_train(freq_hz, level, sample_rate, ear=ear_label.lower(), rng=rng)
                     backend.play_tone(samples, sample_rate, output_device)
                     heard = _ask_heard(RESPONSE_WINDOW_S)
                     engine.record_response(heard)

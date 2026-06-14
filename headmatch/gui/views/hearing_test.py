@@ -14,8 +14,10 @@ from ...hearing_test import (
     NORMAL_HEARING_REFERENCE,
     RESPONSE_WINDOW_S,
     START_LEVEL_DBFS,
+    EXTENDED_HF_FREQUENCIES,
     TEST_FREQUENCIES,
     TEST_ORDER,
+    build_test_order,
     FrequencyThreshold,
     adaptive_needs_more_passes,
     averaged_frequency_threshold,
@@ -28,6 +30,7 @@ from ...hearing_test import (
     ThresholdEngine,
     detect_asymmetric_frequencies,
     generate_tone,
+    generate_tone_train,
     save_hearing_profile,
 )
 from ..widgets import theme_background
@@ -74,6 +77,9 @@ _FREQ_LABELS = {
     4000: "4 kHz",
     6000: "6 kHz",
     8000: "8 kHz",
+    10000: "10 kHz",
+    12500: "12.5 kHz",
+    16000: "16 kHz",
 }
 
 
@@ -112,6 +118,7 @@ def render_hearing_test(
                   "right": {"catch": 0, "false_positive": 0}},
         "catch_this_freq": 0,
         "in_catch": False,
+        "extended_hf": False,   # opt-in 10/12.5/16 kHz, toggled on the intro screen
     }
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -129,11 +136,19 @@ def render_hearing_test(
                 pass
             _state["response_timer"] = None
 
-    def _play_tone_async(freq_hz: int, level_dbfs: float):
-        """Play tone in a background thread so Tkinter stays responsive."""
+    def _play_tone_async(freq_hz: int, level_dbfs: float, *, pulsed: bool = False):
+        """Play a tone in a background thread so Tkinter stays responsive.
+
+        ``pulsed`` plays a random pulse train (used for staircase presentations);
+        the single comfort/channel-check tones stay continuous.
+        """
         def _worker():
             try:
-                samples = generate_tone(freq_hz, level_dbfs, sample_rate, ear=_state["ear"])
+                if pulsed:
+                    samples = generate_tone_train(freq_hz, level_dbfs, sample_rate,
+                                                  ear=_state["ear"], rng=_state["rng"])
+                else:
+                    samples = generate_tone(freq_hz, level_dbfs, sample_rate, ear=_state["ear"])
                 backend.play_tone(samples, sample_rate, output_device)
             except Exception:
                 pass
@@ -182,9 +197,29 @@ def render_hearing_test(
         info_text.configure(state="disabled")
         info_text.grid(row=2, column=0, sticky="ew", pady=(0, 16))
 
+        # Opt-in extended high frequencies (10/12.5/16 kHz).
+        ehf_var = tk.BooleanVar(value=_state["extended_hf"])
+        _state["ehf_var"] = ehf_var
+        ttk.Checkbutton(
+            frame,
+            text="Also test extended high frequencies (10, 12.5, 16 kHz)",
+            variable=ehf_var,
+        ).grid(row=3, column=0, sticky="w", pady=(0, 2))
+        ttk.Label(
+            frame,
+            text=("These are dominated by your headphone's response and fit, so enabling "
+                  "them shapes the 'air band' / coloration, not just hearing. Many people "
+                  "cannot hear 16 kHz at a safe volume; those points are simply skipped."),
+            wraplength=560, justify="left",
+        ).grid(row=4, column=0, sticky="w", pady=(0, 16))
+
+        def _start():
+            _state["extended_hf"] = bool(ehf_var.get())
+            _show_volume_check()
+
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=3, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Start Test", command=_show_volume_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        btn_frame.grid(row=5, column=0, sticky="w")
+        ttk.Button(btn_frame, text="Start Test", command=_start, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Cancel", command=on_cancel).grid(row=0, column=1)
 
     def _show_volume_check():
@@ -308,7 +343,7 @@ def render_hearing_test(
 
     def _advance_to_next_freq():
         idx = _state["freq_index"]
-        order = TEST_ORDER
+        order = build_test_order(_state["extended_hf"])
 
         # Skip already-processed frequencies
         while idx < len(order) and order[idx] in _state["processed_freqs"]:
@@ -337,7 +372,7 @@ def render_hearing_test(
         ear = _state["ear"]
         # Count unique frequencies done so far
         done_count = len(_state["processed_freqs"])
-        total = len(TEST_FREQUENCIES)
+        total = len(TEST_FREQUENCIES) + (len(EXTENDED_HF_FREQUENCIES) if _state["extended_hf"] else 0)
 
         ttk.Label(frame, text=f"Testing {ear.capitalize()} Ear", style="Title.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 4)
@@ -415,7 +450,7 @@ def render_hearing_test(
         if speaker_var:
             speaker_var.set(_STATUS_PLAYING)
 
-        _play_tone_async(freq_hz, level)
+        _play_tone_async(freq_hz, level, pulsed=True)
 
         # Response window: RESPONSE_WINDOW_S seconds from tone start
         timer_id = frame.after(
@@ -593,7 +628,8 @@ def render_hearing_test(
                 "are sure you hear."
             )
 
-        grid = geometric_log_grid(500.0, 8000.0, 48)
+        grid_top = 16000.0 if _state["extended_hf"] else 8000.0
+        grid = geometric_log_grid(500.0, grid_top, 48)
         comp = compute_compensation_curve(profile_for_preview, grid)
         avg_boost = float(np.mean(comp[comp > 0])) if np.any(comp > 0) else 0.0
         max_boost = float(np.max(comp))

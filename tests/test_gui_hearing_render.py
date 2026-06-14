@@ -51,7 +51,9 @@ class _FakeTkWidget:
         return lambda *a, **k: None
 
 
-_FAKE_TK = types.SimpleNamespace(StringVar=_FakeVar, Text=_FakeTkWidget, Canvas=_FakeTkWidget)
+_FAKE_TK = types.SimpleNamespace(
+    StringVar=_FakeVar, BooleanVar=_FakeVar, Text=_FakeTkWidget, Canvas=_FakeTkWidget,
+)
 
 
 class _FakeTtkWidget:
@@ -91,6 +93,9 @@ class _FakeTtk:
         return self._make(*a, **k)
 
     def Button(self, *a, **k):
+        return self._make(*a, **k)
+
+    def Checkbutton(self, *a, **k):
         return self._make(*a, **k)
 
 
@@ -223,6 +228,37 @@ def test_full_flow_timeout_path_reaches_results_and_completes(harness):
     assert isinstance(profile, HearingProfile)
     # Both ears measured across all eight unique frequencies.
     assert len(profile.left) == 8 and len(profile.right) == 8
+
+
+def _find_text(ttk, needle):
+    for w in reversed(ttk.created):
+        if w.text and needle in w.text:
+            return w
+    return None
+
+
+def test_extended_hf_opt_in_measures_11_frequencies(harness):
+    from headmatch.hearing_test import EXTENDED_HF_FREQUENCIES
+    harness.render()
+    # Tick the extended-HF checkbox before starting.
+    cb = _find_text(harness.ttk, "extended high frequencies")
+    assert cb is not None, "EHF opt-in checkbox not rendered"
+    cb.kwargs["variable"].set(True)
+
+    _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()
+    _find_last(harness.ttk, "Left ear").command()
+    for _ in range(2):
+        _find_last(harness.ttk, "Ready — Start").command()
+        _drain(harness.frame)
+    _find_last(harness.ttk, "Save & Use for EQ").command()
+    _drain(harness.frame)
+
+    profile = harness.events["complete"][0]
+    # 8 standard + 3 extended-HF frequencies.
+    assert len(profile.left) == 8 + len(EXTENDED_HF_FREQUENCIES)
+    for f in EXTENDED_HF_FREQUENCIES:
+        assert f in profile.left and f in profile.right
 
 
 def test_heard_response_path(harness):
