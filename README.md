@@ -1,502 +1,272 @@
 # HeadMatch
 
-HeadMatch is a beginner-friendly headphone measurement and EQ tool for Linux.
+**Personalise your headphone sound — with or without a measurement microphone.**
 
-It helps you:
-- measure headphone response with **PipeWire** or an offline recorder workflow
-- fit a conservative **parametric EQ** toward a target curve
-- export ready-to-use **CamillaDSP** configurations and **Equalizer APO** presets
-- build **clone targets** from your own measurements or published CSV curves
-- review runs with graphs, summaries, and confidence guidance
+HeadMatch helps you build a ready-to-load EQ for your headphones and apply it in
+**Equalizer APO**, **EasyEffects**, or **CamillaDSP**. You can:
 
-The design goal is simple: make headphone measurement usable for audio enthusiasts who do **not** want to fight the tooling.
+- **Tune by ear, no equipment** — take a built-in **hearing test** and get an EQ matched to
+  your own hearing.
+- **Measure your headphones** with a microphone (PipeWire, or an offline recorder) and fit
+  an EQ toward a target curve (Harman, free-field, flat, …).
+- **Clone another headphone's sound** by building a difference target between two measurements.
+- **Review every run** with graphs, a plain-language confidence score, and clipping checks.
 
----
-
-## Product strategy
-
-HeadMatch currently has three frontends, but they do not have equal product priority:
-
-- **GUI** — primary experience for most users
-- **CLI** — explicit and scriptable workflow, also the most stable troubleshooting surface
-- **TUI** — backup option, mainly for offline processing or systems without a usable desktop
-
-That means most future feature work should land in the **GUI and CLI first**. The TUI remains supported, but it is no longer a primary investment area.
+The goal: make headphone personalisation usable for enthusiasts who don't want to fight the tooling.
 
 ---
 
-## What HeadMatch supports
-
-### 1. Online measurement
-Use PipeWire playback and recording to run a guided measurement directly on Linux.
-
-### 2. Offline measurement
-Generate a sweep package, record it with an external recorder, then import the WAV and fit EQ later.
-
-### 3. EQ fitting
-Analyze the measured response and generate a conservative PEQ profile aimed at audible improvement without overfitting.
-
-### 4. EQ export
-Write both **Equalizer APO** preset files and **CamillaDSP** configs from the same fit result.
-
-### 5. Headphone cloning
-Create a target curve that moves one headphone toward the tonal balance of another.
-
-### 6. Result interpretation
-Each run can include a plain-language trust summary so users can tell whether the measurement looks believable.
-
-### 7. EQ clipping prediction
-Each fit automatically checks whether the generated EQ profile could cause digital clipping. If boosts are too aggressive, HeadMatch recommends a preamp reduction and flags potential quality concerns.
-
-The CLI `headmatch fit` command shows a clipping summary after each fit. Use `--show-clipping` for a detailed breakdown (which bands are boosted, how much headroom is lost) or `--json` to get the full run summary including `eq_clipping_assessment` as structured output.
-
----
-
-## Interaction modes
-
-### GUI
-Best for most users.
+## Quick start
 
 ```bash
-headmatch-gui
-```
+python -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip headmatch
 
-The GUI offers two modes:
-
-- **Basic Mode** — A guided 3-step wizard for beginners. Pick a target, run 3 measurement iterations, review and export. No exposed device selection, sweep parameters, or filter limits.
-- **Advanced Mode** — Full control over devices, iterations, filter limits, and export options.
-
-If you want HeadMatch to appear
-
-### CLI
-Best for explicit control, scripting, and repeatable workflows.
-
-```bash
+headmatch-gui          # graphical app (recommended)
+# or, command line:
 headmatch --version
-headmatch start --out-dir out/session_01
-headmatch list-targets
+headmatch doctor       # check your setup
 ```
 
-### TUI
-Supported as a backup option, mainly for offline processing and non-desktop setups.
-
-```bash
-headmatch tui
-```
-
-All three modes share the same saved config, run summaries, and output formats.
+No microphone? Jump straight to the **[Hearing test](#hearing-test-equipment-free-eq)** — it
+only needs headphones.
 
 ---
 
-## Installation
+## Which workflow should I use?
 
-### Recommended: install from PyPI
-
-Create a small virtualenv and install the published package:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install headmatch
-```
-
-After that, the main entry points should be available:
-
-```bash
-headmatch --version
-headmatch doctor
-headmatch-gui
-```
-
-If you are not sure your local setup is ready yet, run:
-
-```bash
-headmatch doctor
-```
-
-It gives a small readiness check for the config file, PipeWire tools, and device discovery before your first measurement.
-
-### Install from source (development)
-
-If you are working from a checkout and want the editable developer install instead:
-
-```bash
-cd headmatch
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-For tests:
-
-```bash
-python -m pip install -r requirements-test.txt
-```
-
-### Optional: add a Linux desktop launcher
-
-For GUI-first setups, you can add HeadMatch to your desktop app menu without changing packaging:
-
-1. Find the installed GUI entry point.
-   - inside a normal virtualenv this is usually `$(pwd)/.venv/bin/headmatch-gui`
-   - otherwise use `command -v headmatch-gui`
-2. Copy `docs/examples/headmatch.desktop` to:
-   ```bash
-   mkdir -p ~/.local/share/applications
-   cp docs/examples/headmatch.desktop ~/.local/share/applications/headmatch.desktop
-   ```
-3. Edit `~/.local/share/applications/headmatch.desktop` and replace `Exec=/ABSOLUTE/PATH/TO/headmatch-gui` with the real absolute path from step 1.
-4. Optionally set a custom `Icon=` path if you want something more specific than the generic `audio-headphones` icon.
-
-After that, HeadMatch should show up in most Linux desktop launchers and app menus.
+| You want to… | Use | Needs a mic? |
+|---|---|---|
+| Get an EQ matched to **your hearing**, no gear | **Hearing test** (`headmatch hearing-test`) | No |
+| Correct your headphone toward a **target curve** | **Measurement + fit** (`headmatch start` / `fit`) | Yes |
+| Make one headphone **sound like another** | **Clone target** (`headmatch clone-target`) | Yes (both headphones) |
+| Just apply an EQ you already have | See **[Applying your EQ](#applying-your-eq)** | No |
 
 ---
 
-## Recommended first run
+## Hearing test (equipment-free EQ)
 
-If you are unsure whether your machine is ready for online measurement, start with:
+The hearing test plays pure tones and asks you to click **"I hear it"**. From your responses
+it builds a personalised EQ — **no measurement microphone required**, so it works on any
+machine that can play sound.
 
+**Run it:**
+
+- **GUI:** open **Hearing Test** (available in both Basic and Advanced mode), set a
+  comfortable volume at the pre-check, then follow the prompts.
+- **CLI:**
+  ```bash
+  headmatch hearing-test            # run the test and save your hearing profile
+  headmatch hearing-fit --out-dir out/hearing_fit   # generate an EQ from the saved profile
+  headmatch hearing-test --fit --out-dir out/hearing_fit   # do both in one go
+  ```
+
+In the GUI you can **reuse a saved profile** ("Use Saved Profile") to regenerate an EQ
+without re-testing, and in **Advanced mode** layer a tonal **target curve** (Harman / free
+field / diffuse field / custom CSV) on top of the hearing correction.
+
+**How it works (and its limits):**
+
+- Each ear is measured **independently** and referenced to your own 1 kHz, so the result is
+  **calibration-invariant** — your volume knob doesn't decide the outcome — and captures real
+  **left/right differences**.
+- The test repeats only the frequencies that look deviant (**adaptive**, so a clean ear
+  finishes fast), and **rejects measurement noise** rather than correcting it.
+- It runs a **volume check** (you should *not* hear the faint tone) and an **L/R channel
+  check** before starting.
+
+> **This is a personalisation aid, not a clinical audiogram.** It's uncalibrated and measures
+> your perceived response *through your headphones*. For near-normal hearing it will
+> correctly produce little or no EQ. For a measured, headphone-specific correction, use the
+> microphone workflow below.
+
+---
+
+## Microphone measurement & EQ fitting
+
+Measure your headphone's actual response and fit a conservative parametric EQ toward a target.
+
+**Online (PipeWire), guided:**
 ```bash
-headmatch doctor
-```
-
-If the doctor output looks good and PipeWire playback and recording are working, continue with:
-
-```bash
-headmatch list-targets
+headmatch doctor                       # confirm PipeWire + devices
+headmatch list-targets                 # find your playback/capture node names
 headmatch start --out-dir out/session_01
 ```
+`start` runs a sweep → records → analyses → fits → exports APO + CamillaDSP + graphs + a summary.
 
-This will:
-1. generate a sweep
-2. run one measurement pass
-3. analyze the recording
-4. fit EQ toward the selected target
-5. export Equalizer APO and CamillaDSP files
-6. write a human-readable `README.txt`, machine-readable `run_summary.json`, and reviewable fit graphs
-
-If `headmatch doctor` reports missing PipeWire tools or no usable devices, fix that first or use the recorder-first offline path instead.
-
-If you prefer the recorder-first path:
-
+**Offline (external recorder):**
 ```bash
-headmatch prepare-offline --out-dir out/session_01
+headmatch prepare-offline --out-dir out/session_01   # get a sweep package
+# ...record the sweep with your recorder, save recording.wav...
+headmatch fit --recording out/session_01/recording.wav --out-dir out/session_01/fit
 ```
 
-Then record the sweep externally and run:
-
+**Iterative (average several passes to cut noise):**
 ```bash
-headmatch fit-offline \
-  --recording out/session_01/recording.wav \
-  --out-dir out/session_01/fit
+headmatch iterate --out-dir out/iter --target-csv my_target.csv \
+  --output-target "your-playback-node" --input-target "your-capture-node" \
+  --iterations 3 --iteration-mode average
 ```
+
+EQ aggressiveness is controlled by `--max-filters` (filters per channel) and `--fill-policy`
+(`up_to_n`, the default, stops early when the residual is small; `exact_n` places exactly N).
+Each fit predicts **clipping** and recommends a preamp if boosts are too aggressive
+(`--show-clipping` for detail, `--json` for the structured assessment).
 
 ---
 
-## Shared configuration
+## Clone another headphone's sound
 
-HeadMatch stores shared defaults in one config file used by the GUI, CLI, and TUI.
-
-Default path:
-- `$XDG_CONFIG_HOME/headmatch/config.json`
-- fallback: `~/.config/headmatch/config.json`
-
-That config can store things like:
-- preferred output folder
-- PipeWire playback target
-- PipeWire capture target
-- preferred target CSV
-- sweep and fit defaults
-
-You can override the path with:
+Build a **difference target** that moves headphone A toward the tonal balance of headphone B.
 
 ```bash
-headmatch --config /path/to/config.json ...
-headmatch-gui --config /path/to/config.json
-headmatch-tui --config /path/to/config.json
-```
-
-An example config is included at:
-
-```text
-docs/examples/headmatch.config.json
-```
-
----
-
-## Main CLI commands
-
-### Guided online path
-```bash
-headmatch doctor
-headmatch list-targets
-headmatch start --out-dir out/session_01
-```
-
-### Manual online measurement
-```bash
-headmatch measure \
-  --out-dir out/measure_usb_01 \
-  --output-target "alsa_output.usb-..." \
-  --input-target "alsa_input.usb-..."
-```
-
-### Fit an existing recording
-```bash
-headmatch fit \
-  --recording out/measure_usb_01/recording.wav \
-  --out-dir out/fit_usb_01 \
-  --target-csv my_target.csv \
-  --max-filters 8 \
-  --fill-policy up_to_n
-```
-
-`--max-filters` sets the number of EQ filters per channel. With `--fill-policy up_to_n` (the default), the fitter uses up to that many filters, stopping early if the residual error is small. With `--fill-policy exact_n`, exactly that many filters are placed.
-
-### Offline package generation
-```bash
-headmatch prepare-offline --out-dir out/offline_session_01
-```
-
-### Offline fitting
-```bash
-headmatch fit \
-  --recording out/offline_session_01/recording.wav \
-  --out-dir out/offline_session_01/fit \
-  --target-csv my_target.csv
-```
-
-`fit-offline` is still accepted as an alias for `fit` for backward compatibility, but there is no difference between them.
-
-### Iterative online workflow
-```bash
-headmatch iterate \
-  --out-dir out/iterative_usb \
-  --target-csv my_target.csv \
-  --output-target "your-playback-node" \
-  --input-target "your-capture-node" \
-  --iterations 3 \
-  --iteration-mode average
-```
-
-`--iteration-mode average` measures N times, averages the frequency responses, and fits once. This reduces noise from head position variation and ambient sound. The default `--iteration-mode independent` fits each pass separately (useful for consistency checking).
-
-### Quick setup check
-```bash
-headmatch doctor
-```
-
-Use this when install or device setup feels uncertain. It is the fastest way to confirm the config file, PipeWire tools, and basic device discovery are in place.
-
-### Clone target generation
-```bash
+# Measure both headphones on the SAME rig, then:
 headmatch clone-target \
-  --source-csv source.csv \
-  --target-csv target.csv \
-  --out clone_target.csv
+  --source-csv out/A_measure/measurement_left.csv \
+  --target-csv out/B_measure/measurement_left.csv \
+  --out out/clone/A_to_B_left.csv
+# Fit A against the clone target:
+headmatch fit --recording out/A_measure/recording.wav \
+  --target-csv out/clone/A_to_B_left.csv --out-dir out/A_to_B_fit
 ```
 
-Use this when you want to create a **difference target** that moves one headphone toward another.
+Use **matching sides** (left-vs-left or right-vs-right) and the analysed `measurement_*.csv`
+files (not the `*_raw.csv`). Ready-made published-curve examples (e.g. HD650 → HD800S) live in
+`docs/examples/clone-targets/` for learning the flow. A clone target can also serve as a
+**mic-calibration baseline** on a binaural rig — see `docs/examples/clone-target-calibration.md`.
 
-Preferred personal workflow:
-1. measure headphone **A** on your rig
-2. measure headphone **B** on the **same rig**
-3. choose matching response CSVs from those two runs
-4. build a clone target from A -> B
-5. fit a fresh measurement of headphone A against that clone target
+---
 
-For personal measurements, the CSVs to feed into `headmatch clone-target` are the run output response files:
-- `measurement_left.csv`
-- `measurement_right.csv`
+## Applying your EQ
 
-Use the **same side from both runs**.
-Examples:
-- `A/measurement_left.csv` with `B/measurement_left.csv`
-- `A/measurement_right.csv` with `B/measurement_right.csv`
+Every fit writes presets for the common hosts — load whichever matches your setup:
 
-Do **not** mix left from one headphone with right from the other unless that is deliberately what you measured.
-The raw files (`measurement_left_raw.csv` / `measurement_right_raw.csv`) are not the preferred inputs for this workflow.
-
-Concrete personal example:
-
-```bash
-# 1) Measure headphone A (the one you want to change)
-headmatch measure \
-  --out-dir out/hd650_measure \
-  --output-target "your-playback-node" \
-  --input-target "your-capture-node"
-
-# 2) Measure headphone B (the tonal balance you want to imitate)
-headmatch measure \
-  --out-dir out/hd800s_measure \
-  --output-target "your-playback-node" \
-  --input-target "your-capture-node"
-
-# 3) Build a difference target from A -> B using matching artifacts
-headmatch clone-target \
-  --source-csv out/hd650_measure/measurement_left.csv \
-  --target-csv out/hd800s_measure/measurement_left.csv \
-  --out out/clone_targets/hd650_to_hd800s_left.csv
-
-# 4) Fit headphone A using the clone target
-headmatch fit \
-  --recording out/hd650_measure/recording.wav \
-  --target-csv out/clone_targets/hd650_to_hd800s_left.csv \
-  --out-dir out/hd650_to_hd800s_fit
-```
-
-This is different from the lightweight example workflow in `docs/examples/clone-targets/`: those shipped CSVs are small published-style examples for learning the command shape. They are useful for demos and experimentation, but the preferred path for serious personal cloning is to measure both headphones on your own rig and generate the difference target from those matching measurements.
-
-### Mic calibration via clone target
-
-If you use a binaural rig, you can also use clone targets as a practical mic calibration step.
-
-The idea is simple: measure a reference headphone with published measurements, save that run as a clone target, then use it as your calibration baseline for other headphones measured on the same rig.
-
-This does **not** remove all rig effects globally. It makes your subsequent measurements more comparable within the same head/rig/setup combination, which is often the useful part.
-
-See `docs/examples/clone-target-calibration.md` for the step-by-step workflow and limitations.
+- **Equalizer APO** — `equalizer_apo.txt` (parametric) or `equalizer_apo_graphiceq.txt` (GraphicEQ).
+- **EasyEffects** — import the APO preset. GraphicEQ exports are **clip-safe** (pure-cut, max
+  0 dB), so they won't clip; turn your system volume up slightly to compensate for the cut.
+- **CamillaDSP** — `camilladsp_full.yaml` (full config template) or `camilladsp_filters_only.yaml`
+  (to merge into an existing config).
 
 ---
 
 ## Output files
 
-A typical fit output folder contains:
-- `README.txt` — plain-language explanation of the run output
-- `run_summary.json` — stable summary used by the GUI/TUI history views, including a confidence score, plain-language interpretation, and warnings
-- `fit_report.json` — detailed fit report
-- `measurement_left.csv`
-- `measurement_right.csv`
-- `equalizer_apo.txt`
-- `equalizer_apo_graphiceq.txt`
-- `camilladsp_full.yaml`
-- `camilladsp_filters_only.yaml`
-- `fit_overview.svg`
-- `fit_left.svg`
-- `fit_right.svg`
+A fit output folder contains:
 
-The general rule is:
-- open `README.txt` if you want the human explanation
-- open `run_summary.json` if you want the stable machine-readable summary, confidence score, and warnings
-- use `equalizer_apo.txt` for Equalizer APO parametric filters, `equalizer_apo_graphiceq.txt` for Equalizer APO GraphicEQ, or one of the CamillaDSP YAML files for CamillaDSP
+| File | What it is |
+|---|---|
+| `README.txt` | Plain-language explanation of the run |
+| `run_summary.json` | Stable machine-readable summary: confidence score, warnings, predicted error |
+| `fit_report.json` | Detailed fit / band list |
+| `equalizer_apo.txt`, `equalizer_apo_graphiceq.txt` | Equalizer APO presets (parametric, GraphicEQ) |
+| `camilladsp_full.yaml`, `camilladsp_filters_only.yaml` | CamillaDSP configs |
+| `measurement_left.csv`, `measurement_right.csv` | Estimated per-channel response (measurement fits) |
+| `fit_overview.svg`, `fit_left.svg`, `fit_right.svg` | Review graphs (measurement fits) |
+| `hearing_profile.json` | Your raw hearing thresholds (hearing fits) |
+
+Hearing-test runs and measurement runs both write `run_summary.json`, so both appear in the
+GUI's **Results** view and can be A/B compared.
 
 ---
 
-## Example target curves
+## Interaction modes
 
-General-purpose example target curves live in:
+All three share the same config, run summaries, and output formats. The GUI and CLI are the
+primary, actively-developed surfaces.
 
-```text
-docs/examples/targets/
-```
-
-Included example tonal targets:
-- Harman-style
-- diffuse-field
-- free-field
-- IEF neutral / Crinacle-style
-- V-shape
-- flat / studio
-
-These are small, editable example targets for quick experimentation. They are intentionally lightweight starting points rather than claims of exact published reference datasets.
-
-## Clone-target examples
-
-Documented examples live in:
-
-```text
-docs/examples/clone-targets/
-```
-
-There are two distinct clone-target workflows:
-
-### 1. Preferred personal workflow
-Use this when you own or can measure both headphones on the same rig.
-
-- measure the **source** headphone you want to change
-- measure the **target** headphone whose tonal balance you want
-- feed matching run artifacts into `headmatch clone-target`
-- use the resulting difference target when fitting the source headphone
-
-The important input files are the analyzed response CSVs written by HeadMatch:
-- `measurement_left.csv`
-- `measurement_right.csv`
-
-Use matching sides from both runs. In practice that means either:
-- left vs left, or
-- right vs right
-
-This personal-measurement path is the most trustworthy because the source and target curves come from the same coupler, mic chain, positioning style, and analysis pipeline.
-
-### 2. Lightweight published-example workflow
-Use this when you want to learn the command flow or try a rough tonal experiment from small example CSVs.
-
-These examples are useful if you want to:
-- understand the expected CSV shape
-- see a simple published-curve clone workflow
-- inspect a prebuilt example clone target
-- try ready-to-use pairings such as:
-  - FiiO JT7 → Ananda Nano
-  - HD650 → HD800S
-
-Important: the shipped clone-target CSVs are **difference targets**, not magic “make this headphone become that headphone” files.
-Use them when measuring the matching **source** headphone, then review the graphs and confidence summary to see how close the result actually got.
+- **GUI** (`headmatch-gui`) — recommended. **Basic** mode is a guided wizard; **Advanced** mode
+  exposes devices, iterations, filter limits, and target selection.
+- **CLI** (`headmatch …`) — explicit, scriptable, and the most stable troubleshooting surface.
+- **TUI** (`headmatch tui`) — backup option for offline processing or non-desktop systems.
 
 ---
 
-## Test coverage
+## Installation
 
-The repo includes:
-- unit and functional tests
-- deterministic synthetic integration tests for the CLI workflow
-- GitHub Actions workflows for both the main test suite and integration tests
+### From PyPI (recommended)
+```bash
+python -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip headmatch
+headmatch doctor      # readiness check
+```
 
-Run locally with:
+### From source (development)
+```bash
+cd headmatch
+python -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -r requirements-test.txt   # for tests
+```
+
+### Standalone binaries
+Prebuilt binaries are on the [GitHub Releases](https://github.com/EaseIT-cz/headmatch/releases) page:
+
+- **Linux x64** — `headmatch-linux-x64`, `headmatch-gui-linux-x64`
+- **macOS Apple Silicon** — `headmatch-macos-arm64`, `headmatch-gui-macos-arm64`
+
+On macOS, clear the Gatekeeper quarantine once:
+```bash
+xattr -dr com.apple.quarantine /path/to/headmatch-macos-arm64
+```
+
+### Optional: desktop launcher (Linux)
+Copy `docs/examples/headmatch.desktop` to `~/.local/share/applications/` and set its `Exec=`
+to the absolute path of `headmatch-gui` (find it with `command -v headmatch-gui`).
+
+---
+
+## Configuration
+
+Shared defaults live in one config file used by the GUI, CLI, and TUI:
+
+- `$XDG_CONFIG_HOME/headmatch/config.json` (fallback `~/.config/headmatch/config.json`)
+
+It stores the preferred output folder, PipeWire playback/capture targets, preferred target
+CSV, and sweep/fit defaults. Override the path with `--config /path/to/config.json` on any
+entry point. An example is at `docs/examples/headmatch.config.json`.
+
+Your saved **hearing profile** lives separately at `hearing_profile.json` in that same config
+directory (e.g. `~/Library/Application Support/headmatch/` on macOS) and is reused across runs.
+
+---
+
+## Target curves
+
+Editable example tonal targets are in `docs/examples/targets/`: Harman-style, diffuse-field,
+free-field, IEF-neutral/Crinacle-style, V-shape, and flat/studio. They're lightweight starting
+points, not claims of exact reference datasets. Pass one with `--target-csv`, or pick one in the
+GUI's advanced target selector.
+
+---
+
+## Troubleshooting
+
+```bash
+headmatch doctor          # checks config, PipeWire tools, and device discovery
+headmatch list-targets    # lists playback/capture node names for --output/--input-target
+```
+
+If your USB audio path is unstable, use the **offline recorder-first** workflow — it's a
+supported path, not a workaround. For the hearing test, if it warns "volume too high," lower
+your level until the faint tone in the pre-check is inaudible.
+
+---
+
+## Platform & environment
+
+- **Linux + PipeWire** for microphone measurement (or an external recorder, offline).
+- The **hearing test** needs only audio playback, so it works wherever HeadMatch runs.
+- Apply the generated EQ with **Equalizer APO**, **EasyEffects**, or **CamillaDSP**.
+- In-ear or binaural microphone setups recommended for measurement.
+
+---
+
+## Tests & docs
 
 ```bash
 python -m pytest -q
 ```
 
----
-
-## Recommended hardware / environment
-
-HeadMatch is currently designed around:
-- Linux
-- PipeWire
-- CamillaDSP or Equalizer APO for applying the generated EQ
-- in-ear or binaural microphone setups
-- optional external recorder workflows
-
-If your USB audio path is unstable, use the offline recorder-first workflow. That is a supported path, not a hack.
-
----
-
-## Project docs
-
-Current project docs live in:
-- `docs/architecture.md`
-- `docs/backlog.md`
-- `docs/examples/`
-- `docs/product_pages.md` (placeholder)
-
----
-
-## Standalone binaries
-
-Prebuilt binaries are available on the [GitHub Releases](https://github.com/EaseIT-cz/headmatch/releases) page for:
-
-- **Linux x64** — `headmatch-linux-x64`, `headmatch-gui-linux-x64`
-- **macOS Apple Silicon (M1/M2/M3)** — `headmatch-macos-arm64`, `headmatch-gui-macos-arm64`
-
-### macOS: bypass "app not signed" error
-
-On macOS, unsigned binaries will be blocked by Gatekeeper. To bypass:
-
-```bash
-xattr -dr com.apple.quarantine /path/to/headmatch-macos-arm64
-```
-
-Run this once on the extracted binary or the containing folder. After that, the binary will launch normally.
+Project docs: `docs/architecture.md`, `docs/designs/` (design notes, incl. the hearing-EQ
+methodology), `docs/backlog.md`, `docs/examples/`.
