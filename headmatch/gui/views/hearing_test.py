@@ -308,13 +308,12 @@ def render_hearing_test(
         engine: ThresholdEngine = _state["engine"]
         freq_hz = engine.freq_hz
         threshold = engine.threshold
-        determined = threshold is not None
-
         result = FrequencyThreshold(
             freq_hz=freq_hz,
             level_dbfs=threshold,
             ascending_runs=engine.ascending_run_count,
-            determined=determined,
+            determined=engine.converged,
+            floored=engine.floored,
         )
         _state[_state["ear"]][freq_hz] = result
 
@@ -364,6 +363,16 @@ def render_hearing_test(
         )
         n_total = len(left_thresholds) + len(right_thresholds)
         summary_parts = [f"Thresholds determined: {n_determined} / {n_total}"]
+
+        n_floored = sum(
+            1 for t in (list(left_thresholds.values()) + list(right_thresholds.values()))
+            if getattr(t, "floored", False)
+        )
+        if n_floored:
+            summary_parts.insert(0,
+                "Volume too high: the quietest tones were still audible, so reliable "
+                "thresholds could not be measured. Lower your headphone volume and retest."
+            )
 
         if asymmetric:
             freq_labels = ", ".join(_FREQ_LABELS.get(f, str(f)) for f in asymmetric)

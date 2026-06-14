@@ -146,6 +146,8 @@ class _FakeEngine:
         self.threshold = -45.0
         self.ascending_run_count = 3
         self.done = False
+        self.converged = True
+        self.floored = False
 
     def record_response(self, _heard):
         self.done = True

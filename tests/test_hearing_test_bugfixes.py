@@ -57,8 +57,10 @@ def test_engine_terminates_when_listener_hears_everything():
             break
         eng.record_response(True)
     assert eng.done, "engine must terminate even if every tone is heard"
-    # Heard even the quietest tone -> threshold determined at/near the floor.
-    assert eng.threshold is not None
+    # Hearing the floor means the volume is too high to bracket a threshold:
+    # the engine flags it floored and reports it undetermined (0.8.3 guards).
+    assert eng.floored is True
+    assert eng.threshold is None
 
 
 def test_engine_terminates_when_listener_misses_everything():
