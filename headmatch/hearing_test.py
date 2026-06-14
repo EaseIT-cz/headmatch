@@ -140,16 +140,14 @@ HEARING_PROFILE_FILENAME = "hearing_profile.json"
 # threshold-of-hearing levels, i.e. the *threshold* shape appropriate for a
 # threshold-based test (not ISO 226 supra-threshold loudness contours). Subtracting
 # this isolates the listener's deviation from a normal ear's natural frequency
-# response so we don't over-correct the extremes. 6 kHz is log-f interpolated (not
-# in the ISO 389-8 table). See docs/designs/calibration-robust-hearing.md.
+# response so we don't over-correct the extremes.
+# See docs/designs/calibration-robust-hearing.md.
 NORMAL_RELATIVE_SHAPE_DB: dict[int, float] = {
-    250: 12.5, 500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 8.7, 8000: 12.0,
+    250: 12.5, 500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 11.5, 8000: 12.0,
 }
-# 250 Hz value verified against ISO 389-8:2004 Table 1 (HDA 200): RETSPL(250) −
-# RETSPL(1000) = 18.0 − 5.5 = 12.5 dB exactly. (Likewise 500/2000/3000/4000/8000
-# match the standard exactly. NOTE: the pre-existing 6000 Hz entry, 8.7, disagrees
-# with ISO 389-8 Table 1, which lists RETSPL(6000)=17.0 → 11.5 dB; left unchanged
-# here as it predates this work and changing it would shift existing EQ output.)
+# Every entry = ISO 389-8:2004 Table 1 RETSPL(f) − RETSPL(1000), where
+# RETSPL(1000) = 5.5 dB. Verified against the standard:
+#   250→18.0  500→11.0  2000→4.5  3000→2.5  4000→9.5  6000→17.0  8000→17.5 dB SPL.
 
 # WHO 2021 grades of hearing loss, keyed by better-ear pure-tone average (dB).
 # Each entry is (exclusive upper bound, label); the last bound is +inf.
