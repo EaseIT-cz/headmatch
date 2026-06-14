@@ -196,8 +196,10 @@ class TestRunHearingFit:
         assert set(data["left"]) == {str(f) for f in TEST_FREQUENCIES}
         assert data["tested_at"] == profile.tested_at
 
-    def test_left_channel_not_attenuated_when_only_right_has_boost(self, tmp_path):
-        # A channel with no boost must not get a preamp (no L/R imbalance).
+    def test_both_channels_share_preamp_when_only_right_has_boost(self, tmp_path):
+        # Both channels share the worst-case preamp (clip-safe under single-preamp
+        # hosts like EasyEffects, and L/R balance preserved). The no-boost channel
+        # still has no filters, but it IS attenuated by the same shared headroom.
         from headmatch.hearing_test import NORMAL_RELATIVE_SHAPE_DB
         left = {f: FrequencyThreshold(f, -60.0 + NORMAL_RELATIVE_SHAPE_DB[f], 3, True) for f in TEST_FREQUENCIES}
         right_levels = {250: -60, 500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
@@ -206,10 +208,11 @@ class TestRunHearingFit:
         run_hearing_fit(profile, tmp_path, sample_rate=48000)
 
         apo = (tmp_path / "equalizer_apo.txt").read_text()
+        preamps = [ln for ln in apo.splitlines() if ln.startswith("Preamp")]
+        assert len(preamps) == 2 and preamps[0] == preamps[1]  # shared on both channels
+        assert preamps[0] != "Preamp: 0.00 dB"                 # worst-case headroom applied
         left_section = apo.split("Channel: R")[0]
-        assert "Channel: L" in left_section
-        assert "Preamp: 0.00 dB" in left_section  # no boost -> no attenuation
-        assert "Filter" not in left_section
+        assert "Filter" not in left_section                    # no-boost channel has no filters
 
     def test_report_json_valid(self, tmp_path):
         profile = self._profile()

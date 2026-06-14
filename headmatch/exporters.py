@@ -162,13 +162,22 @@ def _format_apo_channel(channel: str, bands: List[PEQBand], *, preamp_db: float 
 def export_equalizer_apo_parametric_txt(path: str | Path, bands_left: List[PEQBand], bands_right: List[PEQBand], *, preamp_db: float | None = None) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # A single shared preamp across both channels = the worst-case headroom over
+    # L and R. Single-preamp hosts (e.g. EasyEffects) can only apply one preamp to
+    # both channels; sharing the worst-case keeps the preset clip-safe whichever
+    # value such a host uses, and preserves L/R balance — both channels are
+    # attenuated equally, so the intended per-ear difference stays in the filters
+    # rather than leaking into a broadband level offset.
+    shared_preamp = _apo_preamp_db(list(bands_left) + list(bands_right), preamp_db)
     lines = [
         '; headmatch Equalizer APO parametric preset',
         '; Generated for stereo headphones with per-channel filter sections.',
+        '; A single shared preamp (worst-case headroom) is used on both channels so',
+        '; single-preamp hosts (e.g. EasyEffects) stay clip-safe and keep L/R balance.',
         '',
-        *_format_apo_channel('L', bands_left, preamp_db=preamp_db),
+        *_format_apo_channel('L', bands_left, preamp_db=shared_preamp),
         '',
-        *_format_apo_channel('R', bands_right, preamp_db=preamp_db),
+        *_format_apo_channel('R', bands_right, preamp_db=shared_preamp),
         '',
     ]
     path.write_text('\n'.join(lines), encoding="utf-8")

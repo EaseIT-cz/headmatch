@@ -156,12 +156,39 @@ def test_export_equalizer_apo_parametric_txt_uses_preamp_and_filter_lines(tmp_pa
 
     assert '; headmatch Equalizer APO parametric preset' in text
     assert 'Channel: L' in text
-    assert 'Preamp: -3.50 dB' in text
     assert 'Filter 1: ON LS Fc 105.00 Hz Gain 3.50 dB Q 0.59' in text
     assert 'Filter 2: ON PK Fc 2500.00 Hz Gain -2.00 dB Q 1.23' in text
     assert 'Channel: R' in text
-    assert 'Preamp: 0.00 dB' in text
     assert 'Filter 1: ON HS Fc 8500.00 Hz Gain -1.50 dB Q 0.59' in text
+    # Both channels share the worst-case preamp (only L has a boost, +3.5 dB), so a
+    # single-preamp host stays clip-safe and L/R balance is preserved.
+    preamps = [ln for ln in text.splitlines() if ln.startswith('Preamp')]
+    assert preamps == ['Preamp: -3.50 dB', 'Preamp: -3.50 dB']
+
+
+def test_parametric_export_shares_worst_case_preamp_across_channels(tmp_path):
+    # Single-preamp hosts (e.g. EasyEffects) apply one preamp to both channels.
+    # Emit a shared worst-case preamp so it's clip-safe either way AND preserves
+    # L/R balance (the per-channel difference stays in the filters).
+    out = tmp_path / 'equalizer_apo.txt'
+    export_equalizer_apo_parametric_txt(
+        out,
+        [PEQBand('peaking', 12500.0, 11.6, 1.41)],   # L: large boost
+        [PEQBand('peaking', 12500.0, 6.6, 1.41)],    # R: smaller boost
+    )
+    preamps = [ln for ln in out.read_text().splitlines() if ln.startswith('Preamp')]
+    assert preamps == ['Preamp: -11.60 dB', 'Preamp: -11.60 dB']
+
+
+def test_parametric_export_shares_preamp_even_when_one_channel_has_no_boost(tmp_path):
+    out = tmp_path / 'equalizer_apo.txt'
+    export_equalizer_apo_parametric_txt(
+        out,
+        [],                                          # L: no boost
+        [PEQBand('peaking', 4000.0, 8.0, 1.0)],      # R: boost
+    )
+    preamps = [ln for ln in out.read_text().splitlines() if ln.startswith('Preamp')]
+    assert preamps == ['Preamp: -8.00 dB', 'Preamp: -8.00 dB']
 
 
 def test_export_equalizer_apo_parametric_txt_keeps_channel_numbering_independent_and_trailing_newline(tmp_path):
