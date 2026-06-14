@@ -495,6 +495,86 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
 
 
 
+def _make_saved_hearing_profile():
+    from headmatch.hearing_test import (
+        HearingProfile, FrequencyThreshold, TEST_FREQUENCIES, NORMAL_HEARING_REFERENCE,
+    )
+    side = {
+        f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f] + 15.0, 3, True)
+        for f in TEST_FREQUENCIES
+    }
+    return HearingProfile(
+        left=dict(side), right=dict(side),
+        tested_at="2026-06-01T12:00:00+00:00", asymmetric_freqs=[],
+    )
+
+
+def _track_buttons(monkeypatch):
+    created = []
+
+    class TrackingButton(DummyWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created.append(self)
+
+    monkeypatch.setattr(DummyTtk, 'Button', TrackingButton)
+    return created
+
+
+def _hearing_app(fake_tk, tmp_path):
+    return fake_tk.create_app(
+        root=DummyRoot(),
+        config_loader=lambda _path=None: (
+            FrontendConfig(default_output_dir=str(tmp_path / 'out' / 'session_01')),
+            tmp_path / 'config.json', False,
+        ),
+    )
+
+
+def test_hearing_test_offers_saved_profile_reuse(tmp_path, fake_tk, monkeypatch):
+    profile = _make_saved_hearing_profile()
+    monkeypatch.setattr('headmatch.hearing_test.load_hearing_profile', lambda: profile)
+    created = _track_buttons(monkeypatch)
+    app = _hearing_app(fake_tk, tmp_path)
+
+    app.show_view('hearing-test')
+
+    texts = [b.kwargs.get('text') for b in created]
+    assert 'Use Saved Profile' in texts
+    assert 'Run New Test' in texts
+
+
+def test_hearing_test_use_saved_profile_goes_to_followup(tmp_path, fake_tk, monkeypatch):
+    profile = _make_saved_hearing_profile()
+    monkeypatch.setattr('headmatch.hearing_test.load_hearing_profile', lambda: profile)
+    created = _track_buttons(monkeypatch)
+    app = _hearing_app(fake_tk, tmp_path)
+    app.show_view('hearing-test')
+
+    use_btn = next(b for b in created if b.kwargs.get('text') == 'Use Saved Profile')
+    use_btn.command()
+
+    assert app.hearing_profile is profile
+    assert 'Generate EQ Preset Now' in [b.kwargs.get('text') for b in created]
+
+
+def test_hearing_test_without_saved_profile_runs_test(tmp_path, fake_tk, monkeypatch):
+    monkeypatch.setattr('headmatch.hearing_test.load_hearing_profile', lambda: None)
+    monkeypatch.setattr('headmatch.audio_backend.get_audio_backend', lambda: object())
+    rendered = {}
+    monkeypatch.setattr(
+        'headmatch.gui.shell.render_hearing_test',
+        lambda *a, **k: rendered.setdefault('called', True),
+    )
+    created = _track_buttons(monkeypatch)
+    app = _hearing_app(fake_tk, tmp_path)
+
+    app.show_view('hearing-test')
+
+    assert rendered.get('called') is True
+    assert 'Use Saved Profile' not in [b.kwargs.get('text') for b in created]
+
+
 def test_create_app_includes_setup_check_view_and_refreshes_doctor_report(tmp_path, fake_tk):
     calls = {}
     root = DummyRoot()

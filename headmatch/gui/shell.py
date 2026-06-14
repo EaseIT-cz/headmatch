@@ -212,6 +212,7 @@ class HeadMatchGuiApp:
         self.basic_clone_target_var = tk.StringVar(master=root, value="")
         self.basic_clone_output_var = tk.StringVar(master=root, value="")
         self.hearing_profile = None  # HearingProfile | None; set after a successful test
+        self._force_new_hearing_test = False  # skip the saved-profile landing once
         self.basic_progress_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
@@ -568,6 +569,16 @@ class HeadMatchGuiApp:
         self.root.after(8000, status.destroy)
 
     def _render_hearing_test(self) -> None:
+        from ..hearing_test import load_hearing_profile
+
+        # Reuse a previously saved hearing profile instead of forcing a retest.
+        if not self._force_new_hearing_test:
+            saved = load_hearing_profile()
+            if saved is not None:
+                self._show_saved_hearing_profile_landing(saved)
+                return
+        self._force_new_hearing_test = False
+
         from ..audio_backend import get_audio_backend
         try:
             backend = get_audio_backend()
@@ -593,6 +604,48 @@ class HeadMatchGuiApp:
             on_complete=_on_complete,
             on_cancel=_on_cancel,
         )
+
+    def _show_saved_hearing_profile_landing(self, profile) -> None:
+        """Offer to reuse a saved hearing profile (regenerate EQ) or retest."""
+        for child in self.content.winfo_children():  # type: ignore[attr-defined]
+            child.destroy()
+        ttk = self._ttk
+        self.content.columnconfigure(0, weight=1)  # type: ignore[attr-defined]
+
+        determined = sum(
+            1 for side in (profile.left, profile.right) for t in side.values()
+            if getattr(t, "determined", False)
+        )
+        total = len(profile.left) + len(profile.right)
+
+        ttk.Label(self.content, text="Hearing Test", style="Title.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        ttk.Label(
+            self.content,
+            text=(
+                f"A saved hearing profile from {profile.tested_at} was found "
+                f"({determined}/{total} thresholds determined). You can reuse it to "
+                "generate an EQ preset without repeating the test, or run a new test."
+            ),
+            wraplength=560,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 16))
+
+        def _use_saved() -> None:
+            self.hearing_profile = profile
+            self._show_hearing_followup(profile)
+
+        def _run_new() -> None:
+            self._force_new_hearing_test = True
+            self.show_view("hearing-test")
+
+        btn_frame = ttk.Frame(self.content)
+        btn_frame.grid(row=2, column=0, sticky="w")
+        ttk.Button(btn_frame, text="Use Saved Profile", command=_use_saved, style="Accent.TButton").grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        ttk.Button(btn_frame, text="Run New Test", command=_run_new).grid(row=0, column=1)
 
     def _show_hearing_followup(self, profile) -> None:
         for child in self.content.winfo_children():  # type: ignore[attr-defined]
