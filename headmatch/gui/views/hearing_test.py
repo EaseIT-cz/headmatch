@@ -156,8 +156,55 @@ def render_hearing_test(
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=3, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Start Test", command=_begin_left, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Start Test", command=_show_channel_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Cancel", command=on_cancel).grid(row=0, column=1)
+
+    def _show_channel_check():
+        """Confirm per-ear routing reaches the hardware before testing."""
+        _clear()
+        frame.columnconfigure(0, weight=1)
+        _state["ear"] = "left"
+        ttk.Label(frame, text="Channel Check", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(
+            frame,
+            text=(
+                "A test tone is playing in your LEFT ear only. Which ear do you hear it in? "
+                "This confirms your headphones are oriented correctly and each ear is "
+                "tested independently."
+            ),
+            wraplength=560, justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 12))
+
+        def _play_check():
+            _play_tone_async(1000, START_LEVEL_DBFS)
+
+        btns = ttk.Frame(frame)
+        btns.grid(row=2, column=0, sticky="w")
+        ttk.Button(btns, text="Left ear", command=_begin_left, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btns, text="Right ear", command=_show_channel_warning).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(btns, text="Play again", command=_play_check).grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(btns, text="Stop", command=_stop_test).grid(row=0, column=3)
+        _play_check()
+
+    def _show_channel_warning():
+        _clear()
+        frame.columnconfigure(0, weight=1)
+        ttk.Label(frame, text="Check Headphone Orientation", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(
+            frame,
+            text=(
+                "You heard the LEFT-channel tone in your right ear, so your headphones may "
+                "be swapped, or your system is not routing the channels independently. "
+                "Re-seat or swap your headphones and re-check, or continue anyway "
+                "(per-ear results may be unreliable)."
+            ),
+            wraplength=560, justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 12))
+        btns = ttk.Frame(frame)
+        btns.grid(row=2, column=0, sticky="w")
+        ttk.Button(btns, text="Re-check", command=_show_channel_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btns, text="Continue anyway", command=_begin_left).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(btns, text="Stop", command=_stop_test).grid(row=0, column=2)
 
     def _begin_left():
         _state["ear"] = "left"

@@ -206,7 +206,8 @@ def test_intro_renders_without_touching_frame_cget(harness):
 
 def test_full_flow_timeout_path_reaches_results_and_completes(harness):
     harness.render()
-    _find_last(harness.ttk, "Start Test").command()        # -> left ear intro
+    _find_last(harness.ttk, "Start Test").command()        # -> channel check
+    _find_last(harness.ttk, "Left ear").command()          # -> left ear intro
     for _ in range(2):                                      # left, then right ear
         _find_last(harness.ttk, "Ready — Start").command()
         _drain(harness.frame)
@@ -226,6 +227,7 @@ def test_full_flow_timeout_path_reaches_results_and_completes(harness):
 def test_heard_response_path(harness):
     harness.render()
     _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "Left ear").command()          # pass channel check
     _find_last(harness.ttk, "Ready — Start").command()     # first tone scheduled
     hear = _find_last(harness.ttk, "I hear it")
     assert hear is not None
@@ -238,6 +240,19 @@ def test_heard_response_path(harness):
     assert isinstance(harness.events["complete"][0], HearingProfile)
 
 
+def test_channel_check_precedes_test_and_warns_on_mismatch(harness):
+    harness.render()
+    _find_last(harness.ttk, "Start Test").command()
+    # Channel check appears before the test.
+    assert _find_last(harness.ttk, "Left ear") is not None
+    assert _find_last(harness.ttk, "Right ear") is not None
+    # Hearing the left-channel tone in the right ear warns, then can continue.
+    _find_last(harness.ttk, "Right ear").command()
+    assert _find_last(harness.ttk, "Continue anyway") is not None
+    _find_last(harness.ttk, "Continue anyway").command()
+    assert _find_last(harness.ttk, "Ready — Start") is not None
+
+
 def test_stop_test_invokes_cancel(harness):
     harness.render()
     _find_last(harness.ttk, "Cancel").command()
@@ -247,6 +262,7 @@ def test_stop_test_invokes_cancel(harness):
 def test_save_without_applying_uses_cancel(harness):
     harness.render()
     _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "Left ear").command()          # pass channel check
     for _ in range(2):
         _find_last(harness.ttk, "Ready — Start").command()
         _drain(harness.frame)
