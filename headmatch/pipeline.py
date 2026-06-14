@@ -202,7 +202,7 @@ def fit_from_hearing_profile(
         eq_target(f) = target(f) + hearing_compensation(f)
     where compensation comes from the half-gain rule (Lybarger 1944).
     """
-    from .hearing_test import eq_bands_from_gain_points, relative_compensation_points
+    from .hearing_test import compute_relative_compensation, eq_bands_from_gain_points
     from .signals import geometric_log_grid
 
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
@@ -223,8 +223,7 @@ def fit_from_hearing_profile(
     # Per-ear, calibration-invariant relative compensation (Part B): reference each
     # ear's thresholds to its own 1 kHz and subtract the normal threshold shape.
     # See docs/designs/calibration-robust-hearing.md.
-    left_comp = relative_compensation_points(profile.left)
-    right_comp = relative_compensation_points(profile.right)
+    left_comp, right_comp = compute_relative_compensation(profile)
     target_grid = np.interp(np.log10(freqs), np.log10(tfreqs), tvals, left=float(tvals[0]), right=float(tvals[-1]))
     target_is_flat = not bool(np.any(np.abs(tvals) > 0.05))
 

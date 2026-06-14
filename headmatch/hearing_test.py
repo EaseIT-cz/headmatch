@@ -9,6 +9,7 @@ No proprietary algorithm or patented DSP method is used.
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -70,6 +71,13 @@ HEARING_DEADBAND_DB: float = 10.0
 # deviation. Lower than the absolute deadband because smoothing already rejects
 # single-point noise, so a smaller bar catches mild-but-consistent deviations.
 RELATIVE_DEADBAND_DB: float = 6.0
+# Per-point inherent uncertainty even with repeats (avoids div-by-zero and reflects
+# that no self-test point is perfectly reliable). Used by the noise-aware model.
+NOISE_FLOOR_DB: float = 2.0
+# L/R deviations within POOL_SIGMA combined std are pooled (treated as the same);
+# a correction must exceed GATE_SIGMA of its own (smoothed) noise to be applied.
+POOL_SIGMA: float = 1.0
+GATE_SIGMA: float = 1.0
 # Each frequency is measured this many times and the converged thresholds are
 # averaged, to cut the per-point self-test variability that makes a single pass
 # jagged (Saliba et al. 2022: within-5 dB agreement only 60-77% per frequency).
@@ -123,6 +131,7 @@ class FrequencyThreshold:
     ascending_runs: int
     determined: bool             # True only when the staircase truly converged
     floored: bool = False        # heard the test floor -> volume likely too high
+    spread_db: float = 0.0        # std of the repeated passes (per-point uncertainty)
 
 
 @dataclass
@@ -329,7 +338,8 @@ def averaged_frequency_threshold(
     """
     if floored or not levels:
         return FrequencyThreshold(freq_hz, None, ascending_runs, False, floored)
-    return FrequencyThreshold(freq_hz, round(float(np.mean(levels)), 2), ascending_runs, True, False)
+    spread = round(float(np.std(levels)), 2) if len(levels) > 1 else 0.0
+    return FrequencyThreshold(freq_hz, round(float(np.mean(levels)), 2), ascending_runs, True, False, spread)
 
 
 def relative_compensation_points(
@@ -349,45 +359,113 @@ def relative_compensation_points(
     capped boost. Adding a constant to every threshold (a volume change) leaves the
     result unchanged — the absolute level cancels.
     """
-    thr = {
-        f: t.level_dbfs
+    return _smooth_and_gate(_ear_deviations(side), fraction, deadband_db, max_gain_db)
+
+
+def compute_relative_compensation(
+    profile: HearingProfile,
+    *,
+    fraction: float = GAIN_FRACTION,
+    deadband_db: float = RELATIVE_DEADBAND_DB,
+    max_gain_db: float = MAX_COMPENSATION_DB,
+) -> tuple[dict[int, float], dict[int, float]]:
+    """Per-ear EQ gains using per-point uncertainty (from repeated passes):
+
+    - A1 variance gate: a correction must exceed the deadband AND the point's own
+      (smoothed) measured noise — so noisy points are not corrected.
+    - B3 noise-aware pooling: where the two ears agree within their combined noise,
+      the deviations are pooled (more data, less noise); where they reliably differ,
+      each ear is kept separate — preserving real L/R asymmetry.
+    - C4 uncertainty-weighted smoothing: neighbouring frequencies are blended with
+      inverse-variance weights, so reliable points dominate noisy ones.
+    """
+    left = _ear_deviations(profile.left)
+    right = _ear_deviations(profile.right)
+
+    pooled_left: dict[int, tuple[float, float]] = {}
+    pooled_right: dict[int, tuple[float, float]] = {}
+    for freq_hz in sorted(set(left) | set(right)):
+        dl = left.get(freq_hz)
+        dr = right.get(freq_hz)
+        if dl and dr:
+            combined = math.hypot(dl[1], dr[1])
+            if abs(dl[0] - dr[0]) <= POOL_SIGMA * combined:
+                merged = _inverse_variance_weighted([dl, dr])  # ears agree -> pool
+                pooled_left[freq_hz] = pooled_right[freq_hz] = merged
+            else:
+                pooled_left[freq_hz] = dl  # reliably differ -> per-ear
+                pooled_right[freq_hz] = dr
+        elif dl:
+            pooled_left[freq_hz] = dl
+        elif dr:
+            pooled_right[freq_hz] = dr
+
+    return (
+        _smooth_and_gate(pooled_left, fraction, deadband_db, max_gain_db),
+        _smooth_and_gate(pooled_right, fraction, deadband_db, max_gain_db),
+    )
+
+
+def _ear_deviations(side: dict[int, FrequencyThreshold]) -> dict[int, tuple[float, float]]:
+    """{freq: (deviation_db, noise_db)} for one ear — relative to its own 1 kHz,
+    normal shape subtracted, with the combined measurement noise."""
+    determined = {
+        f: (t.level_dbfs, getattr(t, 'spread_db', 0.0) or 0.0)
         for f, t in side.items()
         if t is not None and t.determined and t.level_dbfs is not None
     }
-    if len(thr) < 2:
+    if len(determined) < 2:
         return {}
-    ref = thr.get(1000)
-    if ref is None:
-        ref = min(thr.values())  # most sensitive determined frequency
+    ref_level, ref_spread = determined.get(1000, (None, 0.0))
+    if ref_level is None:
+        ref_level = min(v[0] for v in determined.values())
+        ref_spread = 0.0
+    ref_noise_sq = ref_spread ** 2 + NOISE_FLOOR_DB ** 2
 
-    freqs = sorted(thr)
-    raw_dev = [(thr[f] - ref) - NORMAL_RELATIVE_SHAPE_DB.get(f, 0.0) for f in freqs]
-    # Smooth across frequency (triangular 3-tap) so a single noisy self-test point
-    # can't drive a boost — real hearing loss is smooth, so only deviations
-    # corroborated by neighbouring frequencies survive.
-    dev = _smooth_over_frequency(raw_dev)
+    out: dict[int, tuple[float, float]] = {}
+    for freq_hz, (level, spread) in determined.items():
+        dev = (level - ref_level) - NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
+        noise = math.sqrt(spread ** 2 + NOISE_FLOOR_DB ** 2 + ref_noise_sq)
+        out[freq_hz] = (dev, noise)
+    return out
+
+
+def _inverse_variance_weighted(items: list[tuple[float, float]]) -> tuple[float, float]:
+    weights = [1.0 / (n * n) for _, n in items]
+    total = sum(weights)
+    dev = sum(w * d for w, (d, _) in zip(weights, items)) / total
+    return dev, (1.0 / total) ** 0.5
+
+
+def _smooth_and_gate(dn: dict[int, tuple[float, float]], fraction, deadband_db, max_gain_db) -> dict[int, float]:
+    if not dn:
+        return {}
+    freqs = sorted(dn)
+    devs = [dn[f][0] for f in freqs]
+    noises = [dn[f][1] for f in freqs]
+    # C4: inverse-variance-weighted 3-tap smoothing across frequency.
+    sdev: list[float] = []
+    snoise: list[float] = []
+    for i in range(len(freqs)):
+        num = 0.0
+        den = 0.0
+        for off, base in ((-1, 0.25), (0, 0.5), (1, 0.25)):
+            j = i + off
+            if 0 <= j < len(freqs):
+                w = base / (noises[j] ** 2)
+                num += w * devs[j]
+                den += w
+        sdev.append(num / den if den else devs[i])
+        snoise.append((1.0 / den) ** 0.5 if den else noises[i])
 
     points: dict[int, float] = {}
-    for freq_hz, d in zip(freqs, dev):
+    for freq_hz, d, n in zip(freqs, sdev, snoise):
         if d < deadband_db:
             continue  # within a normal ear / within self-test noise
+        if d < GATE_SIGMA * n:
+            continue  # A1: doesn't beat its own measured noise
         points[freq_hz] = round(float(np.clip(d * fraction, 0.0, max_gain_db)), 2)
     return points
-
-
-def _smooth_over_frequency(values: list[float]) -> list[float]:
-    """Triangular 3-tap moving average (weights 0.25/0.5/0.25), edges renormalised."""
-    n = len(values)
-    out: list[float] = []
-    for i in range(n):
-        acc = 0.0
-        weight = 0.0
-        for j, w in ((i - 1, 0.25), (i, 0.5), (i + 1, 0.25)):
-            if 0 <= j < n:
-                acc += w * values[j]
-                weight += w
-        out.append(acc / weight if weight else values[i])
-    return out
 
 
 def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:
