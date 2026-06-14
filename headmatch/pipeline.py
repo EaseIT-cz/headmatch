@@ -221,35 +221,33 @@ def fit_from_hearing_profile(
     tvals = np.asarray(target.values_db, dtype=float)
 
     # Per-ear, calibration-invariant relative compensation (Part B): reference each
-    # ear's thresholds to its own 1 kHz, subtract the normal threshold shape, then
-    # combine with the (independent) target curve and place one peaking filter per
-    # control point. See docs/designs/calibration-robust-hearing.md.
-    def _combine_with_target(comp_points: dict) -> dict:
-        # Control points = the ear's measured frequencies UNION the target's own
-        # non-neutral frequencies (the target applies even with no hearing deviation).
-        control = set(comp_points)
-        control.update(int(round(f)) for f, v in zip(tfreqs, tvals) if abs(v) > 0.05)
-        return {
-            f: round(comp_points.get(f, 0.0) + float(np.interp(f, tfreqs, tvals)), 2)
-            for f in sorted(control)
-        }
+    # ear's thresholds to its own 1 kHz and subtract the normal threshold shape.
+    # See docs/designs/calibration-robust-hearing.md.
+    left_comp = relative_compensation_points(profile.left)
+    right_comp = relative_compensation_points(profile.right)
+    target_grid = np.interp(np.log10(freqs), np.log10(tfreqs), tvals, left=float(tvals[0]), right=float(tvals[-1]))
+    target_is_flat = not bool(np.any(np.abs(tvals) > 0.05))
 
-    def _grid_curve(eq_points: dict) -> np.ndarray:
-        if not eq_points:
-            return np.zeros(len(freqs))
-        fs = sorted(eq_points)
-        gs = [eq_points[f] for f in fs]
-        return np.interp(np.log10(freqs), np.log10(fs), gs, left=gs[0], right=gs[-1])
+    def _ear_bands_and_target(comp: dict):
+        # Sparse hearing compensation as peaking filters at the measured frequencies.
+        hearing_bands = eq_bands_from_gain_points(comp, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
+        if target_is_flat:
+            # Hearing only: keep the honest, sparse measured-resolution bands.
+            return hearing_bands, peq_chain_response_db(freqs, sample_rate, hearing_bands)
+        # A tonal target is layered on. Render the hearing bumps as a curve, add the
+        # (smooth, dense) target, and re-fit the combined curve with fit_peq, which
+        # places low/high SHELVES at tilted edges + peaking for mid features — so the
+        # Harman bass/treble tilt is smooth instead of rippled.
+        combined = target_grid + peq_chain_response_db(freqs, sample_rate, hearing_bands)
+        return fit_peq(freqs, combined, sample_rate, budget=filter_budget), combined
 
-    left_eq_points = _combine_with_target(relative_compensation_points(profile.left))
-    right_eq_points = _combine_with_target(relative_compensation_points(profile.right))
-    left_bands = eq_bands_from_gain_points(left_eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
-    right_bands = eq_bands_from_gain_points(right_eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
+    left_bands, left_target = _ear_bands_and_target(left_comp)
+    right_bands, right_target = _ear_bands_and_target(right_comp)
 
     left_pred = peq_chain_response_db(freqs, sample_rate, left_bands)
     right_pred = peq_chain_response_db(freqs, sample_rate, right_bands)
-    l_rms, l_max = _metrics(freqs, left_pred, _grid_curve(left_eq_points))
-    r_rms, r_max = _metrics(freqs, right_pred, _grid_curve(right_eq_points))
+    l_rms, l_max = _metrics(freqs, left_pred, left_target)
+    r_rms, r_max = _metrics(freqs, right_pred, right_target)
 
     identity = get_app_identity()
     report = {
@@ -274,8 +272,8 @@ def fit_from_hearing_profile(
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
         'hearing_eq_points': {
-            'left': {str(f): g for f, g in left_eq_points.items()},
-            'right': {str(f): g for f, g in right_eq_points.items()},
+            'left': {str(f): g for f, g in left_comp.items()},
+            'right': {str(f): g for f, g in right_comp.items()},
         },
     }
     clipping_assessment = assess_eq_clipping(freqs, sample_rate, left_bands, right_bands)
