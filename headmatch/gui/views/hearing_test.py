@@ -8,6 +8,7 @@ from ...hearing_test import (
     ASYMMETRY_WARNING_DB,
     GAIN_FRACTION,
     MAX_COMPENSATION_DB,
+    MIN_LEVEL_DBFS,
     NORMAL_HEARING_REFERENCE,
     RESPONSE_WINDOW_S,
     START_LEVEL_DBFS,
@@ -156,8 +157,44 @@ def render_hearing_test(
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=3, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Start Test", command=_show_channel_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Start Test", command=_show_volume_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Cancel", command=on_cancel).grid(row=0, column=1)
+
+    def _show_volume_check():
+        """Set a comfortable level where the test floor is inaudible (prevents the
+        flooring that makes thresholds unmeasurable)."""
+        _clear()
+        frame.columnconfigure(0, weight=1)
+        _state["ear"] = "both"
+        ttk.Label(frame, text="Set Volume", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(
+            frame,
+            text=(
+                "A 1 kHz tone is playing. Set your system volume to a comfortable "
+                "listening level. Then play the faint tone: you should NOT be able to "
+                "hear it. If you can, your volume is too high and the test cannot "
+                "measure your thresholds — lower it and re-check."
+            ),
+            wraplength=560, justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 12))
+
+        def _play_comfortable():
+            _state["ear"] = "both"
+            _play_tone_async(1000, START_LEVEL_DBFS)
+
+        def _play_faint():
+            _state["ear"] = "both"
+            _play_tone_async(1000, MIN_LEVEL_DBFS + 5.0)
+
+        row1 = ttk.Frame(frame)
+        row1.grid(row=2, column=0, sticky="w")
+        ttk.Button(row1, text="Play comfortable tone", command=_play_comfortable).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(row1, text="Play faint tone", command=_play_faint).grid(row=0, column=1)
+        row2 = ttk.Frame(frame)
+        row2.grid(row=3, column=0, sticky="w", pady=(12, 0))
+        ttk.Button(row2, text="I can't hear the faint tone — continue", command=_show_channel_check, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(row2, text="Stop", command=_stop_test).grid(row=0, column=1)
+        _play_comfortable()
 
     def _show_channel_check():
         """Confirm per-ear routing reaches the hardware before testing."""

@@ -206,7 +206,8 @@ def test_intro_renders_without_touching_frame_cget(harness):
 
 def test_full_flow_timeout_path_reaches_results_and_completes(harness):
     harness.render()
-    _find_last(harness.ttk, "Start Test").command()        # -> channel check
+    _find_last(harness.ttk, "Start Test").command()        # -> volume check
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()  # -> channel check
     _find_last(harness.ttk, "Left ear").command()          # -> left ear intro
     for _ in range(2):                                      # left, then right ear
         _find_last(harness.ttk, "Ready — Start").command()
@@ -227,6 +228,7 @@ def test_full_flow_timeout_path_reaches_results_and_completes(harness):
 def test_heard_response_path(harness):
     harness.render()
     _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()
     _find_last(harness.ttk, "Left ear").command()          # pass channel check
     _find_last(harness.ttk, "Ready — Start").command()     # first tone scheduled
     hear = _find_last(harness.ttk, "I hear it")
@@ -243,6 +245,7 @@ def test_heard_response_path(harness):
 def test_channel_check_precedes_test_and_warns_on_mismatch(harness):
     harness.render()
     _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()
     # Channel check appears before the test.
     assert _find_last(harness.ttk, "Left ear") is not None
     assert _find_last(harness.ttk, "Right ear") is not None
@@ -251,6 +254,16 @@ def test_channel_check_precedes_test_and_warns_on_mismatch(harness):
     assert _find_last(harness.ttk, "Continue anyway") is not None
     _find_last(harness.ttk, "Continue anyway").command()
     assert _find_last(harness.ttk, "Ready — Start") is not None
+
+
+def test_volume_check_precedes_channel_check(harness):
+    harness.render()
+    _find_last(harness.ttk, "Start Test").command()
+    # Volume calibration appears first.
+    assert _find_last(harness.ttk, "Play faint tone") is not None
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()
+    # ...then the channel check.
+    assert _find_last(harness.ttk, "Left ear") is not None
 
 
 def test_stop_test_invokes_cancel(harness):
@@ -262,6 +275,7 @@ def test_stop_test_invokes_cancel(harness):
 def test_save_without_applying_uses_cancel(harness):
     harness.render()
     _find_last(harness.ttk, "Start Test").command()
+    _find_last(harness.ttk, "I can't hear the faint tone — continue").command()
     _find_last(harness.ttk, "Left ear").command()          # pass channel check
     for _ in range(2):
         _find_last(harness.ttk, "Ready — Start").command()
