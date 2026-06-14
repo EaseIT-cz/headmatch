@@ -25,6 +25,13 @@ from ..widgets import theme_background
 from datetime import datetime, timezone
 
 
+# Speaker-status strings. Kept ASCII-only — decorative glyphs (♪ ✓ — …) fail to
+# render in some platform Tk fonts and show as tofu/boxes.
+_STATUS_PLAYING = "Playing tone..."
+_STATUS_HEARD = "Heard"
+_STATUS_NOT_HEARD = "Not heard"
+
+
 _FREQ_LABELS = {
     500: "500 Hz",
     1000: "1 kHz",
@@ -86,7 +93,7 @@ def render_hearing_test(
         """Play tone in a background thread so Tkinter stays responsive."""
         def _worker():
             try:
-                samples = generate_tone(freq_hz, level_dbfs, sample_rate)
+                samples = generate_tone(freq_hz, level_dbfs, sample_rate, ear=_state["ear"])
                 backend.play_tone(samples, sample_rate, output_device)
             except Exception:
                 pass
@@ -212,7 +219,7 @@ def render_hearing_test(
         ).grid(row=1, column=0, sticky="w", pady=(0, 12))
 
         # Speaker indicator
-        _state["speaker_label_var"] = tk.StringVar(value="♪ Playing tone …")
+        _state["speaker_label_var"] = tk.StringVar(value=_STATUS_PLAYING)
         ttk.Label(frame, textvariable=_state["speaker_label_var"]).grid(
             row=2, column=0, sticky="w", pady=(0, 12)
         )
@@ -244,7 +251,7 @@ def render_hearing_test(
         # Update speaker indicator
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("♪ Playing tone …")
+            speaker_var.set(_STATUS_PLAYING)
 
         _play_tone_async(freq_hz, level)
 
@@ -264,7 +271,7 @@ def render_hearing_test(
         engine.record_response(True)
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("✓ Heard")
+            speaker_var.set(_STATUS_HEARD)
         if engine.done:
             frame.after(300, _on_freq_done)
         else:
@@ -279,7 +286,7 @@ def render_hearing_test(
         engine.record_response(False)
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("— Not heard")
+            speaker_var.set(_STATUS_NOT_HEARD)
         if engine.done:
             frame.after(300, _on_freq_done)
         else:

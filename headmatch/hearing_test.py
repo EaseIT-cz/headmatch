@@ -46,6 +46,12 @@ STEP_UP_DB: float = 5.0             # increase after no response
 MAX_ASCENDING_RUNS: int = 8
 THRESHOLD_RESPONSES_NEEDED: int = 2
 THRESHOLD_WINDOW: int = 3
+# Safety cap: the Hughson-Westlake staircase only completes via ascending runs,
+# which require misses. A listener who hears (or misses) every presentation
+# never produces an ascending run, so without this cap the frequency would
+# never finish and the test would hang on it. 30 is well above a normal
+# convergence (~10-20 presentations).
+MAX_PRESENTATIONS: int = 30
 RESPONSE_WINDOW_S: float = 3.0
 
 # ── Compensation parameters ───────────────────────────────────────────────────
@@ -144,6 +150,8 @@ class ThresholdEngine:
         self._ascending_hits: list[float] = []
         self._done = False
         self._threshold: float | None = None
+        self._presentations = 0     # total tones presented (safety cap)
+        self._ever_heard = False    # any heard response at all
 
     @property
     def current_level_dbfs(self) -> float:
@@ -166,7 +174,9 @@ class ThresholdEngine:
         if self._done:
             return
 
+        self._presentations += 1
         if heard:
+            self._ever_heard = True
             if self._in_ascending:
                 self._run_count += 1
                 self._ascending_hits.append(round(self._level, 2))
@@ -187,6 +197,20 @@ class ThresholdEngine:
             self._level = min(MAX_LEVEL_DBFS, self._level + STEP_UP_DB)
             self._in_ascending = True
 
+        # Safety cap: guarantee termination even when the staircase never
+        # produces an ascending run (listener hears or misses everything).
+        if not self._done and self._presentations >= MAX_PRESENTATIONS:
+            est = self._best_estimate()
+            if est is not None:
+                self._threshold = est
+            elif self._ever_heard:
+                # Heard even the quietest tone -> threshold at/near the floor.
+                self._threshold = round(self._level, 2)
+            else:
+                # Never heard anything -> threshold genuinely undetermined.
+                self._threshold = None
+            self._done = True
+
     def _check_threshold(self) -> float | None:
         if self._run_count < 3:
             return None
@@ -204,10 +228,15 @@ class ThresholdEngine:
 
 # ── Tone generation ───────────────────────────────────────────────────────────
 
-def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000) -> np.ndarray:
+def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
+                  ear: str = "both") -> np.ndarray:
     """
     Return a stereo (N, 2) float64 buffer: a pure sine at freq_hz scaled to
     level_dbfs, with 30 ms raised-cosine onset and offset ramps.
+
+    ``ear`` routes the tone to a single channel so that a one-ear threshold
+    test is actually measured in that ear: "left" silences the right channel,
+    "right" silences the left, and "both" (default) plays the tone in both.
     """
     n_total = int(round(TONE_DURATION_S * sample_rate))
     n_ramp = int(round(RAMP_DURATION_S * sample_rate))
@@ -221,6 +250,13 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000) -> 
         mono[-n_ramp:] *= ramp[::-1]
 
     mono *= 10.0 ** (level_dbfs / 20.0)
+    silent = np.zeros_like(mono)
+
+    side = (ear or "both").lower()
+    if side == "left":
+        return np.column_stack([mono, silent])
+    if side == "right":
+        return np.column_stack([silent, mono])
     return np.column_stack([mono, mono])
 
 
@@ -373,7 +409,7 @@ def run_cli_hearing_test(
 
             while not engine.done:
                 level = engine.current_level_dbfs
-                samples = generate_tone(freq_hz, level, sample_rate)
+                samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
                 backend.play_tone(samples, sample_rate, output_device)
                 heard = _ask_heard(RESPONSE_WINDOW_S)
                 engine.record_response(heard)
