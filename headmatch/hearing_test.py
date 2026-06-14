@@ -78,6 +78,10 @@ NOISE_FLOOR_DB: float = 2.0
 # a correction must exceed GATE_SIGMA of its own (smoothed) noise to be applied.
 POOL_SIGMA: float = 1.0
 GATE_SIGMA: float = 1.0
+# Across-frequency smoothing kernel width, in octaves. Weighting by log-frequency
+# distance (not list position) keeps a real deviation from being washed out by a
+# distant frequency when intervening frequencies are missing/floored.
+SMOOTH_SIGMA_OCT: float = 0.6
 # Adaptive depth: every frequency gets 1 pass; a frequency whose deviation looks
 # like a candidate for correction is repeated (up to MEASUREMENT_REPEATS) to confirm
 # it and measure its spread. Clean/normal frequencies finish in one pass — fast where
@@ -472,18 +476,22 @@ def _smooth_and_gate(dn: dict[int, tuple[float, float]], fraction, deadband_db, 
     freqs = sorted(dn)
     devs = [dn[f][0] for f in freqs]
     noises = [dn[f][1] for f in freqs]
-    # C4: inverse-variance-weighted 3-tap smoothing across frequency.
+    # C4: smoothing weighted by log-frequency distance (Gaussian kernel) AND inverse
+    # variance — neighbours blend by how close they actually are in frequency (so a
+    # distant point doesn't wash out a real deviation) and how reliable they are.
+    two_sigma_sq = 2.0 * SMOOTH_SIGMA_OCT ** 2
     sdev: list[float] = []
     snoise: list[float] = []
-    for i in range(len(freqs)):
+    for i, fi in enumerate(freqs):
         num = 0.0
         den = 0.0
-        for off, base in ((-1, 0.25), (0, 0.5), (1, 0.25)):
-            j = i + off
-            if 0 <= j < len(freqs):
-                w = base / (noises[j] ** 2)
-                num += w * devs[j]
-                den += w
+        for j, fj in enumerate(freqs):
+            oct_dist = abs(math.log2(fi / fj))
+            if oct_dist > 1.5:
+                continue  # negligible weight beyond ~1.5 octaves
+            w = math.exp(-(oct_dist ** 2) / two_sigma_sq) / (noises[j] ** 2)
+            num += w * devs[j]
+            den += w
         sdev.append(num / den if den else devs[i])
         snoise.append((1.0 / den) ** 0.5 if den else noises[i])
 
