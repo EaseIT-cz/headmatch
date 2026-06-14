@@ -234,9 +234,17 @@ def fit_from_hearing_profile(
     # per-frequency hearing compensation with the target sampled at those same
     # frequencies, then place one peaking filter per point (Q from spacing).
     comp_points = compute_compensation_points(profile)
+    # Control points = the measured audiometric frequencies (hearing comp) UNION the
+    # target curve's own frequencies where it deviates from neutral. The target is
+    # known independently of the hearing test, so it must apply even when there is
+    # no measurable hearing loss. gain(f) = compensation(f) + target(f).
+    tfreqs = np.asarray(target.freqs_hz, dtype=float)
+    tvals = np.asarray(target.values_db, dtype=float)
+    control = set(comp_points)
+    control.update(int(round(f)) for f, v in zip(tfreqs, tvals) if abs(v) > 0.05)
     eq_points = {
-        f: round(g + float(np.interp(f, target_resampled.freqs_hz, target_resampled.values_db)), 2)
-        for f, g in comp_points.items()
+        f: round(comp_points.get(f, 0.0) + float(np.interp(f, tfreqs, tvals)), 2)
+        for f in sorted(control)
     }
     bands = eq_bands_from_gain_points(eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
     left_bands = bands
@@ -368,6 +376,10 @@ def run_hearing_fit(
         comment='; GraphicEQ rendered on the standard 127-point grid from the fitted bands.',
     )
 
+    # Drop a copy of the raw hearing profile alongside the EQ artifacts for
+    # traceability (the canonical copy still lives in the config dir).
+    if hasattr(profile, 'to_dict'):
+        save_json(out_dir / 'hearing_profile.json', profile.to_dict())
     save_json(out_dir / 'hearing_fit_report.json', report)
     _write_hearing_fit_readme(out_dir, report)
 
