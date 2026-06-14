@@ -213,6 +213,7 @@ class HeadMatchGuiApp:
         self.basic_clone_output_var = tk.StringVar(master=root, value="")
         self.hearing_profile = None  # HearingProfile | None; set after a successful test
         self._force_new_hearing_test = False  # skip the saved-profile landing once
+        self.hearing_target_var = tk.StringVar(master=root, value="Flat (default)")  # advanced-mode tonal target
         self.basic_progress_var = tk.StringVar(master=root, value="")
         self.progress_title_var = tk.StringVar(master=root, value="")
         self.progress_body_var = tk.StringVar(master=root, value="")
@@ -667,13 +668,27 @@ class HeadMatchGuiApp:
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(0, 16))
 
+        # Advanced mode: choose a tonal target curve to layer on the compensation.
+        # Basic mode keeps the flat default.
+        if self.mode_var.get() == "advanced":
+            from ..builtin_targets import BUILTIN_TARGET_DEFS
+            target_frame = ttk.Frame(self.content)
+            target_frame.grid(row=2, column=0, sticky="w", pady=(0, 12))
+            ttk.Label(target_frame, text="Target curve:").grid(row=0, column=0, sticky="w", padx=(0, 8))
+            values = [label for label, _pts in BUILTIN_TARGET_DEFS.values()] + ["Custom CSV…"]
+            ttk.Combobox(
+                target_frame, textvariable=self.hearing_target_var,
+                values=values, state="readonly", width=20,
+            ).grid(row=0, column=1, sticky="w")
+            ttk.Button(target_frame, text="Browse…", command=self.choose_target_csv).grid(row=0, column=2, padx=(8, 0))
+
         def _generate_now():
             from pathlib import Path as _Path
             out_dir = str(_Path(self.state.default_output_dir).expanduser().parent / "hearing_fit")
-            self._start_hearing_fit(profile, out_dir)
+            self._start_hearing_fit(profile, out_dir, target_path=self._resolve_hearing_target_path(out_dir))
 
         btn_frame = ttk.Frame(self.content)
-        btn_frame.grid(row=2, column=0, sticky="w")
+        btn_frame.grid(row=3, column=0, sticky="w")
         ttk.Button(btn_frame, text="Generate EQ Preset Now", command=_generate_now, style="Accent.TButton").grid(
             row=0, column=0, padx=(0, 8)
         )
@@ -682,13 +697,33 @@ class HeadMatchGuiApp:
             command=lambda: self.show_view("measure-online"),
         ).grid(row=0, column=1)
 
-    def _start_hearing_fit(self, profile, out_dir: str) -> None:
+    def _resolve_hearing_target_path(self, out_dir: str) -> str | None:
+        """Resolve the advanced-mode tonal target selection to a CSV path.
+
+        Returns None (flat default) in basic mode, for the Flat selection, or
+        when Custom CSV is chosen without a file. Built-in curves are
+        materialised next to the fit output.
+        """
+        if self.mode_var.get() != "advanced":
+            return None
+        from ..builtin_targets import label_to_name, materialize_builtin_target
+        label = self.hearing_target_var.get().strip()
+        if label in ("", "Flat (default)"):
+            return None
+        if label == "Custom CSV…":
+            return self.target_csv_var.get().strip() or None
+        name = label_to_name(label)
+        if name is None:
+            return None
+        return str(materialize_builtin_target(name, out_dir))
+
+    def _start_hearing_fit(self, profile, out_dir: str, target_path: str | None = None) -> None:
         from ..pipeline import run_hearing_fit
         self._run_background_task(
             task_name="hearing-fit",
             progress_title="Generating EQ preset from hearing profile",
             progress_body=f"Fitting EQ bands to your hearing compensation curve. Writing output to {out_dir}.",
-            worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate),
+            worker=lambda: run_hearing_fit(profile, out_dir, sample_rate=self.state.sample_rate, target_path=target_path),
             on_success=lambda result: self._set_completion(
                 title="Hearing EQ preset ready",
                 summary=f"EQ preset written to {out_dir}.",

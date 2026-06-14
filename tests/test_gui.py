@@ -575,6 +575,34 @@ def test_hearing_test_without_saved_profile_runs_test(tmp_path, fake_tk, monkeyp
     assert 'Use Saved Profile' not in [b.kwargs.get('text') for b in created]
 
 
+def test_resolve_hearing_target_path_modes(tmp_path, fake_tk):
+    from headmatch.targets import load_curve
+    app = _hearing_app(fake_tk, tmp_path)
+    out = tmp_path / "hearing_fit"
+
+    # Basic mode -> always flat (None).
+    app.mode_var.set("basic")
+    app.hearing_target_var.set("Harman")
+    assert app._resolve_hearing_target_path(str(out)) is None
+
+    # Advanced + Flat -> None.
+    app.mode_var.set("advanced")
+    app.hearing_target_var.set("Flat (default)")
+    assert app._resolve_hearing_target_path(str(out)) is None
+
+    # Advanced + Harman -> a materialised Harman target CSV.
+    app.hearing_target_var.set("Harman")
+    path = app._resolve_hearing_target_path(str(out))
+    assert path is not None
+    curve = load_curve(path)
+    assert len(curve.freqs_hz) == 12
+
+    # Advanced + Custom CSV -> the chosen target_csv_var path.
+    app.hearing_target_var.set("Custom CSV…")
+    app.target_csv_var.set("/tmp/my_target.csv")
+    assert app._resolve_hearing_target_path(str(out)) == "/tmp/my_target.csv"
+
+
 def test_create_app_includes_setup_check_view_and_refreshes_doctor_report(tmp_path, fake_tk):
     calls = {}
     root = DummyRoot()
@@ -1238,6 +1266,9 @@ def test_show_hearing_followup_renders_two_buttons():
         content=content,
         _ttk=ttk,
         state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        mode_var=DummyVar(value="basic"),
+        hearing_target_var=DummyVar(value="Flat (default)"),
+        _resolve_hearing_target_path=lambda out: None,
         show_view=lambda key: commands.setdefault("show_view", key),
         _start_hearing_fit=lambda p, out: commands.update({"start_fit": out}),
     )
@@ -1263,8 +1294,11 @@ def test_show_hearing_followup_generate_button_calls_start_hearing_fit():
         content=content,
         _ttk=ttk,
         state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        mode_var=DummyVar(value="basic"),
+        hearing_target_var=DummyVar(value="Flat (default)"),
+        _resolve_hearing_target_path=lambda out: None,
         show_view=lambda key: None,
-        _start_hearing_fit=lambda p, out: calls.update({"profile": p, "out": out}),
+        _start_hearing_fit=lambda p, out, target_path=None: calls.update({"profile": p, "out": out, "target": target_path}),
     )
 
     HeadMatchGuiApp._show_hearing_followup(app, profile)
@@ -1293,6 +1327,9 @@ def test_show_hearing_followup_measure_button_navigates_to_measure_online():
         content=content,
         _ttk=ttk,
         state=SimpleNamespace(default_output_dir="/tmp/hm/session_01"),
+        mode_var=DummyVar(value="basic"),
+        hearing_target_var=DummyVar(value="Flat (default)"),
+        _resolve_hearing_target_path=lambda out: None,
         show_view=lambda key: navigated.update({"key": key}),
         _start_hearing_fit=lambda *a: None,
     )
