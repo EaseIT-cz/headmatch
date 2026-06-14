@@ -380,9 +380,64 @@ def run_hearing_fit(
     if hasattr(profile, 'to_dict'):
         save_json(out_dir / 'hearing_profile.json', profile.to_dict())
     save_json(out_dir / 'hearing_fit_report.json', report)
+    # run_summary.json so the hearing fit is discoverable in the Results/history
+    # view and A/B-comparable, like the measurement fit.
+    save_json(out_dir / 'run_summary.json',
+              _hearing_run_summary(profile, out_dir, left_bands, right_bands, report, sample_rate, filter_budget).to_dict())
     _write_hearing_fit_readme(out_dir, report)
 
     return report
+
+
+def _hearing_run_summary(profile, out_dir, left_bands, right_bands, report, sample_rate, filter_budget):
+    from .contracts import (
+        RUN_SUMMARY_SCHEMA_VERSION, ConfidenceSummary, FrontendRunSummary,
+        RunErrorSummary, RunFilterCounts,
+    )
+    from .hearing_test import TEST_FREQUENCIES
+
+    sides = list(profile.left.values()) + list(profile.right.values())
+    total = len(sides)
+    determined = sum(1 for t in sides if getattr(t, 'determined', False))
+    floored = sum(1 for t in sides if getattr(t, 'floored', False))
+    if floored:
+        label, score, headline = "low", 30, "Some frequencies floored — volume likely too high; re-test at a lower level."
+    elif total and determined == total:
+        label, score, headline = "high", 80, "All frequencies measured (hearing-only fit; flat headphone assumed)."
+    elif total and determined >= 0.6 * total:
+        label, score, headline = "medium", 60, "Most frequencies measured (hearing-only fit)."
+    else:
+        label, score, headline = "low", 40, "Few frequencies converged — results uncertain; re-test."
+
+    confidence = ConfidenceSummary(
+        score=score, label=label, headline=headline,
+        interpretation="Equipment-free hearing-based EQ. Not a clinical audiogram (uncalibrated, relative test).",
+        reasons=(f"{determined}/{total} thresholds determined",),
+        warnings=("Volume too high during the test — re-test at a lower level.",) if floored else (),
+        metrics={"determined": float(determined), "floored": float(floored), "total": float(total)},
+    )
+    clipping = report.get('eq_clipping') if isinstance(report.get('eq_clipping'), dict) else None
+    return FrontendRunSummary(
+        schema_version=RUN_SUMMARY_SCHEMA_VERSION,
+        generated_by=get_app_identity().as_metadata(),
+        kind="fit",
+        out_dir=str(out_dir),
+        sample_rate=sample_rate,
+        frequency_points=len(TEST_FREQUENCIES),
+        target=report.get('target', 'flat'),
+        filters=RunFilterCounts(left=len(left_bands), right=len(right_bands)),
+        predicted_error_db=RunErrorSummary(
+            left_rms=report['predicted_left_rms_error_db'],
+            right_rms=report['predicted_right_rms_error_db'],
+            left_max=report['predicted_left_max_error_db'],
+            right_max=report['predicted_right_max_error_db'],
+        ),
+        confidence=confidence,
+        plots={},
+        results_guide=str(out_dir / 'README.txt'),
+        filter_budget=filter_budget,
+        eq_clipping_assessment=clipping,
+    )
 
 
 def _average_measurements(results: list[MeasurementResult]) -> MeasurementResult:
