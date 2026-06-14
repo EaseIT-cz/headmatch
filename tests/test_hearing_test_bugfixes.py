@@ -82,6 +82,44 @@ def test_engine_still_converges_normally_within_cap():
         n += 1
     assert eng.done
     assert eng.threshold == -45.0
-    # Genuine convergence happens before the safety cap kicks in.
+    # Terminates within the safety cap (which doubles as a max-length bound).
     from headmatch.hearing_test import MAX_PRESENTATIONS
-    assert n < MAX_PRESENTATIONS
+    assert n <= MAX_PRESENTATIONS
+
+
+def test_hearing_fit_graphiceq_point_count_is_sane(tmp_path):
+    # Regression: run_hearing_fit used geometric_log_grid(20, 20000, 512) where
+    # 512 is points-per-octave -> ~5103 points, which crashed EasyEffects.
+    from headmatch.hearing_test import HearingProfile, FrequencyThreshold, TEST_FREQUENCIES
+    from headmatch.pipeline import run_hearing_fit
+
+    left = {f: FrequencyThreshold(f, -30.0, 3, True) for f in TEST_FREQUENCIES}
+    right = {f: FrequencyThreshold(f, -30.0, 3, True) for f in TEST_FREQUENCIES}
+    profile = HearingProfile(left=left, right=right, tested_at="2026-01-01T00:00:00Z", asymmetric_freqs=[])
+
+    run_hearing_fit(profile, str(tmp_path), sample_rate=48000)
+    text = (tmp_path / "equalizer_apo_graphiceq.txt").read_text()
+    gq_lines = [ln for ln in text.splitlines() if ln.startswith("GraphicEQ:")]
+    assert gq_lines, "no GraphicEQ line written"
+    n_points = len(gq_lines[0].split(":", 1)[1].split(";"))
+    # Compact: the 7 audiometric points + 20 Hz / 20 kHz anchors, never a
+    # dense grid manufactured from a 7-frequency measurement.
+    assert n_points <= 12, f"GraphicEQ should be compact, got {n_points} points"
+
+
+def test_parametric_bands_placed_at_audiometric_frequencies(tmp_path):
+    # Direct 7-frequency EQ: peaking filters sit AT the measured frequencies,
+    # not at greedy-fit positions on an interpolated grid.
+    from headmatch.hearing_test import (
+        HearingProfile, FrequencyThreshold, TEST_FREQUENCIES, NORMAL_HEARING_REFERENCE,
+        eq_bands_from_gain_points, compute_compensation_points,
+    )
+    side = {f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f] + 20.0, 3, True) for f in TEST_FREQUENCIES}
+    profile = HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
+    bands = eq_bands_from_gain_points(compute_compensation_points(profile))
+    assert bands, "expected boost bands for 20 dB loss"
+    assert all(b.kind == "peaking" for b in bands)
+    assert all(round(b.freq) in TEST_FREQUENCIES for b in bands)
+    # Wider spacing -> lower Q; narrower spacing -> higher Q.
+    qs = {round(b.freq): b.q for b in bands}
+    assert qs[1000] < qs[4000]

@@ -202,11 +202,19 @@ def fit_from_hearing_profile(
         eq_target(f) = target(f) + hearing_compensation(f)
     where compensation comes from the half-gain rule (Lybarger 1944).
     """
-    from .hearing_test import compute_compensation_curve
+    from .hearing_test import (
+        compute_compensation_curve,
+        compute_compensation_points,
+        eq_bands_from_gain_points,
+    )
     from .signals import geometric_log_grid
 
     filter_budget = (filter_budget or FilterBudget(max_filters=max_filters)).normalized()
-    freqs = geometric_log_grid(20.0, 20000.0, 512)
+    # Modest grid used only for the prediction/clipping metrics and target
+    # sampling — NOT for manufacturing EQ resolution. The hearing test has only
+    # ~7 measured points, so the EQ is built directly from those (see
+    # docs/designs/measurement-resolution-eq.md).
+    freqs = geometric_log_grid(20.0, 20000.0, 48)
     flat = np.zeros(len(freqs))
 
     if target_path:
@@ -222,8 +230,17 @@ def fit_from_hearing_profile(
     compensation = compute_compensation_curve(profile, freqs)
     eq_target = target_values + compensation
 
-    left_bands = fit_peq(freqs, eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
-    right_bands = fit_peq(freqs, eq_target, sample_rate, max_filters=max_filters, budget=filter_budget)
+    # Build the EQ directly from the measured audiometric frequencies: combine
+    # per-frequency hearing compensation with the target sampled at those same
+    # frequencies, then place one peaking filter per point (Q from spacing).
+    comp_points = compute_compensation_points(profile)
+    eq_points = {
+        f: round(g + float(np.interp(f, target_resampled.freqs_hz, target_resampled.values_db)), 2)
+        for f, g in comp_points.items()
+    }
+    bands = eq_bands_from_gain_points(eq_points, max_filters=filter_budget.max_filters)
+    left_bands = bands
+    right_bands = list(bands)
 
     left_pred = flat + peq_chain_response_db(freqs, sample_rate, left_bands)
     right_pred = flat + peq_chain_response_db(freqs, sample_rate, right_bands)
@@ -252,6 +269,7 @@ def fit_from_hearing_profile(
         },
         'left_bands': [asdict(b) for b in left_bands],
         'right_bands': [asdict(b) for b in right_bands],
+        'hearing_eq_points': {str(f): g for f, g in eq_points.items()},
     }
     clipping_assessment = assess_eq_clipping(freqs, sample_rate, left_bands, right_bands)
     report['eq_clipping'] = {
@@ -338,14 +356,17 @@ def run_hearing_fit(
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
 
-    freqs = geometric_log_grid(20.0, 20000.0, 512)
-    left_fitted_eq = peq_chain_response_db(freqs, sample_rate, left_bands)
-    right_fitted_eq = peq_chain_response_db(freqs, sample_rate, right_bands)
+    # Compact GraphicEQ keyed to the measured frequencies (+ hold-edge anchors),
+    # not a dense grid interpolated from ~7 points.
+    from .hearing_test import hearing_graphiceq_curve
+    eq_points = {int(float(k)): v for k, v in report.get('hearing_eq_points', {}).items()}
+    gq_freqs, gq_gains = hearing_graphiceq_curve(eq_points)
     export_equalizer_apo_graphiceq_txt(
         out_dir / 'equalizer_apo_graphiceq.txt',
-        freqs,
-        left_fitted_eq,
-        right_fitted_eq,
+        gq_freqs,
+        gq_gains,
+        list(gq_gains),
+        comment='; Compact GraphicEQ at the measured audiometric frequencies (+ hold-edge anchors).',
     )
 
     save_json(out_dir / 'hearing_fit_report.json', report)
