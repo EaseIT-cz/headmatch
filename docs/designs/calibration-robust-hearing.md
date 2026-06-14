@@ -27,10 +27,13 @@ be constructed to be invariant against missing calibration**
 and even validated app audiometry has only 60–77% test-retest agreement within
 5 dB ([Saliba et al., AJA 2022](https://pubs.asha.org/doi/10.1044/2022_AJA-21-00191)).
 
-Self-referencing thresholds to the user's own best frequency was considered and
-**rejected**: it is not a literature-backed prescription method. The
-calibration-robust path the literature actually supports is a **supra-threshold
-(loudness) measure**.
+A single *absolute* reference is the wrong tool here. But measuring the **relative
+response shape at one fixed listening level** is calibration-invariant (the absolute
+system gain cancels) and is the appropriate goal for a music-EQ tool. This reframes the
+objective from *clinical hearing-loss prescription* to **perceptual response calibration
+at the listening volume** — see Part B. (Self-referencing is not a valid *clinical*
+prescription, but for perceptual calibration, referencing to the user's own fixed level
+is the standard, correct approach.)
 
 ## Goals
 
@@ -56,56 +59,66 @@ measurement trustworthy. Low-risk, no new science.
    quietest tones are *near* inaudible. Also an L/R channel check ("which ear?")
    to confirm per-ear routing reaches the hardware.
 
-## Part B — Supra-threshold, calibration-invariant measurement (primary)
+## Part B — Relative response calibration at a fixed reference (primary)
 
-**Method: cross-frequency equal-loudness matching (method of adjustment).**
+**Goal (reframed).** Instead of clinical hearing-loss prescription (which needs
+absolute dB HL we cannot calibrate), measure the listener's **perceived response
+shape at the single volume they actually listen at**, and EQ it toward flat (or a
+target). Music plays at one master volume, so this matches real use; and because
+everything is measured *relative to one fixed reference*, the absolute system gain
+cancels (calibration-invariant). It also naturally includes the **headphone's own
+tuning**, since tones are measured *through* the headphone.
 
-- Present a reference tone (1 kHz) at a fixed comfortable level.
-- For each test frequency, the user adjusts that tone's level until it sounds
-  **equally loud** as the reference.
-- The level offset needed, `match(f)` (dB relative to 1 kHz), is a **within-
-  session, fixed-volume relative comparison**, so the absolute system gain
-  cancels — it is calibration-invariant by construction.
+**Method — keeps the familiar "I hear it" flow. No loudness matching, no per-frequency
+volume knob.**
 
-**Grounding:** equal-loudness matching and equal-loudness contours are
-established psychoacoustics (ISO 226; Fletcher–Munson), and supra-threshold
-measures are the calibration-robust option the smartphone-audiometry literature
-recommends (medRxiv 2024, above).
+1. The user sets the **master volume once** so a 1 kHz reference tone is comfortable;
+   that reference level is fixed for the whole test.
+2. For each frequency, the app varies only the **tone level digitally** (master
+   untouched), using the same Hughson-Westlake staircase + "I hear it" interaction
+   (with Part A's guards), to find the audibility threshold **relative to the
+   reference** — `rel_thr(f)`, in dB below the 1 kHz reference. Only the *framing*
+   changes vs today: relative to the user's own reference, not an absolute population
+   value.
+3. Repeat per ear — per-ear EQ falls out naturally.
 
-**Isolating the hearing component (the subtle part).** `match(f)` reflects three
-things mixed together: the headphone's own FR, the user's hearing, and the
-*natural* equal-loudness contour shape (a normal ear is itself less sensitive at
-the extremes). We must not "correct" the natural contour — music is already
-mastered for normal ears. So the hearing deviation is:
+**Isolating the deviation (required, or we over-boost the extremes).** A normal ear is
+*naturally* far less sensitive at the frequency extremes, so flattening the raw
+`rel_thr(f)` would wrongly boost deep bass / high treble for everyone. Subtract the
+**normal relative reference shape** (normal threshold-in-quiet / equal-loudness contour,
+referenced to 1 kHz). This is a *relative* reference and needs no absolute calibration:
 
 ```
-hearing_dev(f) = match_user(f) − match_normal(f)
+dev(f) = [ rel_thr_user(f) − rel_thr_user(1 kHz) ] − normal_rel_shape(f)
 ```
 
-where `match_normal(f)` is the normal-listener equal-loudness offset at the same
-phon level (from ISO 226). Both terms are relative-to-1 kHz, so `hearing_dev`
-stays calibration-invariant. The EQ boosts where the user needed *more* level
-than normal to match (reduced sensitivity).
+`dev(f) > 0` ⇒ the user is less sensitive than normal at f (through this headphone) ⇒
+boost. `dev(f)` then feeds the measured-resolution EQ (bands at the measured
+frequencies, LSQ gains, 127-point GraphicEQ).
 
-> ⚠ **Needs its own literature review before implementation.** Mapping a
-> supra-threshold/loudness deviation to EQ gain is *loudness restoration*, not the
-> half-gain threshold rule. There is a body of work on loudness-based fitting
-> (LGOB, IHAFF/Contour, categorical loudness scaling) with its own gain rules and
-> caveats. Before coding Part B's prescription, run a focused research pass (like
-> the EQ rework) to choose and cite the supra→gain mapping, the right phon level,
-> and how aggressively to apply `hearing_dev`. Do **not** reuse the half-gain
-> fraction blindly here.
+**What this measures, honestly.** `dev(f)` captures **hearing + this headphone**
+combined — which is exactly what reaches the listener's perception, so for a
+hearing-only music EQ that is the right quantity. It is **not** a clinical audiogram and
+must not be presented as one. To separate headphone from hearing, use the
+mic-measurement workflow.
 
-**UX caveat.** Method-of-adjustment loudness matching is harder than "I hear it"
-threshold detection (two-tone alternation + a level slider/buttons). The flow
-must make the comparison easy and allow re-matching.
+> ⚠ **Needs a short focused review before coding** (smaller than a full study). Two
+> things to ground and cite: (a) the source/shape of `normal_rel_shape(f)` — ISO 389-8
+> reference-equivalent thresholds vs an ISO 226 equal-loudness contour at a comfortable
+> phon level; (b) how aggressively to map `dev(f)` → gain — full correction vs a
+> fraction — given listeners prefer softer high-frequency correction (PMID 23357807)
+> and self-test thresholds carry ±5 dB spread. Reuse the EQ design doc's 12 dB cap and
+> noise deadband.
 
-## Part C — Keep the pure-tone path (guarded)
+## Part C — Keep the absolute (clinical-style) interpretation (guarded, optional)
 
-Retain pure-tone threshold audiometry as a secondary/clinical-style option with
-Part A's guards. It remains useful where the user *can* establish a sensible
-level, and it is the cited Hughson-Westlake method. The supra-threshold loudness
-test becomes the **default** because it is calibration-robust.
+Part B and the legacy path share the *same* measurement (the Hughson-Westlake
+"I hear it" staircase). They differ only in interpretation: Part B reads it
+**relatively** (perceptual calibration, calibration-invariant — the **default**),
+while the legacy path reads it **absolutely** (half-gain vs the population reference)
+to produce a clinical-style audiogram + EQ. Retain the absolute interpretation as an
+optional output for users who have a calibrated level, with Part A's guards applied so
+it never emits non-converged/floored thresholds as if determined.
 
 ## Part D — Hearing test in basic mode
 
@@ -114,35 +127,36 @@ parked from earlier; do once Parts A/B stabilise.
 
 ## Compensation model interaction
 
-Whatever Part B produces (`hearing_dev` per frequency) flows into the same
-**measured-resolution EQ** path from `docs/designs/measurement-resolution-eq.md`
-(bands at the measured frequencies, interaction-aware least-squares gains,
-standard 127-point GraphicEQ). Only the *source* of the per-frequency gains
-changes; the realisation is unchanged. Per-ear EQ (vs the current L/R average)
-becomes natural here since loudness matching is per ear — worth doing in 0.8.3.
+Part B's `dev(f)` per frequency flows into the same **measured-resolution EQ** path
+from `docs/designs/measurement-resolution-eq.md` (bands at the measured frequencies,
+interaction-aware least-squares gains, standard 127-point GraphicEQ). Only the *source*
+of the per-frequency gains changes; the realisation is unchanged. Per-ear EQ (vs the
+current L/R average) becomes natural here since the relative-threshold test is per ear —
+worth doing in 0.8.3.
 
 ## Open questions for the focused review (Part B)
 
-1. Supra-threshold → gain mapping: which loudness-restoration rule, and how does
-   it compare to half-gain? Is partial restoration preferred (as listeners
-   preferred softer NAL-NL2 over louder CAM2, PMID 23357807)?
-2. Reference phon level for matching, and `match_normal(f)` source (ISO 226 vs a
-   simpler anchor).
-3. Test-retest reliability of self-administered loudness matching vs the ±5 dB
-   threshold figure.
-4. Minimum frequency set for matching (the 7 audiometric points, or fewer?).
+1. `normal_rel_shape(f)` source: ISO 389-8 reference-equivalent threshold shape vs an
+   ISO 226 equal-loudness contour at a comfortable phon level (and which level).
+2. `dev(f)` → gain aggressiveness: full correction vs a fraction; interaction with the
+   12 dB cap and noise deadband; listeners prefer softer HF correction (PMID 23357807).
+3. Test-retest reliability of self-administered *relative* thresholds vs the absolute
+   ±5 dB figure.
+4. Frequency set: keep the 7 audiometric points, or add a few for shape resolution?
 
 ## Sequencing
 
 1. Part A (guards) — independent, high value, no new science.
-2. Focused literature review for Part B's prescription mapping → update this doc.
-3. Part B (equal-loudness matching + grounded mapping + per-ear EQ).
+2. Short focused review for `normal_rel_shape` + `dev`→gain mapping → update this doc.
+3. Part B (relative-threshold measurement at a fixed reference + grounded mapping +
+   per-ear EQ).
 4. Part C wiring + Part D basic-nav.
 
 ## References
 
-- ISO 226 — equal-loudness-level contours.
-- medRxiv 2024.06.25.24309468 — supra-threshold measures robust to missing
+- ISO 389-8 / ISO 226 — reference-equivalent thresholds and equal-loudness contours
+  (source for the normal relative reference shape).
+- medRxiv 2024.06.25.24309468 — relative / supra-threshold measures robust to missing
   calibration.
 - Saliba et al., AJA 2022 (doi:10.1044/2022_AJA-21-00191) — app audiometry
   validity and ±5 dB test-retest.
