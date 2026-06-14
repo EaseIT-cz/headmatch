@@ -46,13 +46,15 @@ STEP_UP_DB: float = 5.0             # increase after no response
 MAX_ASCENDING_RUNS: int = 8
 THRESHOLD_RESPONSES_NEEDED: int = 2
 THRESHOLD_WINDOW: int = 3
-# Safety cap: the Hughson-Westlake staircase only completes via ascending runs,
-# which require misses. A listener who hears (or misses) every presentation
-# never produces an ascending run, so without this cap the frequency would
-# never finish and the test would hang on it. 10 keeps each frequency short
-# (it also bounds the descent for very good hearing, which otherwise feels
-# like it takes forever) while still allowing a normal staircase to resolve.
-MAX_PRESENTATIONS: int = 10
+# Safety-net cap on total presentations per frequency. High enough that a
+# legitimate staircase (~11 presentations to satisfy the 2-of-3 rule, up to
+# MAX_ASCENDING_RUNS) converges; it only ever fires on a degenerate
+# miss-everything pattern. Hearing-everything is handled earlier and faster by
+# flooring detection (below), so good hearing no longer "drags on".
+MAX_PRESENTATIONS: int = 30
+# Hearing the test floor (MIN_LEVEL_DBFS) this many times means the volume is too
+# high to bracket a threshold: terminate early and flag the frequency floored.
+FLOOR_HEARD_LIMIT: int = 2
 RESPONSE_WINDOW_S: float = 3.0
 
 # ── Compensation parameters ───────────────────────────────────────────────────
@@ -100,7 +102,8 @@ class FrequencyThreshold:
     freq_hz: int
     level_dbfs: Optional[float]  # None when UNDETERMINED
     ascending_runs: int
-    determined: bool
+    determined: bool             # True only when the staircase truly converged
+    floored: bool = False        # heard the test floor -> volume likely too high
 
 
 @dataclass
@@ -158,6 +161,9 @@ class ThresholdEngine:
         self._threshold: float | None = None
         self._presentations = 0     # total tones presented (safety cap)
         self._ever_heard = False    # any heard response at all
+        self._converged = False     # True only on real 2-of-3 convergence
+        self._floored = False       # heard the test floor (volume too high)
+        self._floor_heard = 0       # times the floor was heard
 
     @property
     def current_level_dbfs(self) -> float:
@@ -175,6 +181,17 @@ class ThresholdEngine:
     def ascending_run_count(self) -> int:
         return self._run_count
 
+    @property
+    def converged(self) -> bool:
+        """True only when a real threshold was found (>=3 ascending runs,
+        2-of-last-3). Cap-terminated / floored results are NOT converged."""
+        return self._converged
+
+    @property
+    def floored(self) -> bool:
+        """True if the listener heard the test floor — volume likely too high."""
+        return self._floored
+
     def record_response(self, heard: bool) -> None:
         """Feed one user response for the current level."""
         if self._done:
@@ -183,12 +200,23 @@ class ThresholdEngine:
         self._presentations += 1
         if heard:
             self._ever_heard = True
+            # Flooring: heard the quietest tone -> can't bracket a threshold.
+            # Terminate early and flag it (the test should tell the user to lower
+            # the volume) rather than grinding to the safety cap.
+            if self._level <= MIN_LEVEL_DBFS:
+                self._floored = True
+                self._floor_heard += 1
+                if self._floor_heard >= FLOOR_HEARD_LIMIT:
+                    self._threshold = None
+                    self._done = True
+                    return
             if self._in_ascending:
                 self._run_count += 1
                 self._ascending_hits.append(round(self._level, 2))
                 threshold = self._check_threshold()
                 if threshold is not None:
                     self._threshold = threshold
+                    self._converged = True
                     self._done = True
                     return
                 if self._run_count >= MAX_ASCENDING_RUNS:
@@ -493,15 +521,18 @@ def run_cli_hearing_test(
                 engine.record_response(heard)
 
             threshold = engine.threshold
-            determined = threshold is not None
+            determined = engine.converged
             thresholds[freq_hz] = FrequencyThreshold(
                 freq_hz=freq_hz,
                 level_dbfs=threshold,
                 ascending_runs=engine.ascending_run_count,
                 determined=determined,
+                floored=engine.floored,
             )
             if determined:
                 _status(f"    threshold: {threshold:.1f} dBFS after {engine.ascending_run_count} runs")
+            elif engine.floored:
+                _status("    floored — volume too high to measure; lower it and retest")
             else:
                 _status(f"    threshold undetermined after {engine.ascending_run_count} runs")
 
