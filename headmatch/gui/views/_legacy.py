@@ -240,7 +240,7 @@ def render_completion(ttk, frame, *, title: str, body: str, steps: tuple[str, ..
         card = ttk.LabelFrame(frame, text="EQ clipping assessment", padding=SECTION_PAD)
         card.grid(row=row, column=0, sticky="ew")
         card.columnconfigure(1, weight=1)
-        indicator = "⚠" if clipping_assessment.get("will_clip") else "✓"
+        indicator = "[!]" if clipping_assessment.get("will_clip") else "[OK]"
         status = "Clipping risk detected" if clipping_assessment.get("will_clip") else "No clipping risk detected"
         ttk.Label(card, text=f"{indicator} {status}", style="Heading.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Label(card, text="Preamp recommendation").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=2)
@@ -330,9 +330,9 @@ def render_history(ttk, frame, *, history_root_var, config_path: Path):
 
 
 _CONFIDENCE_BADGES = {
-    'high': '✓',
-    'medium': '⚠',
-    'low': '✗',
+    'high': '[OK]',
+    'medium': '[!]',
+    'low': '[X]',
 }
 
 
@@ -783,7 +783,7 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
         ttk.Button(points_frame, text="+", command=_add_after, width=3).grid(
             row=row, column=3, sticky="w", pady=2)
         if len(editor.points) > 2:
-            ttk.Button(points_frame, text="\u2715", command=lambda i=idx: _remove_point(i), width=3).grid(
+            ttk.Button(points_frame, text="X", command=lambda i=idx: _remove_point(i), width=3).grid(
                 row=row, column=4, sticky="w", pady=2)
 
     _vars["setup_done"] = True

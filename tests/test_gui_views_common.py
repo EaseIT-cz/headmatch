@@ -8,7 +8,7 @@ from tests.test_gui import DummyVar, DummyWidget, RecordingTtk
 
 def test_confidence_display_helpers():
     assert _confidence_display("very_high") == "Very High"
-    assert _confidence_badge("high").startswith("✓")
+    assert _confidence_badge("high").startswith("[OK]")
     assert _confidence_badge("unknown") == "Unknown"
 
 

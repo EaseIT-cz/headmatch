@@ -69,7 +69,7 @@ def render_history(ttk, frame, *, history_root_var, config_path: Path):
     return build_history_selection(history_root_var.get(), config_path.parent)
 
 
-_CONFIDENCE_BADGES = {'high': '✓', 'medium': '⚠', 'low': '✗'}
+_CONFIDENCE_BADGES = {'high': '[OK]', 'medium': '[!]', 'low': '[X]'}
 
 
 def _confidence_display(label: str) -> str:

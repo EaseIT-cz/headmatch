@@ -113,15 +113,15 @@ from headmatch.history import confidence_icon, format_run_entry, format_comparis
 
 
 def test_confidence_icon_returns_checkmark_for_high():
-    assert confidence_icon("high") == "\u2713"
+    assert confidence_icon("high") == "[OK]"
 
 
 def test_confidence_icon_returns_warning_for_medium():
-    assert confidence_icon("medium") == "\u26A0"
+    assert confidence_icon("medium") == "[!]"
 
 
 def test_confidence_icon_returns_cross_for_low():
-    assert confidence_icon("low") == "\u2717"
+    assert confidence_icon("low") == "[X]"
 
 
 def test_confidence_icon_returns_question_for_unknown():
@@ -148,7 +148,7 @@ def test_format_run_entry(tmp_path):
     from headmatch.history import RunHistoryEntry
     entry = RunHistoryEntry(summary_path=tmp_path / "run_summary.json", summary=summary, guide_path=tmp_path / "README.txt")
     text = format_run_entry(entry, 1)
-    assert "✓" in text
+    assert "[OK]" in text
     assert "HIGH" in text
     assert "Good run" in text
     assert "L rms=1.20" in text
