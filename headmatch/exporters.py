@@ -199,22 +199,37 @@ def export_equalizer_apo_graphiceq_txt(
     gains_right_db: Iterable[float],
     *,
     comment: str = '; Generated from the shared effective correction target on the analysis frequency grid.',
+    bake_preamp: bool = False,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     freqs_hz = list(freqs_hz)
     gains_left_db = list(gains_left_db)
     gains_right_db = list(gains_right_db)
+
+    if bake_preamp:
+        # Make the curve clip-safe by construction: shift BOTH channels down by the
+        # global peak so the maximum gain is 0 dB (a pure-cut EQ). This avoids
+        # clipping even when the consumer (e.g. EasyEffects) ignores the separate
+        # Preamp line, and the common shift preserves L/R balance.
+        peak = max([0.0, *gains_left_db, *gains_right_db])
+        gains_left_db = [g - peak for g in gains_left_db]
+        gains_right_db = [g - peak for g in gains_right_db]
+        left_preamp = right_preamp = 0.0
+    else:
+        left_preamp = _graphiceq_preamp_db(gains_left_db)
+        right_preamp = _graphiceq_preamp_db(gains_right_db)
+
     lines = [
         '; headmatch Equalizer APO GraphicEQ preset',
         comment,
         '',
         'Channel: L',
-        f'Preamp: {_graphiceq_preamp_db(gains_left_db):.2f} dB',
+        f'Preamp: {left_preamp:.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_left_db),
         '',
         'Channel: R',
-        f'Preamp: {_graphiceq_preamp_db(gains_right_db):.2f} dB',
+        f'Preamp: {right_preamp:.2f} dB',
         _format_graphiceq_series(freqs_hz, gains_right_db),
         '',
     ]

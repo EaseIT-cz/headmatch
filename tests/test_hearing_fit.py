@@ -133,6 +133,20 @@ class TestFitFromHearingProfile:
         kinds = {b.kind for b in left_bands}
         assert "lowshelf" in kinds or "highshelf" in kinds, f"expected shelf filters, got {kinds}"
 
+    def test_graphiceq_is_clip_safe_for_boosting_target(self, tmp_path):
+        # A Harman target boosts the bass; the GraphicEQ must be clip-safe (max gain
+        # <= 0 dB, preamp baked in) so it doesn't clip even if the consumer ignores
+        # the Preamp line.
+        from headmatch.builtin_targets import materialize_builtin_target
+        harman = materialize_builtin_target("harman", tmp_path)
+        run_hearing_fit(_make_profile(loss_db=0.0), tmp_path, sample_rate=48000, target_path=harman)
+        for line in (tmp_path / "equalizer_apo_graphiceq.txt").read_text().splitlines():
+            if line.startswith("GraphicEQ:"):
+                gains = [float(p.split()[1]) for p in line.split(":", 1)[1].split(";")]
+                assert max(gains) <= 0.01, f"GraphicEQ has positive gain (clips): {max(gains)}"
+            if line.startswith("Preamp:"):
+                assert line.strip() == "Preamp: 0.00 dB"
+
     def test_target_curve_applied_even_with_no_hearing_loss(self, tmp_path):
         # Regression: a tonal target (e.g. Harman) must still produce an EQ when
         # the listener shows no measurable hearing loss — the target is known

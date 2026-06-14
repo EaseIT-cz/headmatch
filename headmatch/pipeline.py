@@ -370,6 +370,7 @@ def run_hearing_fit(
         peq_chain_response_db(gq_freqs, sample_rate, left_bands),
         peq_chain_response_db(gq_freqs, sample_rate, right_bands),
         comment='; GraphicEQ rendered on the standard 127-point grid from the fitted bands.',
+        bake_preamp=True,
     )
 
     # Drop a copy of the raw hearing profile alongside the EQ artifacts for

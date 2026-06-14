@@ -103,6 +103,7 @@ def _write_fixed_band_graphiceq_artifact(
         [band.gain_db for band in left_bands],
         [band.gain_db for band in right_bands],
         comment='; Generated directly from the fixed-band GraphicEQ fitting backend.',
+        bake_preamp=True,
     )
 
 
@@ -219,6 +220,7 @@ def write_fit_artifacts(
         gq_freqs,
         peq_chain_response_db(gq_freqs, sample_rate, left_bands),
         peq_chain_response_db(gq_freqs, sample_rate, right_bands),
+        bake_preamp=True,
     )
     _write_fixed_band_graphiceq_artifact(
         out_dir,
