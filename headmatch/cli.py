@@ -179,6 +179,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="Print the resulting hearing profile as JSON.")
     p.add_argument("--fit", action="store_true", help="Generate an EQ preset immediately after the hearing test completes.")
     p.add_argument("--out-dir", default=None, help="Output folder for EQ files when --fit is used. Defaults to ~/Documents/HeadMatch/hearing_fit.")
+    p.add_argument("--extended-hf", action="store_true", help="Also test extended high frequencies (10, 12.5, 16 kHz). These are dominated by the headphone's response and fit, so enabling them shapes the 'air band'/coloration, not just hearing.")
 
     p = sub.add_parser(
         "hearing-fit",
@@ -608,7 +609,13 @@ def main(argv: list[str] | None = None) -> None:
             from .audio_backend import get_audio_backend
             backend = get_audio_backend()
             output_device = getattr(args, "output_target", None) or None
-            profile = run_cli_hearing_test(backend, output_device, sample_rate=args.sample_rate)
+            extended_hf = getattr(args, "extended_hf", False)
+            if extended_hf:
+                print("Extended high frequencies (10/12.5/16 kHz) enabled. Note: these are "
+                      "dominated by your headphone's response and fit, so they shape the "
+                      "'air band'/coloration, not just hearing.")
+            profile = run_cli_hearing_test(backend, output_device, sample_rate=args.sample_rate,
+                                           extended_hf=extended_hf)
             path = save_hearing_profile(profile)
             if getattr(args, "json", False):
                 profile_json = profile.to_dict()
