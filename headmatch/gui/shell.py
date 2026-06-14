@@ -82,6 +82,7 @@ DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 
 BASIC_NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("basic-mode", "Basic Workflow"),
+    NavigationItem("hearing-test", "Hearing Test"),
     NavigationItem("basic-clone-target", "Clone Target"),
     NavigationItem("history", "Results"),
 )
