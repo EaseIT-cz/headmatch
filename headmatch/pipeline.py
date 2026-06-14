@@ -363,8 +363,10 @@ def run_hearing_fit(
         max_filters=max_filters, filter_budget=filter_budget, flatten=flatten,
     )
 
-    # Per-channel preamp (preamp_db=None): a channel with no boost is not attenuated,
-    # so a one-eared correction doesn't shift L/R balance.
+    # Shared worst-case preamp across both channels (handled inside the exporter):
+    # single-preamp hosts (e.g. EasyEffects) apply one preamp to both channels, so
+    # sharing the worst-case keeps the preset clip-safe and preserves L/R balance
+    # (the per-ear difference stays in the filters, not in a broadband offset).
     export_equalizer_apo_parametric_txt(
         out_dir / 'equalizer_apo.txt',
         left_bands,
