@@ -34,6 +34,14 @@ def _make_profile(loss_db: float = 0.0) -> HearingProfile:
     )
 
 
+def _sloping_profile() -> HearingProfile:
+    # Progressively worse than 1 kHz at high frequency, beyond the normal shape ->
+    # a relative high-frequency deviation that should be compensated.
+    levels = {500: -60, 1000: -60, 2000: -58, 3000: -52, 4000: -46, 6000: -40, 8000: -34}
+    side = {f: FrequencyThreshold(f, levels[f], 3, True) for f in TEST_FREQUENCIES}
+    return HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
+
+
 class TestFitFromHearingProfile:
     def test_returns_band_lists_and_report(self):
         profile = _make_profile(loss_db=10.0)
@@ -83,23 +91,23 @@ class TestFitFromHearingProfile:
         resp = peq_chain_response_db(grid, 48000, left_bands)
         assert float(np.max(np.abs(resp))) < 2.0  # very near flat
 
-    def test_20dB_loss_produces_boost(self):
-        """20 dB hearing loss → ~10 dB half-gain compensation → EQ bands with positive gain."""
+    def test_sloping_hf_loss_produces_hf_boost(self):
+        """A sloping HF deviation (worse than normal at high freq, relative to the
+        listener's own 1 kHz) produces a positive high-frequency boost."""
         from headmatch.peq import peq_chain_response_db
         from headmatch.signals import geometric_log_grid
-        profile = _make_profile(loss_db=20.0)
-        left_bands, _, _ = fit_from_hearing_profile(profile, sample_rate=48000, max_filters=8)
-        grid = geometric_log_grid(500.0, 8000.0, 48)
+        left_bands, _, _ = fit_from_hearing_profile(_sloping_profile(), sample_rate=48000, max_filters=8)
+        assert left_bands
+        grid = geometric_log_grid(2000.0, 8000.0, 48)
         resp = peq_chain_response_db(grid, 48000, left_bands)
         assert float(np.mean(resp)) > 1.0
 
     def test_symmetric_left_right_bands(self):
         """Symmetric hearing profile → left and right bands identical."""
-        profile = _make_profile(loss_db=15.0)
         left_bands, right_bands, _ = fit_from_hearing_profile(
-            profile, sample_rate=48000, max_filters=4
+            _sloping_profile(), sample_rate=48000, max_filters=4
         )
-        assert len(left_bands) == len(right_bands)
+        assert left_bands and len(left_bands) == len(right_bands)
         for lb, rb in zip(left_bands, right_bands):
             assert lb.freq == pytest.approx(rb.freq, abs=0.1)
             assert lb.gain_db == pytest.approx(rb.gain_db, abs=0.01)
