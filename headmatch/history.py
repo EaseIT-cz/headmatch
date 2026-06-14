@@ -130,9 +130,9 @@ def build_history_selection(search_root: str | Path, config_root: str | Path | N
 # ── Display helpers ──
 
 _CONFIDENCE_ICONS = {
-    "high": "\u2713",   # ✓
-    "medium": "\u26A0", # ⚠
-    "low": "\u2717",    # ✗
+    "high": "[OK]",
+    "medium": "[!]",
+    "low": "[X]",
 }
 
 

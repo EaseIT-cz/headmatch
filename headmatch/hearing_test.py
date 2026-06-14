@@ -46,12 +46,24 @@ STEP_UP_DB: float = 5.0             # increase after no response
 MAX_ASCENDING_RUNS: int = 8
 THRESHOLD_RESPONSES_NEEDED: int = 2
 THRESHOLD_WINDOW: int = 3
+# Safety cap: the Hughson-Westlake staircase only completes via ascending runs,
+# which require misses. A listener who hears (or misses) every presentation
+# never produces an ascending run, so without this cap the frequency would
+# never finish and the test would hang on it. 10 keeps each frequency short
+# (it also bounds the descent for very good hearing, which otherwise feels
+# like it takes forever) while still allowing a normal staircase to resolve.
+MAX_PRESENTATIONS: int = 10
 RESPONSE_WINDOW_S: float = 3.0
 
 # ── Compensation parameters ───────────────────────────────────────────────────
 
 GAIN_FRACTION: float = 0.50         # half-gain rule (Lybarger 1944)
 MAX_COMPENSATION_DB: float = 12.0
+# Self-administered, uncalibrated thresholds have ~5 dB+ test-retest spread
+# (Saliba et al. 2022, AJA), and the half-gain rule over-prescribes for mild
+# losses (Schwartz et al. 1980). Ignore measured "loss" below this deadband so
+# we don't EQ within-noise differences. See docs/designs/measurement-resolution-eq.md.
+HEARING_DEADBAND_DB: float = 10.0
 ASYMMETRY_WARNING_DB: float = 15.0
 NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 
@@ -144,6 +156,8 @@ class ThresholdEngine:
         self._ascending_hits: list[float] = []
         self._done = False
         self._threshold: float | None = None
+        self._presentations = 0     # total tones presented (safety cap)
+        self._ever_heard = False    # any heard response at all
 
     @property
     def current_level_dbfs(self) -> float:
@@ -166,7 +180,9 @@ class ThresholdEngine:
         if self._done:
             return
 
+        self._presentations += 1
         if heard:
+            self._ever_heard = True
             if self._in_ascending:
                 self._run_count += 1
                 self._ascending_hits.append(round(self._level, 2))
@@ -187,6 +203,20 @@ class ThresholdEngine:
             self._level = min(MAX_LEVEL_DBFS, self._level + STEP_UP_DB)
             self._in_ascending = True
 
+        # Safety cap: guarantee termination even when the staircase never
+        # produces an ascending run (listener hears or misses everything).
+        if not self._done and self._presentations >= MAX_PRESENTATIONS:
+            est = self._best_estimate()
+            if est is not None:
+                self._threshold = est
+            elif self._ever_heard:
+                # Heard even the quietest tone -> threshold at/near the floor.
+                self._threshold = round(self._level, 2)
+            else:
+                # Never heard anything -> threshold genuinely undetermined.
+                self._threshold = None
+            self._done = True
+
     def _check_threshold(self) -> float | None:
         if self._run_count < 3:
             return None
@@ -204,10 +234,15 @@ class ThresholdEngine:
 
 # ── Tone generation ───────────────────────────────────────────────────────────
 
-def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000) -> np.ndarray:
+def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
+                  ear: str = "both") -> np.ndarray:
     """
     Return a stereo (N, 2) float64 buffer: a pure sine at freq_hz scaled to
     level_dbfs, with 30 ms raised-cosine onset and offset ramps.
+
+    ``ear`` routes the tone to a single channel so that a one-ear threshold
+    test is actually measured in that ear: "left" silences the right channel,
+    "right" silences the left, and "both" (default) plays the tone in both.
     """
     n_total = int(round(TONE_DURATION_S * sample_rate))
     n_ramp = int(round(RAMP_DURATION_S * sample_rate))
@@ -221,10 +256,109 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000) -> 
         mono[-n_ramp:] *= ramp[::-1]
 
     mono *= 10.0 ** (level_dbfs / 20.0)
+    silent = np.zeros_like(mono)
+
+    side = (ear or "both").lower()
+    if side == "left":
+        return np.column_stack([mono, silent])
+    if side == "right":
+        return np.column_stack([silent, mono])
     return np.column_stack([mono, mono])
 
 
 # ── Compensation curve ────────────────────────────────────────────────────────
+
+def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:
+    """Half-gain EQ compensation (dB) at each *determined* audiometric frequency.
+
+    Returns ``{freq_hz: gain_db}`` keyed by the ISO 8253 test frequencies. L/R
+    thresholds are averaged; undetermined frequencies are omitted. This is the
+    raw, measurement-resolution compensation — the hearing test has only these
+    ~7 degrees of freedom, so the EQ is built directly from these points rather
+    than from a dense interpolated grid.
+    """
+    points: dict[int, float] = {}
+    for freq_hz in TEST_FREQUENCIES:
+        left_t = profile.left.get(freq_hz)
+        right_t = profile.right.get(freq_hz)
+
+        thresholds: list[float] = []
+        if left_t is not None and left_t.determined and left_t.level_dbfs is not None:
+            thresholds.append(left_t.level_dbfs)
+        if right_t is not None and right_t.determined and right_t.level_dbfs is not None:
+            thresholds.append(right_t.level_dbfs)
+        if not thresholds:
+            continue
+
+        avg_threshold = float(np.mean(thresholds))
+        ref = NORMAL_HEARING_REFERENCE.get(freq_hz, -50.0)
+        loss = avg_threshold - ref  # positive = worse than reference
+        if loss < HEARING_DEADBAND_DB:
+            continue  # within self-test noise / clinically insignificant — don't EQ
+        gain = float(np.clip(loss * GAIN_FRACTION, 0.0, MAX_COMPENSATION_DB))
+        points[freq_hz] = round(gain, 2)
+    return points
+
+
+def _peaking_q_for_octave_bandwidth(n_octaves: float) -> float:
+    """Q of a peaking filter whose -3 dB bandwidth spans ``n_octaves``.
+
+    Standard relationship: Q = sqrt(2^N) / (2^N - 1). For N=1 octave Q≈1.41;
+    for N=0.5 octave Q≈2.87.
+    """
+    n = max(0.05, float(n_octaves))
+    return float((2.0 ** (n / 2.0)) / (2.0 ** n - 1.0))
+
+
+def eq_bands_from_gain_points(
+    points: dict[int, float],
+    *,
+    sample_rate: int | None = None,
+    max_filters: int | None = None,
+    max_gain_db: float = MAX_COMPENSATION_DB,
+    min_gain_db: float = 0.1,
+) -> list:
+    """Build peaking PEQ bands placed directly at the measured frequencies.
+
+    One peaking filter per frequency; each band's Q is derived from its spacing
+    to neighbouring measured frequencies. When ``sample_rate`` is given, the band
+    gains are solved by interaction-aware least squares so the realised chain
+    matches the target points (overlapping bands sum) rather than each band
+    taking its raw point gain. ``max_filters`` keeps the largest-magnitude bands.
+    """
+    from .peq import PEQBand, solve_band_gains_lsq
+
+    freqs = sorted(points)
+    if not freqs:
+        return []
+    logs = [np.log2(f) for f in freqs]
+
+    qs: list[float] = []
+    for i, _freq in enumerate(freqs):
+        gaps = []
+        if i > 0:
+            gaps.append(logs[i] - logs[i - 1])
+        if i < len(freqs) - 1:
+            gaps.append(logs[i + 1] - logs[i])
+        n_oct = float(np.mean(gaps)) if gaps else 1.0
+        qs.append(round(min(4.5, max(0.5, _peaking_q_for_octave_bandwidth(n_oct))), 3))
+
+    target = [float(points[f]) for f in freqs]
+    if sample_rate:
+        gains = solve_band_gains_lsq(freqs, target, sample_rate, freqs, qs, max_gain_db=max_gain_db)
+    else:
+        gains = [float(np.clip(g, -max_gain_db, max_gain_db)) for g in target]
+
+    bands: list = [
+        PEQBand("peaking", float(f), round(g, 2), q)
+        for f, g, q in zip(freqs, gains, qs)
+        if abs(g) >= min_gain_db
+    ]
+    if max_filters is not None and len(bands) > max_filters:
+        bands = sorted(bands, key=lambda b: abs(b.gain_db), reverse=True)[:max_filters]
+        bands.sort(key=lambda b: b.freq)
+    return bands
+
 
 def compute_compensation_curve(profile: HearingProfile, freq_grid: np.ndarray) -> np.ndarray:
     """
@@ -238,32 +372,12 @@ def compute_compensation_curve(profile: HearingProfile, freq_grid: np.ndarray) -
     The 7-point gain array is interpolated to freq_grid via cubic spline on
     log-frequency, then 1-octave Gaussian-smoothed to remove sharp peaks.
     """
-    test_freqs: list[float] = []
-    test_gains: list[float] = []
-
-    for freq_hz in TEST_FREQUENCIES:
-        left_t = profile.left.get(freq_hz)
-        right_t = profile.right.get(freq_hz)
-
-        thresholds: list[float] = []
-        if left_t is not None and left_t.determined and left_t.level_dbfs is not None:
-            thresholds.append(left_t.level_dbfs)
-        if right_t is not None and right_t.determined and right_t.level_dbfs is not None:
-            thresholds.append(right_t.level_dbfs)
-
-        if not thresholds:
-            continue
-
-        avg_threshold = float(np.mean(thresholds))
-        ref = NORMAL_HEARING_REFERENCE.get(freq_hz, -50.0)
-        loss = avg_threshold - ref  # positive = worse than reference
-        gain = float(np.clip(loss * GAIN_FRACTION, 0.0, MAX_COMPENSATION_DB))
-
-        test_freqs.append(float(freq_hz))
-        test_gains.append(gain)
-
-    if len(test_freqs) < 2:
+    points = compute_compensation_points(profile)
+    if len(points) < 2:
         return np.zeros(len(freq_grid))
+
+    test_freqs = [float(f) for f in sorted(points)]
+    test_gains = [points[int(f)] for f in test_freqs]
 
     log_test = np.log10(test_freqs)
     cs = CubicSpline(log_test, test_gains, bc_type="not-a-knot", extrapolate=True)
@@ -373,7 +487,7 @@ def run_cli_hearing_test(
 
             while not engine.done:
                 level = engine.current_level_dbfs
-                samples = generate_tone(freq_hz, level, sample_rate)
+                samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
                 backend.play_tone(samples, sample_rate, output_device)
                 heard = _ask_heard(RESPONSE_WINDOW_S)
                 engine.record_response(heard)

@@ -25,6 +25,36 @@ from ..widgets import theme_background
 from datetime import datetime, timezone
 
 
+# Speaker-status strings. Kept ASCII-only — decorative glyphs (♪ ✓ — …) fail to
+# render in some platform Tk fonts and show as tofu/boxes.
+_STATUS_PLAYING = "Playing tone..."
+_STATUS_HEARD = "Heard"
+_STATUS_NOT_HEARD = "Not heard"
+
+# Intro instructions shown before the test starts. ASCII-only so they render in
+# every platform Tk font. The volume guidance matters: if the volume is too
+# high the listener hears every tone, no threshold can be found, and the
+# staircase only stops via the engine's safety cap.
+_INTRO_INSTRUCTIONS = (
+    "Before you start:",
+    "  - Set your headphone volume to a comfortable",
+    "    music-listening level, then leave it unchanged",
+    "    for the whole test.",
+    "  - Volume check: at the right level the quietest tones",
+    "    are inaudible. If you can hear EVERY tone the volume",
+    "    is too high - turn it down, otherwise no hearing",
+    "    threshold can be measured.",
+    "  - Go to a quiet room and minimise background noise.",
+    "  - The test takes about 5 minutes total.",
+    "",
+    "During the test:",
+    "  - Click 'I hear it' each time you hear a tone.",
+    "  - If you don't hear a tone, do nothing; it advances",
+    "    automatically.",
+    "  - Test your LEFT ear first, then your RIGHT ear.",
+)
+
+
 _FREQ_LABELS = {
     500: "500 Hz",
     1000: "1 kHz",
@@ -86,7 +116,7 @@ def render_hearing_test(
         """Play tone in a background thread so Tkinter stays responsive."""
         def _worker():
             try:
-                samples = generate_tone(freq_hz, level_dbfs, sample_rate)
+                samples = generate_tone(freq_hz, level_dbfs, sample_rate, ear=_state["ear"])
                 backend.play_tone(samples, sample_rate, output_device)
             except Exception:
                 pass
@@ -115,29 +145,18 @@ def render_hearing_test(
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(0, 12))
 
-        instructions = (
-            "Before you start:",
-            "  • Set your headphone volume to a comfortable music-listening level.",
-            "  • Go to a quiet room.",
-            "  • The test takes about 5 minutes total.",
-            "",
-            "During the test:",
-            "  • Click 'I hear it' each time you hear a tone.",
-            "  • If you don't hear the tone, do nothing — the test advances automatically.",
-            "  • Test your LEFT ear first, then your RIGHT ear.",
-        )
         info_text = tk.Text(
-            frame, height=10, width=62, state="normal",
+            frame, height=len(_INTRO_INSTRUCTIONS) + 1, width=62, state="normal",
             relief="flat", background=theme_background(ttk),
             wrap="word",
         )
-        info_text.insert("1.0", "\n".join(instructions))
+        info_text.insert("1.0", "\n".join(_INTRO_INSTRUCTIONS))
         info_text.configure(state="disabled")
         info_text.grid(row=2, column=0, sticky="ew", pady=(0, 16))
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=3, column=0, sticky="w")
-        ttk.Button(btn_frame, text="Start Test", command=_begin_left).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Start Test", command=_begin_left, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Cancel", command=on_cancel).grid(row=0, column=1)
 
     def _begin_left():
@@ -164,7 +183,7 @@ def render_hearing_test(
             text=f"Cover or plug your {cover} ear. Click Ready when set.",
             wraplength=560,
         ).grid(row=1, column=0, sticky="w", pady=(0, 16))
-        ttk.Button(frame, text="Ready — Start", command=callback).grid(row=2, column=0, sticky="w")
+        ttk.Button(frame, text="Ready — Start", command=callback, style="Accent.TButton").grid(row=2, column=0, sticky="w")
         ttk.Button(frame, text="Stop Test", command=_stop_test).grid(row=3, column=0, sticky="w", pady=(8, 0))
 
     # ── test loop ─────────────────────────────────────────────────────────────
@@ -212,7 +231,7 @@ def render_hearing_test(
         ).grid(row=1, column=0, sticky="w", pady=(0, 12))
 
         # Speaker indicator
-        _state["speaker_label_var"] = tk.StringVar(value="♪ Playing tone …")
+        _state["speaker_label_var"] = tk.StringVar(value=_STATUS_PLAYING)
         ttk.Label(frame, textvariable=_state["speaker_label_var"]).grid(
             row=2, column=0, sticky="w", pady=(0, 12)
         )
@@ -244,7 +263,7 @@ def render_hearing_test(
         # Update speaker indicator
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("♪ Playing tone …")
+            speaker_var.set(_STATUS_PLAYING)
 
         _play_tone_async(freq_hz, level)
 
@@ -264,7 +283,7 @@ def render_hearing_test(
         engine.record_response(True)
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("✓ Heard")
+            speaker_var.set(_STATUS_HEARD)
         if engine.done:
             frame.after(300, _on_freq_done)
         else:
@@ -279,7 +298,7 @@ def render_hearing_test(
         engine.record_response(False)
         speaker_var = _state.get("speaker_label_var")
         if speaker_var:
-            speaker_var.set("— Not heard")
+            speaker_var.set(_STATUS_NOT_HEARD)
         if engine.done:
             frame.after(300, _on_freq_done)
         else:
@@ -406,7 +425,7 @@ def render_hearing_test(
             save_hearing_profile(profile)
             on_cancel()
 
-        ttk.Button(btn_frame, text="Save & Use for EQ", command=_save_and_apply).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(btn_frame, text="Save & Use for EQ", command=_save_and_apply, style="Accent.TButton").grid(row=0, column=0, padx=(0, 8))
         ttk.Button(btn_frame, text="Save Without Applying", command=_save_only).grid(row=0, column=1, padx=(0, 8))
         ttk.Button(btn_frame, text="Discard", command=on_cancel).grid(row=0, column=2)
 

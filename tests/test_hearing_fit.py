@@ -115,6 +115,21 @@ class TestFitFromHearingProfile:
         assert isinstance(left_bands, list)
         assert isinstance(report["target"], str)
 
+    def test_target_curve_applied_even_with_no_hearing_loss(self, tmp_path):
+        # Regression: a tonal target (e.g. Harman) must still produce an EQ when
+        # the listener shows no measurable hearing loss — the target is known
+        # independently of the hearing test.
+        from headmatch.builtin_targets import materialize_builtin_target
+        # Thresholds exactly at the reference -> zero compensation.
+        side = {
+            f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f], 3, True)
+            for f in TEST_FREQUENCIES
+        }
+        profile = HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
+        harman = materialize_builtin_target("harman", tmp_path)
+        left_bands, _, _ = fit_from_hearing_profile(profile, sample_rate=48000, target_path=harman)
+        assert left_bands, "Harman target should yield EQ bands even with no hearing loss"
+
     def test_filter_budget_respected(self):
         from headmatch.peq import FilterBudget
         profile = _make_profile(loss_db=20.0)
@@ -139,6 +154,15 @@ class TestRunHearingFit:
         assert (tmp_path / "camilladsp_filters_only.yaml").exists()
         assert (tmp_path / "hearing_fit_report.json").exists()
         assert (tmp_path / "README.txt").exists()
+
+    def test_writes_profile_copy_to_results_dir(self, tmp_path):
+        profile = self._profile(loss_db=20.0)
+        run_hearing_fit(profile, tmp_path, sample_rate=48000)
+        prof_path = tmp_path / "hearing_profile.json"
+        assert prof_path.exists()
+        data = json.loads(prof_path.read_text(encoding="utf-8"))
+        assert set(data["left"]) == {str(f) for f in TEST_FREQUENCIES}
+        assert data["tested_at"] == profile.tested_at
 
     def test_report_json_valid(self, tmp_path):
         profile = self._profile()

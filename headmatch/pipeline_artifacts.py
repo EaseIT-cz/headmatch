@@ -209,15 +209,16 @@ def write_fit_artifacts(
         right_bands,
         preamp_db=(float(clipping['preamp_db']) if clipping and clipping.get('will_clip') else None),
     )
-    # Dense GraphicEQ: export the actual PEQ-fitted response (what the parametric
-    # preset applies), not the raw correction target.
-    left_fitted_eq = peq_chain_response_db(result.freqs_hz, sample_rate, left_bands)
-    right_fitted_eq = peq_chain_response_db(result.freqs_hz, sample_rate, right_bands)
+    # GraphicEQ: export the actual PEQ-fitted response (what the parametric preset
+    # applies) on the standard 127-point grid — unified with the hearing-fit path
+    # and comfortably loadable by Equalizer APO / EasyEffects.
+    from .signals import standard_graphic_eq_grid
+    gq_freqs = standard_graphic_eq_grid()
     export_equalizer_apo_graphiceq_txt(
         out_dir / 'equalizer_apo_graphiceq.txt',
-        result.freqs_hz,
-        left_fitted_eq,
-        right_fitted_eq,
+        gq_freqs,
+        peq_chain_response_db(gq_freqs, sample_rate, left_bands),
+        peq_chain_response_db(gq_freqs, sample_rate, right_bands),
     )
     _write_fixed_band_graphiceq_artifact(
         out_dir,
