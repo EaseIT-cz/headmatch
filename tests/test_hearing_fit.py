@@ -123,6 +123,16 @@ class TestFitFromHearingProfile:
         assert isinstance(left_bands, list)
         assert isinstance(report["target"], str)
 
+    def test_tonal_target_tilt_uses_shelf_filters_not_rippled_peaking(self, tmp_path):
+        # A Harman-like bass/treble tilt should be realised with shelf filters
+        # (smooth) rather than a ripple of peaking filters at the target points.
+        from headmatch.builtin_targets import materialize_builtin_target
+        harman = materialize_builtin_target("harman", tmp_path)
+        profile = _make_profile(loss_db=0.0)  # no hearing deviation -> target only
+        left_bands, _, _ = fit_from_hearing_profile(profile, sample_rate=48000, target_path=harman)
+        kinds = {b.kind for b in left_bands}
+        assert "lowshelf" in kinds or "highshelf" in kinds, f"expected shelf filters, got {kinds}"
+
     def test_target_curve_applied_even_with_no_hearing_loss(self, tmp_path):
         # Regression: a tonal target (e.g. Harman) must still produce an EQ when
         # the listener shows no measurable hearing loss — the target is known
