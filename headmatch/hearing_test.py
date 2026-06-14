@@ -335,14 +335,34 @@ def relative_compensation_points(
     if ref is None:
         ref = min(thr.values())  # most sensitive determined frequency
 
+    freqs = sorted(thr)
+    raw_dev = [(thr[f] - ref) - NORMAL_RELATIVE_SHAPE_DB.get(f, 0.0) for f in freqs]
+    # Smooth across frequency (triangular 3-tap) so a single noisy self-test point
+    # can't drive a boost — real hearing loss is smooth, so only deviations
+    # corroborated by neighbouring frequencies survive.
+    dev = _smooth_over_frequency(raw_dev)
+
     points: dict[int, float] = {}
-    for freq_hz, level in thr.items():
-        rel = level - ref  # how much louder than the reference the listener needed
-        dev = rel - NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
-        if dev < deadband_db:
+    for freq_hz, d in zip(freqs, dev):
+        if d < deadband_db:
             continue  # within a normal ear / within self-test noise
-        points[freq_hz] = round(float(np.clip(dev * fraction, 0.0, max_gain_db)), 2)
+        points[freq_hz] = round(float(np.clip(d * fraction, 0.0, max_gain_db)), 2)
     return points
+
+
+def _smooth_over_frequency(values: list[float]) -> list[float]:
+    """Triangular 3-tap moving average (weights 0.25/0.5/0.25), edges renormalised."""
+    n = len(values)
+    out: list[float] = []
+    for i in range(n):
+        acc = 0.0
+        weight = 0.0
+        for j, w in ((i - 1, 0.25), (i, 0.5), (i + 1, 0.25)):
+            if 0 <= j < n:
+                acc += w * values[j]
+                weight += w
+        out.append(acc / weight if weight else values[i])
+    return out
 
 
 def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:

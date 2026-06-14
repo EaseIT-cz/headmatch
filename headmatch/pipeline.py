@@ -353,12 +353,12 @@ def run_hearing_fit(
         max_filters=max_filters, filter_budget=filter_budget,
     )
 
-    clipping = report.get('eq_clipping') if isinstance(report.get('eq_clipping'), dict) else None
+    # Per-channel preamp (preamp_db=None): a channel with no boost is not attenuated,
+    # so a one-eared correction doesn't shift L/R balance.
     export_equalizer_apo_parametric_txt(
         out_dir / 'equalizer_apo.txt',
         left_bands,
         right_bands,
-        preamp_db=(float(clipping['preamp_db']) if clipping and clipping.get('will_clip') else None),
     )
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
