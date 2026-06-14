@@ -16,6 +16,7 @@ from ...hearing_test import (
     TEST_FREQUENCIES,
     TEST_ORDER,
     FrequencyThreshold,
+    adaptive_needs_more_passes,
     averaged_frequency_threshold,
     HearingProfile,
     ThresholdEngine,
@@ -249,12 +250,14 @@ def render_hearing_test(
         _state["ear"] = "left"
         _state["processed_freqs"] = set()
         _state["freq_index"] = 0
+        _state["ref_level"] = None  # this ear's 1 kHz reference (for adaptive depth)
         _show_ear_intro("left", callback=_start_test_loop)
 
     def _begin_right():
         _state["ear"] = "right"
         _state["processed_freqs"] = set()
         _state["freq_index"] = 0
+        _state["ref_level"] = None
         _show_ear_intro("right", callback=_start_test_loop)
 
     def _show_ear_intro(ear: str, callback: Callable):
@@ -403,18 +406,24 @@ def render_hearing_test(
             _state["freq_levels"].append(engine.threshold)
         _state["repeat"] += 1
 
-        # Repeat this frequency until we have MEASUREMENT_REPEATS passes (unless
-        # it floored), then average the converged passes.
-        if _state["repeat"] < MEASUREMENT_REPEATS and not _state["freq_floored"]:
+        # Adaptive depth: 1 pass per frequency; repeat (up to MEASUREMENT_REPEATS)
+        # only deviant frequencies. The 1 kHz reference gets >=2 passes.
+        min_passes = 2 if freq_hz == 1000 else 1
+        if (not _state["freq_floored"]) and adaptive_needs_more_passes(
+            freq_hz, _state["freq_levels"], _state.get("ref_level"), _state["repeat"], min_passes=min_passes
+        ):
             _state["engine"] = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
             _next_tone()
             return
 
-        _state[_state["ear"]][freq_hz] = averaged_frequency_threshold(
+        result = averaged_frequency_threshold(
             freq_hz, _state["freq_levels"],
             floored=_state["freq_floored"],
             ascending_runs=engine.ascending_run_count,
         )
+        _state[_state["ear"]][freq_hz] = result
+        if freq_hz == 1000 and result.determined:
+            _state["ref_level"] = result.level_dbfs
         _state["freq_index"] += 1
         _advance_to_next_freq()
 
