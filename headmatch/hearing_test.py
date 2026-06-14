@@ -49,9 +49,10 @@ THRESHOLD_WINDOW: int = 3
 # Safety cap: the Hughson-Westlake staircase only completes via ascending runs,
 # which require misses. A listener who hears (or misses) every presentation
 # never produces an ascending run, so without this cap the frequency would
-# never finish and the test would hang on it. 30 is well above a normal
-# convergence (~10-20 presentations).
-MAX_PRESENTATIONS: int = 30
+# never finish and the test would hang on it. 20 is above a normal
+# convergence (~10-15 presentations) but bails out promptly on a degenerate
+# (hear-everything / miss-everything) response pattern.
+MAX_PRESENTATIONS: int = 20
 RESPONSE_WINDOW_S: float = 3.0
 
 # ── Compensation parameters ───────────────────────────────────────────────────

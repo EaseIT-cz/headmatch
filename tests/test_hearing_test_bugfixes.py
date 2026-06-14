@@ -42,6 +42,12 @@ def test_speaker_status_strings_are_ascii():
         assert s.isascii(), f"status string must be ASCII-renderable: {s!r}"
 
 
+def test_intro_instructions_are_ascii_and_cover_volume():
+    text = "\n".join(ht_view._INTRO_INSTRUCTIONS)
+    assert text.isascii(), "intro instructions must be ASCII-renderable"
+    assert "volume" in text.lower(), "intro must guide the user on volume level"
+
+
 # ── Bug 3: engine always terminates ───────────────────────────────────────────
 
 def test_engine_terminates_when_listener_hears_everything():
@@ -76,3 +82,6 @@ def test_engine_still_converges_normally_within_cap():
         n += 1
     assert eng.done
     assert eng.threshold == -45.0
+    # Genuine convergence happens before the safety cap kicks in.
+    from headmatch.hearing_test import MAX_PRESENTATIONS
+    assert n < MAX_PRESENTATIONS

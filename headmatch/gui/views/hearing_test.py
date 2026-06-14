@@ -31,6 +31,29 @@ _STATUS_PLAYING = "Playing tone..."
 _STATUS_HEARD = "Heard"
 _STATUS_NOT_HEARD = "Not heard"
 
+# Intro instructions shown before the test starts. ASCII-only so they render in
+# every platform Tk font. The volume guidance matters: if the volume is too
+# high the listener hears every tone, no threshold can be found, and the
+# staircase only stops via the engine's safety cap.
+_INTRO_INSTRUCTIONS = (
+    "Before you start:",
+    "  - Set your headphone volume to a comfortable",
+    "    music-listening level, then leave it unchanged",
+    "    for the whole test.",
+    "  - Volume check: at the right level the quietest tones",
+    "    are inaudible. If you can hear EVERY tone the volume",
+    "    is too high - turn it down, otherwise no hearing",
+    "    threshold can be measured.",
+    "  - Go to a quiet room and minimise background noise.",
+    "  - The test takes about 5 minutes total.",
+    "",
+    "During the test:",
+    "  - Click 'I hear it' each time you hear a tone.",
+    "  - If you don't hear a tone, do nothing; it advances",
+    "    automatically.",
+    "  - Test your LEFT ear first, then your RIGHT ear.",
+)
+
 
 _FREQ_LABELS = {
     500: "500 Hz",
@@ -122,23 +145,12 @@ def render_hearing_test(
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(0, 12))
 
-        instructions = (
-            "Before you start:",
-            "  • Set your headphone volume to a comfortable music-listening level.",
-            "  • Go to a quiet room.",
-            "  • The test takes about 5 minutes total.",
-            "",
-            "During the test:",
-            "  • Click 'I hear it' each time you hear a tone.",
-            "  • If you don't hear the tone, do nothing — the test advances automatically.",
-            "  • Test your LEFT ear first, then your RIGHT ear.",
-        )
         info_text = tk.Text(
-            frame, height=10, width=62, state="normal",
+            frame, height=len(_INTRO_INSTRUCTIONS) + 1, width=62, state="normal",
             relief="flat", background=theme_background(ttk),
             wrap="word",
         )
-        info_text.insert("1.0", "\n".join(instructions))
+        info_text.insert("1.0", "\n".join(_INTRO_INSTRUCTIONS))
         info_text.configure(state="disabled")
         info_text.grid(row=2, column=0, sticky="ew", pady=(0, 16))
 
