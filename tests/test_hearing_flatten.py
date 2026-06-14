@@ -56,6 +56,16 @@ class TestFlattenKnob:
         assert relative_compensation_points(side, flatten=-3.0) == \
                relative_compensation_points(side, flatten=0.0)
 
+    def test_flatten_is_hf_only_never_boosts_bass(self):
+        # A normal-shaped listener has normal bass; flatten must not boost 250/500
+        # Hz at ANY strength (air-band shaping leaves bass on compensate-to-normal).
+        side = _side(_normal_shaped(-60.0))
+        for fl in (0.35, 0.6, 1.0):
+            pts = relative_compensation_points(side, flatten=fl)
+            assert 250 not in pts and 500 not in pts, (fl, pts)
+        # At full flatten the air band IS lifted (just not the bass).
+        assert any(f >= 8000 for f in relative_compensation_points(side, flatten=1.0))
+
 
 class TestFlattenOnRealProfile:
     def _profile(self):

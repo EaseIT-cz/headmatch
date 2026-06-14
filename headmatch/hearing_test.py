@@ -651,10 +651,11 @@ def _ear_deviations(side: dict[int, FrequencyThreshold],
     with the combined measurement noise.
 
     ``flatten`` (0..1) controls how much of the natural ISO-normal threshold shape
-    is *also* corrected: at 0 only the listener's excess over a normal ear is a
-    deviation (compensate-to-normal); at 1 the full deviation from a flat response
-    relative to 1 kHz is corrected (flatten the perceived response). In between it
-    interpolates, so a fraction of the natural rolloff is lifted.
+    is *also* corrected, but only ABOVE the 1 kHz anchor ("air-band shaping"): at 0
+    only the listener's excess over a normal ear is a deviation
+    (compensate-to-normal); at 1 the full high-frequency rolloff relative to 1 kHz
+    is corrected. Frequencies at/below 1 kHz always stay on compensate-to-normal so
+    the knob never boosts a listener's (typically normal) bass.
     """
     flatten = min(1.0, max(0.0, flatten))
     determined = {
@@ -672,7 +673,10 @@ def _ear_deviations(side: dict[int, FrequencyThreshold],
 
     out: dict[int, tuple[float, float]] = {}
     for freq_hz, (level, spread) in determined.items():
-        dev = (level - ref_level) - (1.0 - flatten) * NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
+        # Flatten only the high-frequency (air-band) rolloff; bass (<= 1 kHz anchor)
+        # always stays on compensate-to-normal so the knob never boosts normal bass.
+        shape_coeff = (1.0 - flatten) if freq_hz > 1000 else 1.0
+        dev = (level - ref_level) - shape_coeff * NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
         noise = math.sqrt(spread ** 2 + NOISE_FLOOR_DB ** 2 + ref_noise_sq)
         out[freq_hz] = (dev, noise)
     return out
