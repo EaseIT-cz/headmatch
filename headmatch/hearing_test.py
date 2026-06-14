@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import math
+import random
+import time
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -25,17 +27,30 @@ from .signals import fractional_octave_smoothing
 
 # ── Frequency protocol ────────────────────────────────────────────────────────
 
-TEST_FREQUENCIES: tuple[int, ...] = (500, 1000, 2000, 3000, 4000, 6000, 8000)
+TEST_FREQUENCIES: tuple[int, ...] = (250, 500, 1000, 2000, 3000, 4000, 6000, 8000)
 
-# ISO 8253-1 test order: start at 1 kHz, ascend, re-verify 1 kHz, descend.
-# The duplicate 1000 Hz entry allows reliability verification.
-TEST_ORDER: tuple[int, ...] = (1000, 2000, 3000, 4000, 6000, 8000, 1000, 500)
+# ISO 8253-1 test order: start at 1 kHz, ascend, re-verify 1 kHz, descend to the
+# lowest frequency last. The duplicate 1000 Hz entry allows reliability verification.
+TEST_ORDER: tuple[int, ...] = (1000, 2000, 3000, 4000, 6000, 8000, 1000, 500, 250)
+
+# Pure-tone average frequencies (WHO/clinical PTA4 — the standard four-frequency
+# average). 250 Hz is measured for the audiogram and EQ but is NOT part of PTA4.
+PTA4_FREQS: tuple[int, ...] = (500, 1000, 2000, 4000)
 
 # ── Tone stimulus parameters ──────────────────────────────────────────────────
 
 TONE_DURATION_S: float = 0.8
 INTER_TONE_SILENCE_S: float = 0.5
 RAMP_DURATION_S: float = 0.03       # 30 ms raised-cosine onset/offset
+
+# False-positive control: silent catch trials measure how often the listener
+# responds when no tone is present, and jittered timing breaks the predictable
+# rhythm that drives expectation-based "phantom" responses.
+CATCH_TRIAL_PROB: float = 0.2           # chance of a silent catch before a real tone
+MAX_CATCH_TRIALS_PER_FREQ: int = 4      # bound the extra presentations per frequency
+FP_RATE_WARN: float = 0.34              # > 1/3 false positives -> ear flagged unreliable
+JITTER_MIN_S: float = 0.5               # pre-tone silence is drawn uniformly from
+JITTER_MAX_S: float = 2.0               # [JITTER_MIN_S, JITTER_MAX_S]
 
 # ── Threshold engine parameters ───────────────────────────────────────────────
 
@@ -105,6 +120,7 @@ NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 # about 30 dB above the expected threshold for a normal-hearing listener.
 
 NORMAL_HEARING_REFERENCE: dict[int, float] = {
+    250:  -45.0,   # 250 Hz: less sensitive than 500 Hz (ISO 7029 median trend)
     500:  -48.0,
     1000: -50.0,
     2000: -50.0,
@@ -124,8 +140,22 @@ HEARING_PROFILE_FILENAME = "hearing_profile.json"
 # response so we don't over-correct the extremes. 6 kHz is log-f interpolated (not
 # in the ISO 389-8 table). See docs/designs/calibration-robust-hearing.md.
 NORMAL_RELATIVE_SHAPE_DB: dict[int, float] = {
-    500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 8.7, 8000: 12.0,
+    250: 12.5, 500: 5.5, 1000: 0.0, 2000: -1.0, 3000: -3.0, 4000: 4.0, 6000: 8.7, 8000: 12.0,
 }
+# 250 Hz value = ISO 389-8 (HDA200) RETSPL(250) − RETSPL(1000) ≈ 18.0 − 5.5 dB,
+# consistent with the 500 Hz entry's derivation.
+
+# WHO 2021 grades of hearing loss, keyed by better-ear pure-tone average (dB).
+# Each entry is (exclusive upper bound, label); the last bound is +inf.
+WHO_GRADE_BANDS: tuple[tuple[float, str], ...] = (
+    (20.0, "No impairment"),
+    (35.0, "Mild"),
+    (50.0, "Moderate"),
+    (65.0, "Moderately severe"),
+    (80.0, "Severe"),
+    (95.0, "Profound"),
+    (float("inf"), "Complete"),
+)
 
 
 # ── Data structures ───────────────────────────────────────────────────────────
@@ -146,11 +176,18 @@ class HearingProfile:
     right: dict[int, FrequencyThreshold]
     tested_at: str                  # ISO 8601
     asymmetric_freqs: list[int]     # freqs where L/R gap > ASYMMETRY_WARNING_DB
+    # False-positive (catch-trial) accounting, e.g.
+    # {"left": {"catch": 6, "false_positive": 1}, "right": {...}}. Optional so
+    # older saved profiles (written before this field existed) still load.
+    catch_stats: Optional[dict] = None
+    unreliable_ears: Optional[list] = None  # subset of ["left", "right"]
 
     def to_dict(self) -> dict:
         return {
             "tested_at": self.tested_at,
             "asymmetric_freqs": self.asymmetric_freqs,
+            "catch_stats": self.catch_stats,
+            "unreliable_ears": self.unreliable_ears,
             "left": {str(k): asdict(v) for k, v in self.left.items()},
             "right": {str(k): asdict(v) for k, v in self.right.items()},
         }
@@ -167,6 +204,8 @@ class HearingProfile:
             right=_parse_side(data["right"]),
             tested_at=data["tested_at"],
             asymmetric_freqs=data.get("asymmetric_freqs", []),
+            catch_stats=data.get("catch_stats"),
+            unreliable_ears=data.get("unreliable_ears"),
         )
 
 
@@ -326,6 +365,84 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
     if side == "right":
         return np.column_stack([silent, mono])
     return np.column_stack([mono, mono])
+
+
+def generate_silence(sample_rate: int = 48000) -> np.ndarray:
+    """Return a silent stereo (N, 2) buffer the same length as a test tone.
+
+    Used for catch trials: the listener is presented with nothing during the
+    normal response window, so any response is a measurable false positive.
+    """
+    n_total = int(round(TONE_DURATION_S * sample_rate))
+    return np.zeros((n_total, 2), dtype=np.float64)
+
+
+# ── False-positive control (catch trials + jitter) ─────────────────────────────
+
+def should_insert_catch(rng: random.Random, n_inserted_this_freq: int) -> bool:
+    """Whether to present a silent catch trial before the next real tone."""
+    return (n_inserted_this_freq < MAX_CATCH_TRIALS_PER_FREQ
+            and rng.random() < CATCH_TRIAL_PROB)
+
+
+def jittered_delay(rng: random.Random) -> float:
+    """Pre-tone silence (seconds) drawn uniformly from [JITTER_MIN_S, JITTER_MAX_S]."""
+    return rng.uniform(JITTER_MIN_S, JITTER_MAX_S)
+
+
+def is_unreliable(catch_count: int, false_positive_count: int) -> bool:
+    """True when an ear's false-positive rate is high enough to distrust it.
+
+    Requires a minimum number of catch trials so a single early false positive
+    doesn't flag the whole ear.
+    """
+    return catch_count >= 3 and (false_positive_count / catch_count) > FP_RATE_WARN
+
+
+# ── Hearing summary (PTA4 + WHO grade) ─────────────────────────────────────────
+
+def who_grade(better_ear_pta_db: float) -> str:
+    """WHO 2021 hearing-loss grade for a better-ear pure-tone average (dB)."""
+    for upper, label in WHO_GRADE_BANDS:
+        if better_ear_pta_db < upper:
+            return label
+    return WHO_GRADE_BANDS[-1][1]
+
+
+def _pta4(side: dict[int, "FrequencyThreshold"]) -> Optional[float]:
+    """Estimated better-than-reference pure-tone average (dB) for one ear.
+
+    est_HL(f) = threshold(f) − NORMAL_HEARING_REFERENCE[f] (positive = worse than
+    normal). Requires at least 3 of the 4 PTA frequencies determined.
+    """
+    losses: list[float] = []
+    for freq_hz in PTA4_FREQS:
+        t = side.get(freq_hz)
+        if t is not None and t.determined and t.level_dbfs is not None:
+            losses.append(t.level_dbfs - NORMAL_HEARING_REFERENCE[freq_hz])
+    if len(losses) < 3:
+        return None
+    return round(sum(losses) / len(losses), 1)
+
+
+def compute_hearing_summary(profile: "HearingProfile") -> dict:
+    """User-facing summary: per-ear PTA4, better-ear PTA, and WHO 2021 grade.
+
+    Values are *estimates* from an uncalibrated self-test (relative dBFS, not
+    clinical dB HL) — not a medical diagnosis. ``who_grade`` is None when fewer
+    than 3 of the 4 PTA frequencies were determined in both ears.
+    """
+    pta_left = _pta4(profile.left)
+    pta_right = _pta4(profile.right)
+    present = [p for p in (pta_left, pta_right) if p is not None]
+    better = min(present) if present else None
+    return {
+        "pta4_left_db": pta_left,
+        "pta4_right_db": pta_right,
+        "better_ear_pta_db": better,
+        "who_grade": who_grade(better) if better is not None else None,
+        "estimated": True,
+    }
 
 
 # ── Compensation curve ────────────────────────────────────────────────────────
@@ -678,16 +795,20 @@ def run_cli_hearing_test(
     sample_rate: int = 48000,
     *,
     on_status=None,
+    rng: random.Random | None = None,
 ) -> HearingProfile:
     """
     Headless hearing test runner for CLI / TUI use.
 
     Plays each tone via backend.play_tone(). The user presses Enter to
     indicate they heard the tone; a response window timer handles silence.
-    Returns a completed HearingProfile.
+    Silent catch trials and jittered timing suppress and measure false-positive
+    ("phantom") responses. Returns a completed HearingProfile.
     """
     import sys
     import threading
+
+    rng = rng or random.Random()
 
     def _status(msg: str) -> None:
         if on_status:
@@ -710,10 +831,12 @@ def run_cli_hearing_test(
         t.start()
         return heard_event.wait(timeout=timeout_s)
 
-    def _test_ear(ear_label: str) -> dict[int, FrequencyThreshold]:
+    def _test_ear(ear_label: str) -> tuple[dict[int, FrequencyThreshold], int, int]:
         thresholds: dict[int, FrequencyThreshold] = {}
         processed: set[int] = set()
         reference: Optional[float] = None  # this ear's 1 kHz, for adaptive depth
+        catch_count = 0          # silent trials presented for this ear
+        false_positive_count = 0  # responses during a silent trial
 
         for freq_hz in TEST_ORDER:
             if freq_hz in processed:
@@ -725,10 +848,20 @@ def run_cli_hearing_test(
             floored = False
             runs = 0
             attempts = 0
+            catch_this_freq = 0
             min_passes = 2 if freq_hz == 1000 else 1
             while True:
                 engine = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
                 while not engine.done:
+                    # Optional silent catch trial before the real tone: a response
+                    # to silence is a false positive (does NOT advance the staircase).
+                    if should_insert_catch(rng, catch_this_freq):
+                        catch_this_freq += 1
+                        catch_count += 1
+                        backend.play_tone(generate_silence(sample_rate), sample_rate, output_device)
+                        if _ask_heard(RESPONSE_WINDOW_S):
+                            false_positive_count += 1
+                    time.sleep(jittered_delay(rng))  # break the predictable rhythm
                     level = engine.current_level_dbfs
                     samples = generate_tone(freq_hz, level, sample_rate, ear=ear_label.lower())
                     backend.play_tone(samples, sample_rate, output_device)
@@ -755,7 +888,7 @@ def run_cli_hearing_test(
             else:
                 _status(f"    threshold undetermined after {runs} runs")
 
-        return thresholds
+        return thresholds, catch_count, false_positive_count
 
     _status("\n=== Hearing Threshold Test ===")
     _status("Instructions:")
@@ -765,19 +898,37 @@ def run_cli_hearing_test(
     _status("\nStarting left ear. Cover or plug your right ear.")
     input("  Press Enter to begin...")
 
-    left = _test_ear("Left")
+    left, left_catch, left_fp = _test_ear("Left")
 
     _status("\nRight ear. Cover or plug your left ear.")
     input("  Press Enter to continue...")
 
-    right = _test_ear("Right")
+    right, right_catch, right_fp = _test_ear("Right")
 
     asymmetric = detect_asymmetric_frequencies(left, right)
+
+    catch_stats = {
+        "left": {"catch": left_catch, "false_positive": left_fp},
+        "right": {"catch": right_catch, "false_positive": right_fp},
+    }
+    unreliable_ears = [
+        ear for ear, s in catch_stats.items()
+        if is_unreliable(s["catch"], s["false_positive"])
+    ]
+    if unreliable_ears:
+        _status(
+            "\n⚠ High false-positive rate detected for "
+            f"{', '.join(unreliable_ears)} ear(s). Results may be unreliable — "
+            "consider retesting in a quieter setting and responding only to tones "
+            "you are sure you hear."
+        )
 
     profile = HearingProfile(
         left=left,
         right=right,
         tested_at=datetime.now(timezone.utc).isoformat(),
         asymmetric_freqs=asymmetric,
+        catch_stats=catch_stats,
+        unreliable_ears=unreliable_ears,
     )
     return profile

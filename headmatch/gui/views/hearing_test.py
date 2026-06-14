@@ -1,6 +1,7 @@
 """GUI view for the hearing threshold test workflow."""
 from __future__ import annotations
 
+import random
 import threading
 from typing import Callable, Optional
 
@@ -18,6 +19,11 @@ from ...hearing_test import (
     FrequencyThreshold,
     adaptive_needs_more_passes,
     averaged_frequency_threshold,
+    compute_hearing_summary,
+    generate_silence,
+    is_unreliable,
+    jittered_delay,
+    should_insert_catch,
     HearingProfile,
     ThresholdEngine,
     detect_asymmetric_frequencies,
@@ -49,7 +55,7 @@ _INTRO_INSTRUCTIONS = (
     "    is too high - turn it down, otherwise no hearing",
     "    threshold can be measured.",
     "  - Go to a quiet room and minimise background noise.",
-    "  - The test takes about 5 minutes total.",
+    "  - The test takes about 6-7 minutes total.",
     "",
     "During the test:",
     "  - Click 'I hear it' each time you hear a tone.",
@@ -60,6 +66,7 @@ _INTRO_INSTRUCTIONS = (
 
 
 _FREQ_LABELS = {
+    250: "250 Hz",
     500: "500 Hz",
     1000: "1 kHz",
     2000: "2 kHz",
@@ -99,6 +106,12 @@ def render_hearing_test(
         "response_timer": None,
         "tone_thread": None,
         "responded": False,
+        # False-positive control: per-ear catch-trial accounting + jitter RNG.
+        "rng": random.Random(),
+        "catch": {"left": {"catch": 0, "false_positive": 0},
+                  "right": {"catch": 0, "false_positive": 0}},
+        "catch_this_freq": 0,
+        "in_catch": False,
     }
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -128,6 +141,17 @@ def render_hearing_test(
         t.start()
         _state["tone_thread"] = t
 
+    def _play_silence_async():
+        """Play a silent catch-trial buffer in a background thread."""
+        def _worker():
+            try:
+                backend.play_tone(generate_silence(sample_rate), sample_rate, output_device)
+            except Exception:
+                pass
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        _state["tone_thread"] = t
+
     # ── view transitions ─────────────────────────────────────────────────────
 
     def _show_intro():
@@ -140,7 +164,7 @@ def render_hearing_test(
         ttk.Label(
             frame,
             text=(
-                "This test sweeps pure tones across 7 frequencies in each ear "
+                "This test sweeps pure tones across 8 frequencies in each ear "
                 "and estimates where your hearing thresholds are. "
                 "The result is used to personalise the EQ compensation applied "
                 "to your headphone fit."
@@ -301,6 +325,7 @@ def render_hearing_test(
         _state["freq_levels"] = []
         _state["freq_floored"] = False
         _state["repeat"] = 0
+        _state["catch_this_freq"] = 0  # catch-trial cap is per frequency (across passes)
         _state["engine"] = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
         _show_test_screen(freq_hz, idx)
         _next_tone()
@@ -341,8 +366,40 @@ def render_hearing_test(
         ttk.Button(frame, text="Stop Test", command=_stop_test).grid(row=4, column=0, sticky="w", pady=(4, 0))
 
     def _next_tone():
+        """Either present a silent catch trial, or schedule the next real tone."""
+        _cancel_timer()
+        engine: ThresholdEngine = _state["engine"]
+        if engine.done:
+            _on_freq_done()
+            return
+
+        # Optionally insert a silent catch trial first. A response to silence is a
+        # false positive; it does NOT advance the staircase.
+        if should_insert_catch(_state["rng"], _state["catch_this_freq"]):
+            _state["catch_this_freq"] += 1
+            _state["catch"][_state["ear"]]["catch"] += 1
+            _state["in_catch"] = True
+            _state["responded"] = False
+            speaker_var = _state.get("speaker_label_var")
+            if speaker_var:
+                speaker_var.set(_STATUS_PLAYING)
+            _play_silence_async()
+            _state["response_timer"] = frame.after(int(RESPONSE_WINDOW_S * 1000), _on_timeout)
+            return
+
+        _schedule_real_tone()
+
+    def _schedule_real_tone():
+        """Wait a jittered interval (breaking the rhythm), then play the real tone."""
+        _state["in_catch"] = False
+        _state["responded"] = True  # ignore clicks during the silent pre-tone gap
+        delay_ms = max(1, int(jittered_delay(_state["rng"]) * 1000))
+        _state["response_timer"] = frame.after(delay_ms, _present_real_tone)
+
+    def _present_real_tone():
         """Play the current tone and start the response window timer."""
         _cancel_timer()
+        _state["in_catch"] = False
         _state["responded"] = False
 
         engine: ThresholdEngine = _state["engine"]
@@ -372,6 +429,12 @@ def render_hearing_test(
             return
         _state["responded"] = True
         _cancel_timer()
+        if _state.get("in_catch"):
+            # Responded to silence -> false positive. Do not touch the staircase.
+            _state["catch"][_state["ear"]]["false_positive"] += 1
+            _state["in_catch"] = False
+            frame.after(300, _schedule_real_tone)
+            return
         engine: ThresholdEngine = _state["engine"]
         engine.record_response(True)
         speaker_var = _state.get("speaker_label_var")
@@ -387,6 +450,11 @@ def render_hearing_test(
             return
         _state["responded"] = True
         _state["response_timer"] = None
+        if _state.get("in_catch"):
+            # Correctly silent on a catch trial -> proceed to the real tone.
+            _state["in_catch"] = False
+            frame.after(300, _schedule_real_tone)
+            return
         engine: ThresholdEngine = _state["engine"]
         engine.record_response(False)
         speaker_var = _state.get("speaker_label_var")
@@ -447,6 +515,21 @@ def render_hearing_test(
         left_thresholds: dict[int, FrequencyThreshold] = _state["left"]
         right_thresholds: dict[int, FrequencyThreshold] = _state["right"]
         asymmetric = detect_asymmetric_frequencies(left_thresholds, right_thresholds)
+        catch_stats = _state["catch"]
+        unreliable_ears = [
+            ear for ear, s in catch_stats.items()
+            if is_unreliable(s["catch"], s["false_positive"])
+        ]
+
+        def _build_profile() -> HearingProfile:
+            return HearingProfile(
+                left=left_thresholds,
+                right=right_thresholds,
+                tested_at=datetime.now(timezone.utc).isoformat(),
+                asymmetric_freqs=asymmetric,
+                catch_stats=catch_stats,
+                unreliable_ears=unreliable_ears,
+            )
 
         ttk.Label(frame, text="Hearing Test Results", style="Title.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 8)
@@ -492,12 +575,24 @@ def render_hearing_test(
         import numpy as np
         from ...signals import geometric_log_grid
 
-        profile_for_preview = HearingProfile(
-            left=left_thresholds,
-            right=right_thresholds,
-            tested_at=datetime.now(timezone.utc).isoformat(),
-            asymmetric_freqs=asymmetric,
-        )
+        profile_for_preview = _build_profile()
+
+        # Estimated hearing summary (PTA4 + WHO 2021 grade). Uncalibrated estimate.
+        hearing_summary = compute_hearing_summary(profile_for_preview)
+        if hearing_summary["who_grade"] is not None:
+            summary_parts.append(
+                f"Estimated hearing: {hearing_summary['who_grade']} "
+                f"(better-ear average {hearing_summary['better_ear_pta_db']:.0f} dB). "
+                "Estimate from an uncalibrated self-test — not a medical diagnosis."
+            )
+        if unreliable_ears:
+            summary_parts.append(
+                f"High false-positive rate on the {', '.join(unreliable_ears)} ear(s): "
+                "responses were registered when no tone played. Results may be "
+                "unreliable — retest in a quiet room and respond only to tones you "
+                "are sure you hear."
+            )
+
         grid = geometric_log_grid(500.0, 8000.0, 48)
         comp = compute_compensation_curve(profile_for_preview, grid)
         avg_boost = float(np.mean(comp[comp > 0])) if np.any(comp > 0) else 0.0
@@ -521,22 +616,12 @@ def render_hearing_test(
         btn_frame.grid(row=row_offset, column=0, sticky="w", pady=(8, 0))
 
         def _save_and_apply():
-            profile = HearingProfile(
-                left=left_thresholds,
-                right=right_thresholds,
-                tested_at=datetime.now(timezone.utc).isoformat(),
-                asymmetric_freqs=asymmetric,
-            )
+            profile = _build_profile()
             save_hearing_profile(profile)
             on_complete(profile)
 
         def _save_only():
-            profile = HearingProfile(
-                left=left_thresholds,
-                right=right_thresholds,
-                tested_at=datetime.now(timezone.utc).isoformat(),
-                asymmetric_freqs=asymmetric,
-            )
+            profile = _build_profile()
             save_hearing_profile(profile)
             on_cancel()
 
