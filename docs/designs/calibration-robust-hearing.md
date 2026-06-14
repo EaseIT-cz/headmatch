@@ -1,9 +1,8 @@
 # Design: Calibration-robust hearing measurement (0.8.3)
 
-Status: **draft for review.** Targets 0.8.3. Some parts are well-grounded in the
-literature; others are explicitly flagged as needing their own focused review
-before implementation (same discipline as
-`docs/designs/measurement-resolution-eq.md`).
+Status: Targets 0.8.3. **Part A (guards) and Part D (basic-nav) shipped; the focused
+literature review for Part B is complete (folded into Part B below); Part B + the A3
+volume pre-check are the remaining implementation.**
 
 ## Problem
 
@@ -102,13 +101,44 @@ hearing-only music EQ that is the right quantity. It is **not** a clinical audio
 must not be presented as one. To separate headphone from hearing, use the
 mic-measurement workflow.
 
-> ⚠ **Needs a short focused review before coding** (smaller than a full study). Two
-> things to ground and cite: (a) the source/shape of `normal_rel_shape(f)` — ISO 389-8
-> reference-equivalent thresholds vs an ISO 226 equal-loudness contour at a comfortable
-> phon level; (b) how aggressively to map `dev(f)` → gain — full correction vs a
-> fraction — given listeners prefer softer high-frequency correction (PMID 23357807)
-> and self-test thresholds carry ±5 dB spread. Reuse the EQ design doc's 12 dB cap and
-> noise deadband.
+### Focused review findings (resolved)
+
+A focused literature review (adversarially verified; see References) answered the two
+open questions. *Caveat:* the review's synthesis step hit a session limit, so these
+conclusions rest on the fully-verified claims plus the prior EQ-design research pass.
+
+**(a) `normal_rel_shape(f)` = ISO 389-8 RETSPL threshold shape, relative to 1 kHz.**
+ISO 389-8 RETSPL values are *reference threshold-of-hearing levels* for circumaural
+earphones (derived from otologically-normal listeners across five labs) — i.e. a
+**threshold** reference, which is the right match for our threshold-based test. ISO 226
+equal-loudness contours are *supra-threshold* and would only apply to a loudness measure,
+so they are **not** used. The RETSPL contour has exactly the U-shape we must not
+over-correct (≈ +30 dB @125 Hz, min ≈ 1–3 kHz, rising to +17.5 dB @8 kHz re 0 dB). Use
+its value re 1 kHz at each test frequency:
+
+```
+normal_rel_shape(f) ≈ RETSPL(f) − RETSPL(1 kHz)   (ISO 389-8, HDA 200)
+  500:+5.5  1k:0  2k:−1  3k:−3  4k:+4  6k:≈+7.5(interp)  8k:+12   dB
+```
+
+Caveat: RETSPL is earphone-specific and we measure uncalibrated through an arbitrary
+headphone, so the residual `dev(f)` still folds in this headphone's deviation — exactly
+the "hearing + headphone" quantity we acknowledged. (A claim that the transducer must be
+"flat within 10–15 dB over 250 Hz–8 kHz" was **refuted** in review, so we impose no such
+hard band limit.)
+
+**(b) Map `dev(f)` → gain with a conservative fraction, a deadband, and a cap — and let
+the user fine-tune.** Apply a **fraction** of `dev(f)` (the half-gain 0.5 is the
+established, literature-backed fraction; preferred functional gain is ≈ half the
+deviation), **deadband** small deviations (self-administered audiometry agrees within
+5 dB only 60–77% of the time per frequency), and keep the **12 dB cap** from the EQ
+design doc. High-frequency aggressiveness is **genuinely contested** in the literature —
+some listeners trim prescribed HF gain by ~4 dB and prefer the softer prescription, yet
+for mild sloping losses the higher-HF prescription is preferred, and preference depends
+on input level. So we do **not** hard-code HF reduction beyond the cap; instead keep HF
+gain moderate and **expose user adjustment of the proposed correction** (the comparison
+studies all let listeners adjust). Steep HF loss correlates with preferring *less* HF
+extension, which the cap + fraction already respect.
 
 ## Part C — Keep the absolute (clinical-style) interpretation (guarded, optional)
 
@@ -134,32 +164,35 @@ of the per-frequency gains changes; the realisation is unchanged. Per-ear EQ (vs
 current L/R average) becomes natural here since the relative-threshold test is per ear —
 worth doing in 0.8.3.
 
-## Open questions for the focused review (Part B)
+## Remaining questions (post-review)
 
-1. `normal_rel_shape(f)` source: ISO 389-8 reference-equivalent threshold shape vs an
-   ISO 226 equal-loudness contour at a comfortable phon level (and which level).
-2. `dev(f)` → gain aggressiveness: full correction vs a fraction; interaction with the
-   12 dB cap and noise deadband; listeners prefer softer HF correction (PMID 23357807).
-3. Test-retest reliability of self-administered *relative* thresholds vs the absolute
-   ±5 dB figure.
-4. Frequency set: keep the 7 audiometric points, or add a few for shape resolution?
+1. Whether to expose the per-region user adjustment in the first 0.8.3 cut or a later
+   iteration (the studies all let listeners adjust the proposed correction).
+2. Exact interpolation of `normal_rel_shape` at 6 kHz (not in the ISO 389-8 HDA 200
+   table); interpolate on log-frequency.
 
 ## Sequencing
 
-1. Part A (guards) — independent, high value, no new science.
-2. Short focused review for `normal_rel_shape` + `dev`→gain mapping → update this doc.
-3. Part B (relative-threshold measurement at a fixed reference + grounded mapping +
-   per-ear EQ).
-4. Part C wiring + Part D basic-nav.
+1. ✅ Part A (guards) — honest `determined` + flooring detection (shipped).
+2. ✅ Focused review for `normal_rel_shape` + `dev`→gain mapping (folded in above).
+3. Part B (relative-threshold measurement at a fixed reference + ISO 389-8 normal-shape
+   subtraction + fractional/capped/deadbanded mapping + per-ear EQ + user adjustment).
+4. Part C wiring + ✅ Part D basic-nav (shipped) + A3 volume pre-check (with Part B).
 
 ## References
 
-- ISO 389-8 / ISO 226 — reference-equivalent thresholds and equal-loudness contours
-  (source for the normal relative reference shape).
+- **ISO 389-8:2004** — RETSPL (reference threshold-of-hearing levels) for circumaural
+  earphones; the threshold-based normal reference shape used in (a). Verified threshold
+  (not loudness) reference with the U-shaped contour.
+- ISO 226 — equal-loudness contours (supra-threshold; *not* used for a threshold test).
 - medRxiv 2024.06.25.24309468 — relative / supra-threshold measures robust to missing
   calibration.
-- Saliba et al., AJA 2022 (doi:10.1044/2022_AJA-21-00191) — app audiometry
-  validity and ±5 dB test-retest.
+- Saliba et al., AJA 2022 (doi:10.1044/2022_AJA-21-00191) — self-test audiometry agrees
+  within 5 dB only 60–77% of the time per frequency (deadband rationale).
+- Moore & Sęk 2013 (Ear & Hearing 34(1):83–95) and PMID 23357807 / doi:10.1177/
+  1084713812465494 — CAM2 vs NAL-NL2: HF-gain preference is mixed and depends on loss
+  slope and input level (informs "moderate HF + user-adjustable, not hard-coded").
+- ResearchGate 5620852 — steep HF-loss slope correlates with preferring narrower
+  bandwidth (less HF extension).
 - Carhart & Jerger 1959 — Modified Hughson-Westlake (the retained pure-tone path).
-- PMID 23357807 — listeners prefer softer HF prescription (informs Part B aggressiveness).
 - `docs/designs/measurement-resolution-eq.md` — the shared EQ realisation.
