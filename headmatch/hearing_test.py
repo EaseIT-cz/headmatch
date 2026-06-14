@@ -33,8 +33,8 @@ TEST_ORDER: tuple[int, ...] = (1000, 2000, 3000, 4000, 6000, 8000, 1000, 500)
 
 # ── Tone stimulus parameters ──────────────────────────────────────────────────
 
-TONE_DURATION_S: float = 1.0
-INTER_TONE_SILENCE_S: float = 0.8
+TONE_DURATION_S: float = 0.8
+INTER_TONE_SILENCE_S: float = 0.5
 RAMP_DURATION_S: float = 0.03       # 30 ms raised-cosine onset/offset
 
 # ── Threshold engine parameters ───────────────────────────────────────────────
@@ -56,7 +56,7 @@ MAX_PRESENTATIONS: int = 30
 # Hearing the test floor (MIN_LEVEL_DBFS) this many times means the volume is too
 # high to bracket a threshold: terminate early and flag the frequency floored.
 FLOOR_HEARD_LIMIT: int = 2
-RESPONSE_WINDOW_S: float = 3.0
+RESPONSE_WINDOW_S: float = 2.0
 
 # ── Compensation parameters ───────────────────────────────────────────────────
 
@@ -78,10 +78,12 @@ NOISE_FLOOR_DB: float = 2.0
 # a correction must exceed GATE_SIGMA of its own (smoothed) noise to be applied.
 POOL_SIGMA: float = 1.0
 GATE_SIGMA: float = 1.0
-# Each frequency is measured this many times and the converged thresholds are
-# averaged, to cut the per-point self-test variability that makes a single pass
-# jagged (Saliba et al. 2022: within-5 dB agreement only 60-77% per frequency).
-MEASUREMENT_REPEATS: int = 2
+# Adaptive depth: every frequency gets 1 pass; a frequency whose deviation looks
+# like a candidate for correction is repeated (up to MEASUREMENT_REPEATS) to confirm
+# it and measure its spread. Clean/normal frequencies finish in one pass — fast where
+# it's easy, careful where it matters. The reference (1 kHz) always gets >=2 passes.
+MEASUREMENT_REPEATS: int = 3
+ADAPTIVE_TRIGGER_DB: float = 4.0
 ASYMMETRY_WARNING_DB: float = 15.0
 NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 
@@ -323,6 +325,33 @@ def generate_tone(freq_hz: int, level_dbfs: float, sample_rate: int = 48000,
 
 
 # ── Compensation curve ────────────────────────────────────────────────────────
+
+def adaptive_needs_more_passes(
+    freq_hz: int,
+    levels: list[float],
+    reference_dbfs: Optional[float],
+    attempts: int,
+    *,
+    min_passes: int = 1,
+    max_passes: int = MEASUREMENT_REPEATS,
+    trigger_db: float = ADAPTIVE_TRIGGER_DB,
+) -> bool:
+    """Whether to spend another measurement pass on this frequency (adaptive depth).
+
+    Always do at least ``min_passes`` and never more than ``max_passes``. In between,
+    repeat only if the running estimate looks deviant vs the reference (a candidate
+    for correction worth confirming) — so clean frequencies finish in one pass.
+    """
+    if attempts >= max_passes:
+        return False
+    if attempts < min_passes:
+        return True
+    if not levels or reference_dbfs is None:
+        return False
+    mean = sum(levels) / len(levels)
+    dev = (mean - reference_dbfs) - NORMAL_RELATIVE_SHAPE_DB.get(freq_hz, 0.0)
+    return abs(dev) >= trigger_db
+
 
 def averaged_frequency_threshold(
     freq_hz: int,
@@ -676,6 +705,7 @@ def run_cli_hearing_test(
     def _test_ear(ear_label: str) -> dict[int, FrequencyThreshold]:
         thresholds: dict[int, FrequencyThreshold] = {}
         processed: set[int] = set()
+        reference: Optional[float] = None  # this ear's 1 kHz, for adaptive depth
 
         for freq_hz in TEST_ORDER:
             if freq_hz in processed:
@@ -686,7 +716,9 @@ def run_cli_hearing_test(
             levels: list[float] = []
             floored = False
             runs = 0
-            for _rep in range(MEASUREMENT_REPEATS):
+            attempts = 0
+            min_passes = 2 if freq_hz == 1000 else 1
+            while True:
                 engine = ThresholdEngine(freq_hz, start_level_dbfs=START_LEVEL_DBFS)
                 while not engine.done:
                     level = engine.current_level_dbfs
@@ -694,15 +726,20 @@ def run_cli_hearing_test(
                     backend.play_tone(samples, sample_rate, output_device)
                     heard = _ask_heard(RESPONSE_WINDOW_S)
                     engine.record_response(heard)
+                attempts += 1
                 runs = max(runs, engine.ascending_run_count)
                 if engine.floored:
                     floored = True
                     break  # volume too high — no point repeating
                 if engine.converged and engine.threshold is not None:
                     levels.append(engine.threshold)
+                if not adaptive_needs_more_passes(freq_hz, levels, reference, attempts, min_passes=min_passes):
+                    break
 
             result = averaged_frequency_threshold(freq_hz, levels, floored=floored, ascending_runs=runs)
             thresholds[freq_hz] = result
+            if freq_hz == 1000 and result.determined:
+                reference = result.level_dbfs
             if result.determined:
                 _status(f"    threshold: {result.level_dbfs:.1f} dBFS (avg of {len(levels)})")
             elif floored:
