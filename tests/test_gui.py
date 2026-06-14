@@ -806,7 +806,7 @@ def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_p
     )
 
     app.set_mode('basic')
-    assert [item.key for item in app._nav_items_for_mode()] == ['basic-mode', 'basic-clone-target', 'history']
+    assert [item.key for item in app._nav_items_for_mode()] == ['basic-mode', 'hearing-test', 'basic-clone-target', 'history']
 
     app.show_view('basic-clone-target')
     app.basic_clone_source_var.set(str(tmp_path / 'source.csv'))
