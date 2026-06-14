@@ -1,106 +1,106 @@
 # Design: Measurement-resolution EQ generation
 
-Status: adopted for the hearing-fit path (0.8.2). Retrofit across the other
-fitting mechanisms is **pending a literature review** validating that the
-approach (prescription rule, band placement, GraphicEQ frequency set) is optimal
-— see "Open questions for the literature review" below.
+Status: **adopted project-wide** (0.8.2). Grounded in a literature review (see
+"Evidence" below); applies to the hearing-fit and measurement-fit paths.
 
 ## Principle
 
-**The resolution of the generated EQ must match the resolution of the
-measurement that produced it.** Do not manufacture frequency resolution the
-data does not have.
+**The resolution and aggressiveness of the generated EQ must match the
+resolution and *reliability* of the measurement that produced it.** Do not
+manufacture frequency resolution the data lacks, and do not turn measurement
+noise into EQ.
 
-The hearing test measures hearing thresholds at exactly seven audiometric
-frequencies (ISO 8253-1: 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz). The EQ has
-seven degrees of freedom — no more. Cubic-spline-interpolating those seven points
-onto a dense grid and then greedily fitting parametric bands (or exporting a
-~5,000-point GraphicEQ) invents detail that was never measured, is slower, and —
-in the GraphicEQ case — produced files large enough to crash downstream
-consumers such as EasyEffects.
+The hearing test measures thresholds at seven audiometric frequencies (ISO
+8253-1: 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz) — seven degrees of freedom,
+each with ~5 dB+ test-retest spread. The EQ must reflect that.
 
 ## Approach
 
-Build the EQ **directly from the measured points**:
+1. **Per-frequency gains with a noise deadband.** Compute the half-gain
+   compensation at each measured frequency, `gain = clamp((threshold −
+   reference) × 0.5, 0, 12 dB)`, L/R averaged — but **ignore losses below a
+   ~10 dB deadband** (`HEARING_DEADBAND_DB`), which are within self-test noise
+   and where the half-gain rule over-prescribes. `compute_compensation_points()`.
 
-1. **Per-frequency gains.** Compute the target gain at each *measured* frequency
-   (for the hearing fit: half-gain compensation `clamp((threshold − reference) ×
-   0.5, 0, 12 dB)`, L/R averaged). This is `compute_compensation_points()` →
-   `{freq_hz: gain_db}`.
+2. **Interaction-aware parametric realization.** One peaking filter per measured
+   frequency (Q from inter-band octave spacing, `Q = sqrt(2^N)/(2^N − 1)` as an
+   approximation of the RBJ octave↔Q relation). Band **gains are solved by
+   least squares against an interaction matrix** so the realised chain hits the
+   target points (overlapping bands sum) — not by assigning each band its raw
+   point gain. `peq.solve_band_gains_lsq()`, `eq_bands_from_gain_points()`.
+   Verified: realised response lands within ~0.3 dB of target at every measured
+   frequency.
 
-2. **Parametric EQ.** One peaking filter per frequency that needs gain, placed
-   *at* the measured frequency. Each filter's Q is derived from the band's
-   spacing to its neighbours so adjacent bands meet near their −3 dB points
-   instead of stacking:
+3. **Unified standard GraphicEQ grid.** Every GraphicEQ export (hearing-fit AND
+   measurement-fit) renders the fitted PEQ chain onto the **AutoEq 127-point log
+   grid** (`signals.standard_graphic_eq_grid()`, step 1.0563 from 20 Hz). This is
+   the de-facto density standard, loads comfortably in Equalizer APO/EasyEffects,
+   and replaced the ~5,103-point grid that crashed EasyEffects.
 
-   ```
-   N      = mean octave distance to neighbouring measured frequencies
-   Q(N)   = sqrt(2^N) / (2^N − 1)      # N=1 oct → 1.41 ; N=0.5 oct → 2.87
-   ```
+A modest 48-points/octave grid is still used for prediction/clipping metrics and
+target sampling — never to manufacture EQ resolution.
 
-   `eq_bands_from_gain_points()`. When a smaller filter budget is requested, the
-   largest-magnitude bands are kept (advanced mode can lower the budget; basic
-   uses all measured points).
+## What was retrofitted
 
-3. **GraphicEQ.** The measured points plus *hold-edge* anchors at 20 Hz and
-   20 kHz (the nearest measured gain, so the host bounds its interpolation
-   instead of ramping to zero). ~9 points total — `hearing_graphiceq_curve()`.
+- **Hearing-fit** (`fit_from_hearing_profile`, `run_hearing_fit`): deadband +
+  least-squares band gains + standard-grid GraphicEQ.
+- **Measurement-fit** (`pipeline_artifacts.write_fit_artifacts`): GraphicEQ moved
+  from the raw analysis grid to the standard 127-point grid. The parametric
+  fitter (`fit_peq`, greedy residual placement) operates at true measurement
+  resolution and is unchanged — placing bands at measured resolution does not
+  violate the principle.
+- **Shared utilities:** `signals.standard_graphic_eq_grid`,
+  `peq.solve_band_gains_lsq`.
 
-A modest 48-points/octave grid is still used, but **only** for prediction/
-clipping metrics and for sampling a target curve at the measured frequencies —
-never to manufacture EQ resolution.
+## Evidence (literature review)
 
-### Why this is also "not random"
+Prescription rule (Q1):
+- Half-gain (Lybarger) is an empirically validated first-order rule for
+  sensorineural loss (~500 fitted clients) — Schwartz/Larson, *A Reexamination
+  of the One-Half Gain Rule*, Ear & Hearing 1980 (PMID 7409361).
+- It **over-prescribes for mild loss** (same source) → motivates the deadband.
+- Modern formulas (NAL-NL2) are model-based, compressive optimizations, not a
+  fixed fraction — Keidser et al., *Trends in Amplification* 2011,
+  doi:10.1177/1084713812468511.
+- Listeners **prefer the softer prescription** and cut aggressive HF gain by
+  ~4 dB; gain is reduced for inexperienced users — Moore et al., PMID 23357807;
+  doi:10.1177/1084713812465494 → keep the 0.5 fraction + 12 dB cap conservative.
 
-The legacy parametric fitter (`fit_peq`) is a deterministic greedy
-residual-peak placer, not random. But running it over a spline-interpolated
-dense grid still fabricates resolution. Placing bands at the measured/standard
-frequencies is both deterministic *and* honest about the data.
+Band placement / Q (Q2):
+- Fixed standard-frequency bands + weighted least squares reconstruct an
+  arbitrary target to <0.81 dB; band interaction must be modelled via an
+  interaction matrix — Välimäki & Liski / Rämö et al., MDPI Appl. Sci. 2020
+  10(4):1222; Aalto "Graphic EQ design with symmetric biquad filters".
+- RBJ peaking realization `A = 10^(dBgain/40)` and the octave↔Q relation —
+  webaudio Audio-EQ-Cookbook. AutoEq uses fixed Q (√2 octave, 4.318 for 31-band).
 
-## Retrofit plan (unify all fitting mechanisms)
+GraphicEQ grid (Q3):
+- Equalizer APO GraphicEQ accepts an arbitrary point list (no documented max),
+  interpolated linearly in log-frequency — SourceForge APO config reference. The
+  EasyEffects crash was the point *count*, not the format.
+- AutoEq's 127-point grid (step 1.0563) is the de-facto density standard —
+  github.com/jaakkopasanen/AutoEq. Band sets follow ANSI S1.11-2004 / ISO 266.
 
-The measurement-based fit (`fit_from_measurement` / `write_fit_artifacts`) and
-the target-fit path should adopt the same principle:
+Validity of uncalibrated self-audiometry (Q4):
+- App audiometry can approximate clinical thresholds (no significant difference
+  0.5–4 kHz), **but** test-retest within 5 dB is only 60–77% per frequency, and
+  uncalibrated audiograms are sensitive to calibration/noise — Saliba et al.,
+  AJA 2022, doi:10.1044/2022_AJA-21-00191; medRxiv 2024.06.25.24309468 →
+  motivates the deadband and conservative, capped gains.
 
-- **Microphone measurement fit.** The analysis grid (~48 ppo) is a real
-  measurement resolution, so its parametric fit is defensible — but the GraphicEQ
-  export should be emitted on a **standard, bounded frequency set** (e.g. the ISO
-  ⅓-octave preferred frequencies, or the AutoEq GraphicEQ standard set) rather
-  than the full analysis grid, for consistent, host-safe files.
-- **Shared GraphicEQ writer.** Centralise GraphicEQ point selection in one place
-  with a single default frequency set and an advanced-mode override, so basic
-  mode is identical everywhere and advanced mode exposes the same knob across
-  hearing-fit, online measure, and offline fit.
-- **Shared band-budget semantics.** `max_filters` / `FilterBudget` already unify
-  the parametric count; extend the same default-in-basic / selectable-in-advanced
-  pattern to GraphicEQ density.
-- **Per-ear option.** The hearing test measures per ear but currently averages
-  L/R into one curve. A future option can emit per-ear EQ from the per-ear
-  thresholds.
+## Possible future work
 
-## Open questions for the literature review
-
-Before retrofitting, validate against peer-reviewed literature / standards:
-
-1. Is the half-gain (Lybarger) rule the right prescription for a music-listening
-   EQ from audiometric thresholds, or do NAL-NL2 / DSL v5 / CAM2 apply better?
-2. Is placing parametric filters at the audiometric frequencies (Q from spacing)
-   optimal vs optimisation-based placement for a sparse target?
-3. What is the recommended standard GraphicEQ frequency set and point count?
-4. What are the validity limits of uncalibrated (dBFS, no RETSPL) self-test
-   audiometry as an EQ basis, and how should that bound the applied gain?
-
-## References
-
-- ISO 8253-1 — pure-tone audiometry test frequencies.
-- ISO 266 — preferred (⅓-octave) frequencies for graphic-EQ band sets.
-- Lybarger half-gain prescription rule (compensation gains).
-- RBJ / standard peaking-filter Q ↔ octave-bandwidth relationship.
+- Taper the gain fraction at mild loss (Libby ⅓-gain style) rather than a hard
+  deadband knee.
+- Per-ear EQ from the per-ear thresholds (currently L/R averaged).
+- Optional ISO-266 ⅓-octave GraphicEQ export alongside the AutoEq grid.
 
 ## Implementation pointers
 
 - `headmatch/hearing_test.py`: `compute_compensation_points`,
-  `eq_bands_from_gain_points`, `hearing_graphiceq_curve`,
-  `_peaking_q_for_octave_bandwidth`.
-- `headmatch/pipeline.py`: `fit_from_hearing_profile`, `run_hearing_fit`.
-- Tests: `tests/test_hearing_test_bugfixes.py`.
+  `eq_bands_from_gain_points`, `_peaking_q_for_octave_bandwidth`,
+  `HEARING_DEADBAND_DB`.
+- `headmatch/peq.py`: `solve_band_gains_lsq`.
+- `headmatch/signals.py`: `standard_graphic_eq_grid`.
+- `headmatch/pipeline.py`, `headmatch/pipeline_artifacts.py`: GraphicEQ export.
+- Tests: `tests/test_hearing_test_bugfixes.py`, `tests/test_e2e_fitting.py`.

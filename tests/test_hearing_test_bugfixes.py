@@ -102,9 +102,42 @@ def test_hearing_fit_graphiceq_point_count_is_sane(tmp_path):
     gq_lines = [ln for ln in text.splitlines() if ln.startswith("GraphicEQ:")]
     assert gq_lines, "no GraphicEQ line written"
     n_points = len(gq_lines[0].split(":", 1)[1].split(";"))
-    # Compact: the 7 audiometric points + 20 Hz / 20 kHz anchors, never a
-    # dense grid manufactured from a 7-frequency measurement.
-    assert n_points <= 12, f"GraphicEQ should be compact, got {n_points} points"
+    # Standard 127-point grid (AutoEq de-facto), never the ~5103-point grid that
+    # crashed EasyEffects.
+    assert n_points <= 130, f"GraphicEQ should use the standard grid, got {n_points} points"
+
+
+def test_deadband_ignores_sub_threshold_losses():
+    # Losses below the ~10 dB self-test noise deadband must not produce EQ.
+    from headmatch.hearing_test import (
+        HearingProfile, FrequencyThreshold, TEST_FREQUENCIES, NORMAL_HEARING_REFERENCE,
+        compute_compensation_points,
+    )
+    side = {f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f] + 8.0, 3, True) for f in TEST_FREQUENCIES}
+    profile = HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
+    assert compute_compensation_points(profile) == {}
+
+
+def test_lsq_band_gains_realize_target_accounting_for_interaction():
+    # The least-squares solve must make the realized chain hit the target gains
+    # at the measured frequencies despite overlapping (summing) bands.
+    import numpy as np
+    from headmatch.hearing_test import (
+        HearingProfile, FrequencyThreshold, TEST_FREQUENCIES, NORMAL_HEARING_REFERENCE,
+        compute_compensation_points, eq_bands_from_gain_points,
+    )
+    from headmatch.peq import peq_chain_response_db
+
+    loss = {500: 5, 1000: 8, 2000: 13, 3000: 22, 4000: 32, 6000: 40, 8000: 48}
+    side = {f: FrequencyThreshold(f, NORMAL_HEARING_REFERENCE[f] + loss[f], 3, True) for f in TEST_FREQUENCIES}
+    profile = HearingProfile(left=dict(side), right=dict(side), tested_at="t", asymmetric_freqs=[])
+    points = compute_compensation_points(profile)
+    bands = eq_bands_from_gain_points(points, sample_rate=48000)
+
+    freqs = np.array(sorted(points), dtype=float)
+    realized = peq_chain_response_db(freqs, 48000, bands)
+    for f, r in zip(freqs, realized):
+        assert abs(r - points[int(f)]) < 1.0, f"{int(f)} Hz: realized {r:.2f} vs target {points[int(f)]}"
 
 
 def test_parametric_bands_placed_at_audiometric_frequencies(tmp_path):

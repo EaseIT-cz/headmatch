@@ -220,6 +220,39 @@ def peq_chain_response_db(freqs_hz: np.ndarray, fs: int, bands: List[PEQBand]) -
     return total
 
 
+def solve_band_gains_lsq(
+    target_freqs_hz: "np.ndarray | list[float]",
+    target_gains_db: "np.ndarray | list[float]",
+    sample_rate: int,
+    band_freqs_hz: "np.ndarray | list[float]",
+    band_qs: "np.ndarray | list[float]",
+    *,
+    max_gain_db: float = 12.0,
+) -> list[float]:
+    """Solve per-band peaking-filter gains so the realised chain matches a sparse
+    target, accounting for inter-band interaction (overlapping bands sum).
+
+    Builds an interaction matrix M (response in dB at each target frequency of
+    each unit-gain band) and solves M·g = target by least squares, then clamps
+    to ±max_gain_db. This is the weighted-least-squares realisation recommended
+    in the graphic-EQ literature (Välimäki & Liski; Rämö et al.), rather than
+    assigning each band its raw point gain and ignoring overlap.
+    """
+    tfreqs = np.asarray(target_freqs_hz, dtype=np.float64)
+    tgains = np.asarray(target_gains_db, dtype=np.float64)
+    band_freqs = list(band_freqs_hz)
+    band_qs = list(band_qs)
+    if not band_freqs:
+        return []
+    columns = [
+        biquad_response_db(tfreqs, sample_rate, PEQBand("peaking", float(f), 1.0, float(q)))
+        for f, q in zip(band_freqs, band_qs)
+    ]
+    matrix = np.column_stack(columns)
+    gains, *_ = np.linalg.lstsq(matrix, tgains, rcond=None)
+    return [float(np.clip(g, -max_gain_db, max_gain_db)) for g in gains]
+
+
 def graphic_eq_bands(profile: GraphicEQProfile, gains_db: np.ndarray | list[float]) -> list[PEQBand]:
     gains = list(gains_db)
     return [PEQBand("peaking", float(freq), float(gain), profile.q) for freq, gain in zip(profile.freqs_hz, gains)]

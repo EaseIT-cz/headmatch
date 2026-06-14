@@ -91,3 +91,15 @@ def geometric_log_grid(f_min: float = 20.0, f_max: float = 20000.0, points_per_o
     octaves = math.log2(f_max / f_min)
     points = int(octaves * points_per_octave) + 1
     return np.geomspace(f_min, f_max, points)
+
+
+# AutoEq's de-facto GraphicEQ density standard: 127 log-spaced points from 20 Hz
+# with a multiplicative step of 1.0563 (top ~19871 Hz). Equalizer APO / EasyEffects
+# load this comfortably; it is the grid all HeadMatch GraphicEQ exports use.
+STANDARD_GRAPHIC_EQ_STEP = 1.0563
+STANDARD_GRAPHIC_EQ_POINTS = 127
+
+
+def standard_graphic_eq_grid(f_min: float = 20.0, step: float = STANDARD_GRAPHIC_EQ_STEP,
+                             points: int = STANDARD_GRAPHIC_EQ_POINTS) -> np.ndarray:
+    return f_min * (step ** np.arange(points, dtype=np.float64))

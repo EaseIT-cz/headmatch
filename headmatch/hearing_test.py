@@ -59,6 +59,11 @@ RESPONSE_WINDOW_S: float = 3.0
 
 GAIN_FRACTION: float = 0.50         # half-gain rule (Lybarger 1944)
 MAX_COMPENSATION_DB: float = 12.0
+# Self-administered, uncalibrated thresholds have ~5 dB+ test-retest spread
+# (Saliba et al. 2022, AJA), and the half-gain rule over-prescribes for mild
+# losses (Schwartz et al. 1980). Ignore measured "loss" below this deadband so
+# we don't EQ within-noise differences. See docs/designs/measurement-resolution-eq.md.
+HEARING_DEADBAND_DB: float = 10.0
 ASYMMETRY_WARNING_DB: float = 15.0
 NOISE_GATE_THRESHOLD_DBFS: float = -30.0
 
@@ -288,6 +293,8 @@ def compute_compensation_points(profile: HearingProfile) -> dict[int, float]:
         avg_threshold = float(np.mean(thresholds))
         ref = NORMAL_HEARING_REFERENCE.get(freq_hz, -50.0)
         loss = avg_threshold - ref  # positive = worse than reference
+        if loss < HEARING_DEADBAND_DB:
+            continue  # within self-test noise / clinically insignificant — don't EQ
         gain = float(np.clip(loss * GAIN_FRACTION, 0.0, MAX_COMPENSATION_DB))
         points[freq_hz] = round(gain, 2)
     return points
@@ -306,72 +313,51 @@ def _peaking_q_for_octave_bandwidth(n_octaves: float) -> float:
 def eq_bands_from_gain_points(
     points: dict[int, float],
     *,
+    sample_rate: int | None = None,
     max_filters: int | None = None,
     max_gain_db: float = MAX_COMPENSATION_DB,
     min_gain_db: float = 0.1,
 ) -> list:
     """Build peaking PEQ bands placed directly at the measured frequencies.
 
-    One peaking filter per frequency with a non-trivial gain; the Q of each
-    band is derived from its spacing to neighbouring measured frequencies so
-    adjacent bands meet near their -3 dB points instead of overlapping. When
-    ``max_filters`` is set and fewer are allowed than there are points, the
-    largest-magnitude bands are kept.
+    One peaking filter per frequency; each band's Q is derived from its spacing
+    to neighbouring measured frequencies. When ``sample_rate`` is given, the band
+    gains are solved by interaction-aware least squares so the realised chain
+    matches the target points (overlapping bands sum) rather than each band
+    taking its raw point gain. ``max_filters`` keeps the largest-magnitude bands.
     """
-    from .peq import PEQBand
+    from .peq import PEQBand, solve_band_gains_lsq
 
     freqs = sorted(points)
     if not freqs:
         return []
     logs = [np.log2(f) for f in freqs]
 
-    bands: list = []
-    for i, freq in enumerate(freqs):
-        gain = float(np.clip(points[freq], -max_gain_db, max_gain_db))
-        if abs(gain) < min_gain_db:
-            continue
+    qs: list[float] = []
+    for i, _freq in enumerate(freqs):
         gaps = []
         if i > 0:
             gaps.append(logs[i] - logs[i - 1])
         if i < len(freqs) - 1:
             gaps.append(logs[i + 1] - logs[i])
         n_oct = float(np.mean(gaps)) if gaps else 1.0
-        q = round(min(4.5, max(0.5, _peaking_q_for_octave_bandwidth(n_oct))), 3)
-        bands.append(PEQBand("peaking", float(freq), round(gain, 2), q))
+        qs.append(round(min(4.5, max(0.5, _peaking_q_for_octave_bandwidth(n_oct))), 3))
 
+    target = [float(points[f]) for f in freqs]
+    if sample_rate:
+        gains = solve_band_gains_lsq(freqs, target, sample_rate, freqs, qs, max_gain_db=max_gain_db)
+    else:
+        gains = [float(np.clip(g, -max_gain_db, max_gain_db)) for g in target]
+
+    bands: list = [
+        PEQBand("peaking", float(f), round(g, 2), q)
+        for f, g, q in zip(freqs, gains, qs)
+        if abs(g) >= min_gain_db
+    ]
     if max_filters is not None and len(bands) > max_filters:
         bands = sorted(bands, key=lambda b: abs(b.gain_db), reverse=True)[:max_filters]
         bands.sort(key=lambda b: b.freq)
     return bands
-
-
-def hearing_graphiceq_curve(
-    points: dict[int, float],
-    f_min: float = 20.0,
-    f_max: float = 20000.0,
-) -> tuple[list[float], list[float]]:
-    """Compact GraphicEQ curve from the measured points, with hold-edge anchors.
-
-    Returns ``(freqs_hz, gains_db)`` consisting of the measured frequencies plus
-    flat-held anchors at ``f_min``/``f_max`` so Equalizer APO / EasyEffects bound
-    their interpolation instead of ramping to zero. Tiny by construction (≤9
-    points) — no dense grid is manufactured from the ~7 measured points.
-    """
-    freqs = sorted(points)
-    if not freqs:
-        return [f_min, f_max], [0.0, 0.0]
-    out_f: list[float] = []
-    out_g: list[float] = []
-    if freqs[0] > f_min:
-        out_f.append(f_min)
-        out_g.append(points[freqs[0]])  # hold lowest measured gain down to f_min
-    for f in freqs:
-        out_f.append(float(f))
-        out_g.append(round(float(points[f]), 2))
-    if freqs[-1] < f_max:
-        out_f.append(f_max)
-        out_g.append(points[freqs[-1]])  # hold highest measured gain up to f_max
-    return out_f, out_g
 
 
 def compute_compensation_curve(profile: HearingProfile, freq_grid: np.ndarray) -> np.ndarray:

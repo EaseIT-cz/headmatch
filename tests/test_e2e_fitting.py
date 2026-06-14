@@ -210,6 +210,6 @@ def test_hearing_fit_e2e_presbycusis_boosts_high_frequencies(tmp_path):
     # Gains respect the compensation cap.
     assert all(b["gain_db"] <= MAX_COMPENSATION_DB + 1e-6 for b in bands)
 
-    # Compact GraphicEQ (measured points + anchors), not a dense grid.
+    # Standard 127-point GraphicEQ grid (not the ~5103-point grid that crashed EasyEffects).
     gq = [ln for ln in (tmp_path / "equalizer_apo_graphiceq.txt").read_text().splitlines() if ln.startswith("GraphicEQ:")]
-    assert gq and len(gq[0].split(":", 1)[1].split(";")) <= 12
+    assert gq and len(gq[0].split(":", 1)[1].split(";")) <= 130

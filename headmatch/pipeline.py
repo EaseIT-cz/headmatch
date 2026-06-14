@@ -238,7 +238,7 @@ def fit_from_hearing_profile(
         f: round(g + float(np.interp(f, target_resampled.freqs_hz, target_resampled.values_db)), 2)
         for f, g in comp_points.items()
     }
-    bands = eq_bands_from_gain_points(eq_points, max_filters=filter_budget.max_filters)
+    bands = eq_bands_from_gain_points(eq_points, sample_rate=sample_rate, max_filters=filter_budget.max_filters)
     left_bands = bands
     right_bands = list(bands)
 
@@ -356,17 +356,16 @@ def run_hearing_fit(
     export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', left_bands, right_bands, samplerate=sample_rate)
     export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', left_bands, right_bands)
 
-    # Compact GraphicEQ keyed to the measured frequencies (+ hold-edge anchors),
-    # not a dense grid interpolated from ~7 points.
-    from .hearing_test import hearing_graphiceq_curve
-    eq_points = {int(float(k)): v for k, v in report.get('hearing_eq_points', {}).items()}
-    gq_freqs, gq_gains = hearing_graphiceq_curve(eq_points)
+    # GraphicEQ rendered from the fitted bands onto the standard 127-point grid
+    # (unified across all fitting workflows; EasyEffects/APO-safe).
+    from .signals import standard_graphic_eq_grid
+    gq_freqs = standard_graphic_eq_grid()
     export_equalizer_apo_graphiceq_txt(
         out_dir / 'equalizer_apo_graphiceq.txt',
         gq_freqs,
-        gq_gains,
-        list(gq_gains),
-        comment='; Compact GraphicEQ at the measured audiometric frequencies (+ hold-edge anchors).',
+        peq_chain_response_db(gq_freqs, sample_rate, left_bands),
+        peq_chain_response_db(gq_freqs, sample_rate, right_bands),
+        comment='; GraphicEQ rendered on the standard 127-point grid from the fitted bands.',
     )
 
     save_json(out_dir / 'hearing_fit_report.json', report)
