@@ -46,13 +46,22 @@ NORMAL_HEARING_REFERENCE[250]   # provisional ≈ -45.0  dBFS
 NORMAL_RELATIVE_SHAPE_DB[250]   # provisional ≈ +11.0  dB relative to 1 kHz
 ```
 
-> **⚠ VERIFY BEFORE MERGE:** these two values are provisional. Confirm them
-> against the actual standard tables during implementation:
-> - `NORMAL_HEARING_REFERENCE[250]` — derive from ISO 7029:2017 median (young
->   adult) mapped to the project's relative dBFS scale, consistent with the
->   existing 500 Hz value (−48.0).
-> - `NORMAL_RELATIVE_SHAPE_DB[250]` — derive from the ISO 389-8 (HDA200) RETSPL
->   table, expressed relative to the 1 kHz value (consistent with 500 Hz = +5.5).
+> **✓ VERIFIED against ISO 389-8:2004 Table 1 (HDA 200):**
+> - `NORMAL_RELATIVE_SHAPE_DB[250] = 12.5` — **exact**. ISO Table 1 gives
+>   RETSPL(250) = 18.0 dB and RETSPL(1000) = 5.5 dB, so the relative-to-1 kHz
+>   shape is 18.0 − 5.5 = 12.5 dB. (The 500/2000/3000/4000/8000 entries also
+>   match the standard exactly.)
+> - `NORMAL_HEARING_REFERENCE[250] = −45.0` — this table is a *softened* dBFS
+>   heuristic (not raw RETSPL), so there is no single "correct" ISO value. −45.0
+>   is ~3 dB less sensitive than 500 Hz, matching the curve's own LF compression
+>   (to within ~0.5 dB). It is **not** used by PTA4 (250 Hz is excluded), so it
+>   only affects the legacy absolute-compensation path.
+>
+> **Incidental finding (pre-existing, NOT changed here):** `NORMAL_RELATIVE_SHAPE_DB[6000]`
+> is 8.7 in the code, but ISO 389-8 Table 1 lists RETSPL(6000) = 17.0 → 11.5 dB.
+> The code comment incorrectly claims 6 kHz is absent from the table. Left as-is
+> because it predates this work and changing it would shift existing EQ output;
+> worth a follow-up.
 
 **Decoupling note:** 250 Hz is *not* used by PTA4 (which is 500/1k/2k/4k), so
 Parts A and B stay independent. 250 Hz participates in the EQ compensation curve
