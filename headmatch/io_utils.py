@@ -124,7 +124,7 @@ def load_fr_csv(path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
         vals = np.array([float(r[value_key]) for r in rows], dtype=np.float64)
     except KeyError as exc:
         raise ValueError(f'Missing expected column {exc.args[0]!r} in {path}') from exc
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         raise ValueError(f'Could not parse numeric frequency/response data from {path}') from exc
 
     if freqs.ndim != 1 or vals.ndim != 1 or len(freqs) != len(vals):
