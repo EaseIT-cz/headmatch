@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from .contracts import FrontendRunSummary
@@ -13,6 +14,12 @@ from .settings import load_or_create_config, save_config, update_config_from_arg
 
 
 DEFAULT_START_ITERATIONS = 1
+
+
+def _desktop_shortcuts_supported() -> bool:
+    """Desktop ``.desktop`` launchers are a Linux/XDG concept; gate the
+    create-shortcut/remove-shortcut commands (and the doctor tip) accordingly."""
+    return sys.platform.startswith("linux")
 
 
 def parse_seconds(value: str) -> float:
@@ -306,6 +313,18 @@ def build_parser(config) -> argparse.ArgumentParser:
         description="Run a small beginner-friendly readiness check for config, audio tools, and device discovery.",
     )
 
+    if _desktop_shortcuts_supported():
+        sub.add_parser(
+            "create-shortcut",
+            help="Add a HeadMatch GUI entry to your desktop application launcher.",
+            description="Create a .desktop launcher in ~/.local/share/applications (Linux desktops).",
+        )
+        sub.add_parser(
+            "remove-shortcut",
+            help="Remove the HeadMatch desktop launcher entry.",
+            description="Delete the .desktop launcher created by 'headmatch create-shortcut'.",
+        )
+
     sub.add_parser(
         "tui",
         help="Launch the interactive beginner wizard.",
@@ -575,14 +594,15 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 print("No desktop shortcut found.")
         elif args.cmd == "doctor":
-            from .desktop import shortcut_exists, find_gui_binary
             print(format_doctor_report(collect_doctor_checks(config_path, config), config_path=config_path))
-            gui = find_gui_binary()
-            if gui and not shortcut_exists():
-                print(f"\nTip: Run 'headmatch create-shortcut' to add HeadMatch to your desktop launcher.")
-                print(f"     (Found GUI at: {gui})")
-            elif shortcut_exists():
-                print(f"\nDesktop shortcut: installed ✓")
+            if _desktop_shortcuts_supported():
+                from .desktop import shortcut_exists, find_gui_binary
+                gui = find_gui_binary()
+                if gui and not shortcut_exists():
+                    print(f"\nTip: Run 'headmatch create-shortcut' to add HeadMatch to your desktop launcher.")
+                    print(f"     (Found GUI at: {gui})")
+                elif shortcut_exists():
+                    print(f"\nDesktop shortcut: installed ✓")
         elif args.cmd == "measure":
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -654,7 +674,7 @@ def main(argv: list[str] | None = None) -> None:
             hf_profile = load_hearing_profile()
             if hf_profile is None:
                 parser.exit(2, f"Error: no hearing profile found at {hearing_profile_path()}.\nRun 'headmatch hearing-test' first.\n")
-                raise SystemExit(2)
+                raise SystemExit(2)  # pragma: no cover  (defensive: parser.exit already raises SystemExit)
             run_hearing_fit(
                 hf_profile,
                 args.out_dir,
@@ -821,5 +841,5 @@ def main(argv: list[str] | None = None) -> None:
     print_next_steps(args.cmd, args)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
