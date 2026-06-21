@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from headmatch.signals import SweepSpec, generate_log_sweep, fractional_octave_smoothing, geometric_log_grid
+from headmatch.signals import SweepSpec, generate_log_sweep, fractional_octave_smoothing, geometric_log_grid, standard_graphic_eq_grid
 
 
 def test_generate_log_sweep_correct_length():
@@ -115,3 +115,29 @@ def test_smoothing_two_points():
     result = fractional_octave_smoothing(freqs, values)
     assert result.shape == (2,)
     assert np.all(np.isfinite(result))
+
+
+def test_standard_graphic_eq_grid_defaults():
+    """Test default parameters: 127 points, starts at 20 Hz, geometric progression with step 1.0563."""
+    grid = standard_graphic_eq_grid()
+    
+    # 1. Test that default parameters produce 127 points
+    assert len(grid) == 127
+    
+    # 2. Test the first point starts at f_min (default 20 Hz)
+    assert np.isclose(grid[0], 20.0)
+    
+    # 3. Test that the grid is monotonically increasing
+    assert np.all(np.diff(grid) > 0)
+    
+    # 4. Test that using default step of 1.0563, each point is ~1.0563x the previous
+    step = 1.0563
+    ratios = grid[1:] / grid[:-1]
+    assert np.allclose(ratios, step, atol=1e-10)
+    
+    # 5. Test custom parameters work (e.g., f_min=10, step=2.0, points=10)
+    custom_grid = standard_graphic_eq_grid(f_min=10, step=2.0, points=10)
+    assert len(custom_grid) == 10
+    assert np.isclose(custom_grid[0], 10.0)
+    assert np.isclose(custom_grid[-1], 10 * (2.0 ** 9))  # 10 * 2^9 = 5120
+    assert np.allclose(custom_grid[1:] / custom_grid[:-1], 2.0, atol=1e-10)
