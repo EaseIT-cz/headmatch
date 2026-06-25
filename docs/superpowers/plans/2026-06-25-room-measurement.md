@@ -20,6 +20,7 @@
 - **Mono EQ output:** `left_bands == right_bands`; the same correction is applied to both channels.
 - **Test command:** `python -m pytest -q` from repo root. New tests live in `tests/`.
 - **Commit style:** small commits per step; no `Co-Authored-By` trailer (project rule).
+- **Execution order:** implement tasks **1 → 2 → 3 → 5 → 4 → 6 → 7**. Tasks are numbered by subsystem, but Task 4 (`room.py`) calls `render_fit_graphs(..., cutoff_hz=)`, which Task 5 adds — so Task 5 must land before Task 4.
 
 ---
 
@@ -397,10 +398,11 @@ git commit -m "feat(room): add mono-aware room measurement analysis"
 
 **Interfaces:**
 - Consumes: existing `peq.py` internals.
-- Produces (new keyword-only params on the public `fit_peq`, both backward-compatible):
-  - `fit_peq(..., *, budget=None, max_freq_hz: float | None = None, low_freq_q_cap: float | None = None)`
+- Produces (new keyword-only params on the public `fit_peq`, all backward-compatible):
+  - `fit_peq(..., *, budget=None, max_freq_hz: float | None = None, low_freq_q_cap: float | None = None, max_boost_db: float | None = None)`
   - When `max_freq_hz` is set, **no returned band has `freq > max_freq_hz`** (enforced in candidate selection AND joint refinement).
   - When `low_freq_q_cap` is set, it replaces the default 2.0 Q ceiling below 120 Hz, allowing narrow modal cuts.
+  - When `max_boost_db` is set, **no returned band has `gain_db > max_boost_db`**, enforced as an *asymmetric* clamp in greedy placement AND in joint Nelder-Mead refinement (cuts still go to `-max_gain_db`). This makes the room boost ceiling structural — the optimizer never explores gains it will later have to clamp away. Default `None` ⇒ symmetric `±max_gain_db` (current behaviour).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -447,6 +449,23 @@ def test_defaults_unchanged_when_new_args_absent():
     bands = fit_peq(freqs, eq_target, 48000, max_filters=6)
     low_bands = [b for b in bands if b.freq < 120.0]
     assert all(b.q <= 2.0 + 1e-6 for b in low_bands)
+
+
+def test_asymmetric_boost_cap_survives_joint_refinement():
+    # Several deep nulls would each "want" a large boost; max_boost_db must bound
+    # every returned band's gain even after joint Nelder-Mead refinement runs.
+    freqs = geometric_log_grid(20, 20000, 48)
+    eq_target = (8.0 * np.exp(-0.5 * (np.log2(freqs / 60.0) / 0.12) ** 2)
+                 + 8.0 * np.exp(-0.5 * (np.log2(freqs / 90.0) / 0.12) ** 2))  # wants +8 dB boosts
+    bands = fit_peq(freqs, eq_target, 48000, max_filters=6,
+                    max_gain_db=12.0, max_q=8.0, max_freq_hz=300.0,
+                    low_freq_q_cap=8.0, max_boost_db=2.0)
+    assert bands, "expected bands"
+    assert all(b.gain_db <= 2.0 + 1e-6 for b in bands)
+    # Cuts are still allowed to go well below the boost ceiling.
+    assert any(b.gain_db < -2.0 for b in fit_peq(
+        freqs, -eq_target, 48000, max_filters=6, max_gain_db=12.0,
+        max_q=8.0, max_freq_hz=300.0, low_freq_q_cap=8.0, max_boost_db=2.0))
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -469,7 +488,7 @@ def _max_q_for_frequency(freq_hz: float, requested_max_q: float, low_freq_q_cap:
 
 - [ ] **Step 4: Thread the caps through candidate selection**
 
-In `_peaking_candidate` (peq.py:346-376), change the signature and the two clamp sites:
+In `_peaking_candidate` (peq.py:346-376), change the signature, the frequency clamp, the Q cap, and the gain clamp (which becomes asymmetric):
 
 ```python
 def _peaking_candidate(
@@ -482,16 +501,25 @@ def _peaking_candidate(
     raw_residual: np.ndarray | None = None,
     max_freq_hz: float | None = None,
     low_freq_q_cap: float = 2.0,
+    max_boost_db: float | None = None,
 ) -> PEQBand:
     peak_db = float(residual[idx])
+    # Defence-in-depth only: _select_peaking_candidate already SKIPS any idx whose
+    # frequency exceeds max_freq_hz, so this clip never relocates a real candidate
+    # when max_freq_hz is set. It just bounds fc against Nyquist in the default path.
     upper = (objective.sample_rate / 2 - 500.0) if max_freq_hz is None else min(max_freq_hz, objective.sample_rate / 2 - 500.0)
     fc = float(np.clip(objective.freqs_hz[idx], 35.0, upper))
-    # ... unchanged bandwidth search ...
+    # ... unchanged bandwidth search (sets `q`) ...
     q_limit = _max_q_for_frequency(fc, max_q, low_freq_q_cap)
-    # ... unchanged remainder ...
+    q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
+    boost_limit = max_gain_db if max_boost_db is None else max_boost_db
+    gain = float(np.clip(peak_db, -max_gain_db, boost_limit))
+    if q >= 2.8:
+        gain *= 0.85
+    return PEQBand("peaking", fc, gain, q)
 ```
 
-(Keep the existing bandwidth-search body between the two shown lines exactly as-is.)
+(Keep the existing bandwidth-search body that computes `bw_oct`/`q` exactly as-is; only the `q_limit`, `gain` clamp, and final lines shown above change.)
 
 In `_select_peaking_candidate` (peq.py:379-402), add the two params and forward them:
 
@@ -508,6 +536,7 @@ def _select_peaking_candidate(
     allow_nearby_same_sign: bool,
     max_freq_hz: float | None = None,
     low_freq_q_cap: float = 2.0,
+    max_boost_db: float | None = None,
 ) -> PEQBand | None:
     raw_residual = objective.raw_residual_db(bands)
     weighted = residual * objective.weights
@@ -521,6 +550,7 @@ def _select_peaking_candidate(
             objective, residual, int(idx),
             max_gain_db=max_gain_db, max_q=max_q, raw_residual=raw_residual,
             max_freq_hz=max_freq_hz, low_freq_q_cap=low_freq_q_cap,
+            max_boost_db=max_boost_db,
         )
         if abs(candidate.gain_db) < min_gain_db:
             continue
@@ -532,7 +562,7 @@ def _select_peaking_candidate(
 
 - [ ] **Step 5: Bound joint refinement**
 
-In `_refine_bands_jointly` (peq.py:405-445), add `max_freq_hz` and clamp the frequency upper bound:
+In `_refine_bands_jointly` (peq.py:405-445), add `max_freq_hz` + `max_boost_db` and clamp the frequency and gain upper bounds. This is the site the review flagged — the optimizer itself must respect the asymmetric boost ceiling, otherwise it can drive a band's gain back above the ceiling after greedy placement:
 
 ```python
 def _refine_bands_jointly(
@@ -542,18 +572,20 @@ def _refine_bands_jointly(
     max_gain_db: float,
     max_q: float,
     max_freq_hz: float | None = None,
+    max_boost_db: float | None = None,
 ) -> List[PEQBand]:
     from scipy.optimize import minimize
     peaking_indices = [i for i, b in enumerate(bands) if b.kind == 'peaking']
     if len(peaking_indices) < 2:
         return bands
     freq_upper = (objective.sample_rate / 2 - 200) if max_freq_hz is None else min(max_freq_hz, objective.sample_rate / 2 - 200)
+    gain_upper = max_gain_db if max_boost_db is None else max_boost_db
 
     def _bands_from_params(params: np.ndarray) -> List[PEQBand]:
         result = list(bands)
         for pi, i in enumerate(peaking_indices):
             freq = float(np.clip(params[pi * 3], 25.0, freq_upper))
-            gain = float(np.clip(params[pi * 3 + 1], -max_gain_db, max_gain_db))
+            gain = float(np.clip(params[pi * 3 + 1], -max_gain_db, gain_upper))
             q = float(np.clip(params[pi * 3 + 2], 0.3, max_q))
             result[i] = PEQBand('peaking', freq, gain, q)
         return result
@@ -576,6 +608,7 @@ def fit_peq(
     budget: FilterBudget | None = None,
     max_freq_hz: float | None = None,
     low_freq_q_cap: float | None = None,
+    max_boost_db: float | None = None,
 ) -> List[PEQBand]:
     budget = (budget or FilterBudget(max_filters=max_filters)).normalized()
     if budget.family == "graphic_eq":
@@ -592,7 +625,7 @@ def fit_peq(
             objective, residual, bands,
             max_gain_db=max_gain_db, max_q=max_q,
             min_peak_db=0.75, min_gain_db=0.6, allow_nearby_same_sign=False,
-            max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap,
+            max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap, max_boost_db=max_boost_db,
         )
         if candidate is not None:
             bands.append(candidate)
@@ -603,22 +636,24 @@ def fit_peq(
             objective, residual, bands,
             max_gain_db=max_gain_db, max_q=max_q,
             min_peak_db=0.0, min_gain_db=0.0, allow_nearby_same_sign=False,
-            max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap,
+            max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap, max_boost_db=max_boost_db,
         )
         if candidate is None:
             candidate = _select_peaking_candidate(
                 objective, residual, bands,
                 max_gain_db=max_gain_db, max_q=max_q,
                 min_peak_db=0.0, min_gain_db=0.0, allow_nearby_same_sign=True,
-                max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap,
+                max_freq_hz=max_freq_hz, low_freq_q_cap=low_cap, max_boost_db=max_boost_db,
             )
         if candidate is None:
             break
         bands.append(candidate)
     if len(bands) >= 2:
-        bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q, max_freq_hz=max_freq_hz)
+        bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q, max_freq_hz=max_freq_hz, max_boost_db=max_boost_db)
     return bands
 ```
+
+Note on shelves: `_edge_shelf_candidate` gain is clamped to `±max_gain_db`. For the room caller, the boost ceiling is enforced on shelves by the safety clamp in `fit_room_bands` (Task 4); a low-shelf is rarely a *boost* in the bass-cut-dominated room case, so this is not a practical gap, but the Task 4 safety clamp covers it regardless.
 
 Note: the `shelf_candidates` block stays as-is. With a sub-cutoff target the high-shelf candidate (needs `freqs >= 7000`) cannot trigger; a low shelf at 105 Hz is acceptable for broadband bass tilt. Room callers also pass a sub-cutoff frequency slice (Task 4), so shelves stay within band.
 
@@ -631,7 +666,7 @@ Expected: PASS (new constraints hold; existing `test_peq.py` still green).
 
 ```bash
 git add headmatch/peq.py tests/test_peq_room_constraints.py
-git commit -m "feat(peq): add band-limit and low-frequency Q-cap options for room fitting"
+git commit -m "feat(peq): add band-limit, low-freq Q-cap, and asymmetric boost-ceiling options for room fitting"
 ```
 
 ---
@@ -659,6 +694,7 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pytest
 
 from headmatch.analysis import MeasurementResult
 from headmatch.peq import peq_chain_response_db
@@ -691,6 +727,13 @@ def test_room_target_flat_above_knee_and_rolls_off_sub_bass():
     assert target.semantics == 'absolute'
 
 
+def test_room_target_knee_is_flat_at_40_hz():
+    # The rolloff must START at the knee: 0 dB at exactly ROOM_SUBBASS_ROLLOFF_HZ.
+    grid = geometric_log_grid(20, 20000, 48)
+    target = build_room_target(grid)
+    assert abs(float(np.interp(40.0, grid, target.values_db))) < 0.01
+
+
 def test_fit_places_no_band_above_cutoff():
     grid = geometric_log_grid(20, 20000, 48)
     # +5 dB hump at 2 kHz (above cutoff) + +6 dB mode at 55 Hz (in band)
@@ -706,6 +749,18 @@ def test_fit_places_no_band_above_cutoff():
 def test_hard_boost_ceiling_on_deep_null():
     grid = geometric_log_grid(20, 20000, 48)
     measured = -15.0 * np.exp(-0.5 * (np.log2(grid / 80.0) / 0.1) ** 2)  # deep null at 80 Hz
+    result = _mono_result(measured)
+    bands, report = fit_room_bands(result, build_room_target(grid), 48000,
+                                   cutoff_hz=ROOM_CUTOFF_DEFAULT_HZ, max_filters=8)
+    assert all(b.gain_db <= ROOM_MAX_BOOST_DB + 1e-6 for b in bands)
+
+
+def test_boost_ceiling_holds_with_multiple_nulls_through_joint_refinement():
+    # Two deep nulls each "want" a large boost; joint Nelder-Mead refinement runs
+    # with >=2 peaking bands, so this exercises the structural max_boost_db path.
+    grid = geometric_log_grid(20, 20000, 48)
+    measured = (-12.0 * np.exp(-0.5 * (np.log2(grid / 60.0) / 0.1) ** 2)
+                + -12.0 * np.exp(-0.5 * (np.log2(grid / 95.0) / 0.1) ** 2))
     result = _mono_result(measured)
     bands, report = fit_room_bands(result, build_room_target(grid), 48000,
                                    cutoff_hz=ROOM_CUTOFF_DEFAULT_HZ, max_filters=8)
@@ -746,6 +801,13 @@ def test_run_room_fit_writes_all_artifacts_and_marks_missing_cal(tmp_path):
     # Missing calibration must be surfaced as a warning and penalise confidence.
     assert any("calibrat" in w.lower() for w in data["confidence"]["warnings"])
     assert data["confidence"]["metrics"]["mic_cal_applied"] == 0.0
+
+
+def test_run_room_fit_rejects_missing_second_recording(tmp_path):
+    rec, spec = _write_room_wav(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        run_room_fit(rec, recording_two=tmp_path / "nope.wav",
+                     out_dir=tmp_path / "out", sweep_spec=spec)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -796,6 +858,11 @@ from .targets import TargetCurve, load_curve, resample_curve
 ROOM_CUTOFF_DEFAULT_HZ = 300.0
 ROOM_MAX_BOOST_DB = 2.0
 ROOM_MAX_CUT_DB = 12.0
+# Q ceiling for modal cuts. 8.0 resolves real room modes (a 40 Hz mode at Q=8 has
+# ~5 Hz bandwidth) while staying clear of the coefficient-precision regime where a
+# 40 Hz / Q=12 biquad at 48 kHz gets sensitive (review finding: keep Q<=~8 below 50 Hz
+# so presets remain safe even outside double-precision rendering).
+ROOM_MAX_Q = 8.0
 ROOM_SUBBASS_ROLLOFF_HZ = 40.0
 ROOM_SUBBASS_ROLLOFF_DB = 3.0
 
@@ -827,15 +894,18 @@ def fit_room_bands(
     target_resampled = resample_curve(target, freqs)
     measured = result.left_db  # mono: left == right
     eq_target = target_resampled.values_db - measured
-    # Hard boost ceiling by construction: never ask for more than the ceiling.
+    # Reduce demand up front: never ask the fitter for more than the boost ceiling.
     eq_target_capped = np.minimum(eq_target, ROOM_MAX_BOOST_DB)
 
+    # The boost ceiling is enforced STRUCTURALLY via max_boost_db — greedy placement
+    # and joint Nelder-Mead refinement both clamp positive gain to ROOM_MAX_BOOST_DB,
+    # so the optimizer never explores gains it would later have to clamp away.
     bands = fit_peq(
         freqs, eq_target_capped, sample_rate,
-        max_filters=max_filters, max_gain_db=ROOM_MAX_CUT_DB, max_q=12.0,
-        max_freq_hz=cutoff_hz, low_freq_q_cap=12.0,
+        max_filters=max_filters, max_gain_db=ROOM_MAX_CUT_DB, max_q=ROOM_MAX_Q,
+        max_freq_hz=cutoff_hz, low_freq_q_cap=ROOM_MAX_Q, max_boost_db=ROOM_MAX_BOOST_DB,
     )
-    # Safety net: clamp any residual positive gain to the ceiling (cuts untouched).
+    # Belt-and-suspenders: also covers shelf bands, which fit_peq clamps to ±max_gain_db.
     for b in bands:
         if b.gain_db > ROOM_MAX_BOOST_DB:
             b.gain_db = ROOM_MAX_BOOST_DB
@@ -965,6 +1035,8 @@ def run_room_fit(
 
     result = analyze_room_measurement(recording, sweep_spec)
     if recording_two is not None:
+        if not Path(recording_two).exists():
+            raise FileNotFoundError(f"Second recording not found: {recording_two}")
         result = _average_two(result, analyze_room_measurement(recording_two, sweep_spec))
     mic_cal_applied = _apply_calibration(result, mic_cal)
 
@@ -1347,7 +1419,7 @@ git commit -m "docs(room): add example room targets and document the room workfl
 
 - §2 two-position average → Task 4 `_average_two` + Task 6 `--listen-position-two` / `--recording-two`. ✅
 - §3.1 `mic_cal.py` (relative-only, scale + coverage guards, tolerant parsing, phase ignored) → Task 1. ✅
-- §3.1 `room.py` (band-limit, hard boost ceiling, Q floor, clipping pre-finalization) → Task 3 (peq options) + Task 4 (`fit_room_bands`). ✅
+- §3.1 `room.py` (band-limit, hard boost ceiling, Q floor, clipping pre-finalization) → Task 3 (peq options) + Task 4 (`fit_room_bands`). ✅ Boost ceiling is **structural** (`max_boost_db` clamps greedy placement *and* joint refinement), with a belt-and-suspenders post-clamp for shelves.
 - §3.2 reuse of analysis/exporters/confidence → Tasks 2 & 4. ✅
 - §3.3 USB-mic alignment latency tolerance → Task 2 `test_alignment_tolerates_large_round_trip_latency`. ✅
 - §4.2 grid density for narrow modes → reuse of 48-ppo `geometric_log_grid`; high-Q fitting in Task 3. ✅
@@ -1357,4 +1429,11 @@ git commit -m "docs(room): add example room targets and document the room workfl
 - §8 shaded ≤cutoff region in the SVG → Task 5. ✅
 - §9 confidence caveats (single-point, sub-bass, missing-cal penalty) → Task 4 `_room_confidence`. ✅
 - §12 resolved decisions (300 Hz default, soft block on missing cal, ship two example CSVs) → Tasks 4/6/7. ✅
+
+## Validation follow-ups applied (companion architectural-review of this plan)
+
+1. **Structural boost ceiling** — `max_boost_db` threaded through `fit_peq` → `_peaking_candidate` → `_refine_bands_jointly`; the optimizer respects +2 dB rather than relying on a post-hoc clamp. New tests: `test_asymmetric_boost_cap_survives_joint_refinement` (Task 3), `test_boost_ceiling_holds_with_multiple_nulls_through_joint_refinement` (Task 4).
+2. **Conservative low-frequency Q** — room Q ceiling lowered from 12 to `ROOM_MAX_Q = 8.0` (safe biquad coefficients at 40 Hz / 48 kHz beyond double precision), with rationale comment.
+3. **Explicit execution order** — `1 → 2 → 3 → 5 → 4 → 6 → 7` stated in Global Constraints.
+4. **Extra guards/tests** — `recording_two` existence guard (`test_run_room_fit_rejects_missing_second_recording`); knee-flat-at-40 Hz target test (`test_room_target_knee_is_flat_at_40_hz`). Also clarified the redundant `np.clip` in `_peaking_candidate` (defence-in-depth, unreachable when `max_freq_hz` is set).
 ```
