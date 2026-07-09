@@ -21,6 +21,23 @@ class MeasurementResult:
     diagnostics: Dict[str, float]
 
 
+def _coerce_room_measurement_audio(data: np.ndarray, mic_channel: int = 0) -> np.ndarray:
+    """Return a 2D array with the selected channel duplicated to both left and right.
+
+    For mono room measurements, we duplicate the single (selected) channel
+    to provide a symmetric result: left_db == right_db, and no channel mismatch.
+    """
+    if data.ndim != 2:
+        raise ValueError('Room recording must be a 2D audio array')
+    if len(data) == 0:
+        raise ValueError('Room recording is empty')
+    num_channels = data.shape[1]
+    if mic_channel >= num_channels:
+        raise ValueError(f'mic_channel {mic_channel} exceeds available channels {num_channels}')
+    selected = data[:, mic_channel:mic_channel + 1]
+    return np.repeat(selected, 2, axis=1)
+
+
 
 def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
     if data.ndim != 2:
@@ -159,9 +176,13 @@ def _channel_mismatch_db(left_db: np.ndarray, right_db: np.ndarray, mask: np.nda
 
 
 
-def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
-    recording, sr = read_wav(recording_wav)
-    recording = _coerce_measurement_audio(recording, recording_wav)
+def _analyze_stereo(recording: np.ndarray, sr: int, sweep_spec: SweepSpec) -> MeasurementResult:
+    """Shared measurement pipeline: align a coerced stereo capture against the
+    regenerated reference sweep and return a smoothed, 1 kHz-normalized FR.
+
+    Callers are responsible for coercing the raw audio to a 2-channel array
+    (headphone stereo vs. mono room capture) before invoking this.
+    """
     if sr != sweep_spec.sample_rate:
         raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
     min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
@@ -192,11 +213,12 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         **alignment_diagnostics,
         'left_roughness_db': _roughness_db(left_norm, left_s, mask),
         'right_roughness_db': _roughness_db(right_norm, right_s, mask),
+        # For mono room captures both channels are identical, so this is 0.0.
         'channel_mismatch_rms_db': _channel_mismatch_db(left_s, right_s, mask),
         'capture_rms_dbfs': float(20 * np.log10(max(np.sqrt(np.mean(aligned ** 2)), 1e-12))),
     }
 
-    result = MeasurementResult(
+    return MeasurementResult(
         freqs_hz=grid,
         left_db=left_s,
         right_db=right_s,
@@ -204,6 +226,12 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         right_raw_db=right_norm,
         diagnostics=diagnostics,
     )
+
+
+def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
+    recording, sr = read_wav(recording_wav)
+    recording = _coerce_measurement_audio(recording, recording_wav)
+    result = _analyze_stereo(recording, sr, sweep_spec)
     if out_dir:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -211,4 +239,34 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         save_fr_csv(out_dir / 'measurement_right.csv', result.freqs_hz, result.right_db)
         save_fr_csv(out_dir / 'measurement_left_raw.csv', result.freqs_hz, result.left_raw_db)
         save_fr_csv(out_dir / 'measurement_right_raw.csv', result.freqs_hz, result.right_raw_db)
+    return result
+
+
+def analyze_room_measurement(
+    recording_wav: str | Path,
+    sweep_spec: SweepSpec,
+    mic_channel: int = 0,
+    out_dir: str | Path | None = None,
+) -> MeasurementResult:
+    """Analyze a mono room measurement and return symmetric frequency response.
+
+    Args:
+        recording_wav: Path to the recorded WAV file (mono or multichannel)
+        sweep_spec: SweepSpec used for the room measurement
+        mic_channel: Which channel to use (default 0) for multichannel files
+        out_dir: Optional directory to save CSV output files
+
+    Returns:
+        MeasurementResult with symmetric left/right responses (identical values)
+    """
+    recording, sr = read_wav(recording_wav)
+    recording = _coerce_room_measurement_audio(recording, mic_channel)
+    result = _analyze_stereo(recording, sr, sweep_spec)
+    if out_dir:
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        save_fr_csv(out_dir / 'room_left.csv', result.freqs_hz, result.left_db)
+        save_fr_csv(out_dir / 'room_right.csv', result.freqs_hz, result.right_db)
+        save_fr_csv(out_dir / 'room_left_raw.csv', result.freqs_hz, result.left_raw_db)
+        save_fr_csv(out_dir / 'room_right_raw.csv', result.freqs_hz, result.right_raw_db)
     return result

@@ -205,6 +205,38 @@ def build_parser(config) -> argparse.ArgumentParser:
     add_filter_budget_args(p, config)
     p.add_argument("--json", action="store_true", help="Print the fit report as JSON.")
 
+    p = sub.add_parser(
+        "room-measure",
+        help="Create a room-correction measurement package with mic calibration.",
+        description=(
+            "Prepare an offline measurement package for room correction. "
+            "Includes sweep files and records mic calibration data for later analysis."
+        ),
+    )
+    add_common_sweep_args(p, config)
+    p.add_argument("--mic-cal", default=None, help="Path to UMIK-1 or other microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
+    p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz for room correction (default: 300).")
+    p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
+    p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, and metadata files.")
+    p.add_argument("--listen-position-two", action="store_true", help="Enable two-point listening position measurement.")
+
+    p = sub.add_parser(
+        "room-fit",
+        help="Fit room correction EQ from a recording with mic calibration.",
+        description=(
+            "Analyze a room recording and generate EQ for room correction. "
+            "Uses mic calibration data and optional second-position recording."
+        ),
+    )
+    add_common_sweep_args(p, config)
+    p.add_argument("--recording", required=True, help="Path to room measurement recording WAV file.")
+    p.add_argument("--mic-cal", default=None, help="Path to microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
+    p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz (default: 300).")
+    p.add_argument("--recording-two", default=None, help="Optional second position recording WAV file.")
+    p.add_argument("--target-csv", default=None, help="Optional room target curve CSV (bass-only, e.g. docs/examples/targets/room_flat.csv). If omitted, fit toward a flat-through-modal-band room target.")
+    p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
+    p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
+
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
 
@@ -691,6 +723,39 @@ def main(argv: list[str] | None = None) -> None:
                     print(_json.dumps(_json.loads(report_path.read_text(encoding="utf-8")), indent=2, sort_keys=True))
                 except Exception:
                     pass
+        elif args.cmd == "room-measure":
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            from .room import prepare_room_measurement
+            from .mic_cal import load_mic_calibration
+            mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
+            prepare_room_measurement(
+                spec=spec_from_args(args),
+                mic_cal=mic_cal,
+                cutoff_hz=getattr(args, "cutoff_hz", 300),
+                max_boost_db=getattr(args, "max_boost_db", 2.0),
+                listen_position_two=getattr(args, "listen_position_two", False),
+                out_dir=out_dir,
+            )
+            print(f"Room measurement package saved in {out_dir}.")
+        elif args.cmd == "room-fit":
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            from .room import run_room_fit
+            from .mic_cal import load_mic_calibration
+            recording_two = getattr(args, "recording_two", None)
+            mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
+            run_room_fit(
+                recording=Path(args.recording),
+                recording_two=Path(recording_two) if recording_two else None,
+                mic_cal=mic_cal,
+                cutoff_hz=getattr(args, "cutoff_hz", 300),
+                max_boost_db=getattr(args, "max_boost_db", 2.0),
+                target_csv=getattr(args, "target_csv", None),
+                out_dir=out_dir,
+                sweep_spec=spec_from_args(args),
+            )
+            print(f"Room correction EQ written to {out_dir}.")
         elif args.cmd == "fit":
             hearing_profile = None
             if getattr(args, "with_hearing_compensation", False):

@@ -205,6 +205,43 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
             action="Run a measure/start command with --input-target once if auto-selection is unreliable.",
         ))
 
+    # Check mic calibration file if configured (for room workflow)
+    if config.preferred_mic_cal_csv:
+        mic_path = Path(config.preferred_mic_cal_csv)
+        if mic_path.exists():
+            # Try to load it and verify coverage
+            try:
+                from .mic_cal import load_mic_calibration, MIC_CAL_MIN_HZ, MIC_CAL_MAX_HZ
+                cal = load_mic_calibration(mic_path)
+                coverage_ok = float(cal.freqs_hz.min()) <= MIC_CAL_MIN_HZ and float(cal.freqs_hz.max()) >= MIC_CAL_MAX_HZ
+                checks.append(DoctorCheck(
+                    name="mic calibration",
+                    ok=coverage_ok,
+                    detail=f"Mic calibration found: {mic_path.name} ({len(cal.freqs_hz)} points, {float(cal.freqs_hz.min()):.1f}-{float(cal.freqs_hz.max()):.1f} Hz)",
+                    action=None if coverage_ok else f"Coverage does not span {MIC_CAL_MIN_HZ:.0f}-{MIC_CAL_MAX_HZ:.0f} Hz — results may be less accurate.",
+                ))
+            except Exception as e:
+                checks.append(DoctorCheck(
+                    name="mic calibration",
+                    ok=False,
+                    detail=f"Mic calibration file exists but cannot be read: {mic_path}",
+                    action=f"Check the file format: {e}",
+                ))
+        else:
+            checks.append(DoctorCheck(
+                name="mic calibration",
+                ok=False,
+                detail=f"Mic calibration configured but not found: {mic_path}",
+                action="Verify the file path in config.preferred_mic_cal_csv or remove the setting.",
+            ))
+    else:
+        checks.append(DoctorCheck(
+            name="mic calibration",
+            ok=True,
+            detail="No preferred mic calibration configured (optional).",
+            action="Run 'headmatch room-measure --mic-cal <file>' to set up room correction workflow.",
+        ))
+
     checks.append(DoctorCheck(
         name="starter sweep settings",
         ok=config.sample_rate > 0 and config.duration_s > 0,

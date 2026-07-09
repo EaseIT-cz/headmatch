@@ -64,11 +64,19 @@ def _infer_target_semantics(path: str | Path, metadata: dict[str, str]) -> Targe
     return 'absolute'
 
 
-def load_curve(path: str | Path, name: Optional[str] = None, semantics: TargetSemantics | None = None) -> TargetCurve:
+def load_curve(path: str | Path, name: Optional[str] = None, semantics: TargetSemantics | None = None, normalize: bool = True) -> TargetCurve:
+    """Load a target curve from CSV.
+
+    By default the curve is normalized to 0 dB at 1 kHz, which requires it to
+    span 1 kHz. Room correction targets are naturally bass-only (e.g. 20-300 Hz),
+    so callers building a room target pass ``normalize=False`` to use the raw
+    values as authored without requiring a 1 kHz anchor.
+    """
     freqs, vals = load_fr_csv(path)
     metadata = _read_target_metadata(path)
     curve_semantics = semantics or _infer_target_semantics(path, metadata)
-    return TargetCurve(freqs, normalize_at_1khz(freqs, vals), name or Path(path).stem, curve_semantics)
+    values = normalize_at_1khz(freqs, vals) if normalize else np.asarray(vals, dtype=np.float64)
+    return TargetCurve(freqs, values, name or Path(path).stem, curve_semantics)
 
 
 
