@@ -1,6 +1,10 @@
-# Room Measurement & Modal Correction Implementation Plan
+# TASK-117 — Room measurement & modal correction
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+Design reference: `docs/designs/room-measurement.md`.
+
+This plan is written to be implemented task-by-task by any developer. Each task is
+test-driven: write the failing test, confirm it fails, implement, confirm it passes,
+then commit. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a `room-measure` / `room-fit` workflow that measures a speaker-in-room response with a calibrated USB mic and produces a bass-only (≤ cutoff) corrective EQ, reusing the existing sweep → align → Wiener-FR → PEQ → export spine.
 

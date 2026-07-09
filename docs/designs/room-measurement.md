@@ -1,9 +1,8 @@
-# Room Measurement & Modal Correction — Design
+# Design: Room measurement & modal correction
 
-**Status:** Draft (for review)
-**Date:** 2026-06-25
-**Author:** Vadim (with Claude Code)
-**Working name:** `room-measure` / `room-fit`
+Status: **proposed** — not yet implemented. Implementation plan: `docs/tasks/TASK-117.md`.
+
+Working name: `room-measure` / `room-fit`.
 
 ---
 
