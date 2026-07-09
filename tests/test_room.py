@@ -511,3 +511,161 @@ class TestRoomConstants:
         """Room constants are properly defined."""
         assert ROOM_CUTOFF_DEFAULT_HZ == 300.0
         assert ROOM_MAX_BOOST_DB == 2.0
+
+
+class TestRoomDimensions:
+    """Tests for estimate_cutoff_from_dimensions function.
+    
+    Phase 2 item 3 - provide a lightweight alternative to RT60 by
+    estimating Schroeder frequency from entered room dimensions (L×W×H).
+    """
+    
+    def test_function_exists(self):
+        """estimate_cutoff_from_dimensions function exists in room module."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        assert callable(estimate_cutoff_from_dimensions)
+    
+    def test_basic_calculation_typical_room(self):
+        """Basic calculation: 5m × 4m × 2.5m → V=50m³, RT60~0.5s → cutoff ≈ 200 Hz."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        result = estimate_cutoff_from_dimensions(length_m=5.0, width_m=4.0, height_m=2.5)
+        
+        # Volume = 5 * 4 * 2.5 = 50 m³
+        # Schroeder frequency formula: fs = 2000 * sqrt(RT60 / V)
+        # With RT60=0.5s: fs = 2000 * sqrt(0.5 / 50) = 2000 * sqrt(0.01) = 2000 * 0.1 = 200 Hz
+        assert isinstance(result, (float, dict))
+        if isinstance(result, dict):
+            cutoff = result['cutoff_hz']
+        else:
+            cutoff = result
+        
+        assert 180 <= cutoff <= 220, f"Expected ~200 Hz for 50m³ typical room, got {cutoff}"
+    
+    def test_furnishing_factor_sparse(self):
+        """Sparse furnishing assumes longer RT60 → lower cutoff."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        # Same room, sparse furnishing
+        result_sparse = estimate_cutoff_from_dimensions(
+            length_m=5.0, width_m=4.0, height_m=2.5, furnishing='sparse'
+        )
+        result_typical = estimate_cutoff_from_dimensions(
+            length_m=5.0, width_m=4.0, height_m=2.5, furnishing='typical'
+        )
+        
+        if isinstance(result_sparse, dict):
+            cutoff_sparse = result_sparse['cutoff_hz']
+            cutoff_typical = result_typical['cutoff_hz']
+        else:
+            cutoff_sparse = result_sparse
+            cutoff_typical = result_typical
+        
+        # Sparse furnishing has longer RT60 → lower Schroeder frequency
+        assert cutoff_sparse < cutoff_typical, \
+            f"Sparse furnishing should give lower cutoff: {cutoff_sparse} vs {cutoff_typical}"
+    
+    def test_furnishing_factor_heavily_furnished(self):
+        """Heavily furnished room assumes shorter RT60 → higher cutoff."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        result_heavy = estimate_cutoff_from_dimensions(
+            length_m=5.0, width_m=4.0, height_m=2.5, furnishing='heavily_furnished'
+        )
+        result_typical = estimate_cutoff_from_dimensions(
+            length_m=5.0, width_m=4.0, height_m=2.5, furnishing='typical'
+        )
+        
+        if isinstance(result_heavy, dict):
+            cutoff_heavy = result_heavy['cutoff_hz']
+            cutoff_typical = result_typical['cutoff_hz']
+        else:
+            cutoff_heavy = result_heavy
+            cutoff_typical = result_typical
+        
+        # Heavily furnished has shorter RT60 → higher Schroeder frequency
+        assert cutoff_heavy > cutoff_typical, \
+            f"Heavily furnished should give higher cutoff: {cutoff_heavy} vs {cutoff_typical}"
+    
+    def test_default_furnishing_is_typical(self):
+        """Default furnishing parameter equals 'typical'."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        result_default = estimate_cutoff_from_dimensions(5.0, 4.0, 2.5)
+        result_typical = estimate_cutoff_from_dimensions(5.0, 4.0, 2.5, furnishing='typical')
+        
+        if isinstance(result_default, dict):
+            assert result_default['cutoff_hz'] == result_typical['cutoff_hz']
+        else:
+            assert result_default == result_typical
+    
+    def test_reject_non_positive_dimensions(self):
+        """Reject non-positive dimensions (zero or negative)."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        with pytest.raises((ValueError, AssertionError)):
+            estimate_cutoff_from_dimensions(length_m=0.0, width_m=4.0, height_m=2.5)
+        
+        with pytest.raises((ValueError, AssertionError)):
+            estimate_cutoff_from_dimensions(length_m=5.0, width_m=-1.0, height_m=2.5)
+        
+        with pytest.raises((ValueError, AssertionError)):
+            estimate_cutoff_from_dimensions(length_m=5.0, width_m=4.0, height_m=-2.5)
+    
+    def test_reject_unreasonably_small_dimensions(self):
+        """Reject unreasonably small dimensions (e.g., < 0.1m)."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        with pytest.raises((ValueError, AssertionError)):
+            estimate_cutoff_from_dimensions(length_m=0.05, width_m=4.0, height_m=2.5)
+    
+    def test_reject_unreasonably_large_dimensions(self):
+        """Reject unreasonably large dimensions (e.g., > 100m)."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        with pytest.raises((ValueError, AssertionError)):
+            estimate_cutoff_from_dimensions(length_m=150.0, width_m=4.0, height_m=2.5)
+    
+    def test_output_format_returns_float(self):
+        """Returns cutoff_hz as a float."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        result = estimate_cutoff_from_dimensions(5.0, 4.0, 2.5)
+        
+        # Result should be float or dict containing float
+        cutoff = result['cutoff_hz'] if isinstance(result, dict) else result
+        assert isinstance(cutoff, (int, float)), f"cutoff should be numeric, got {type(cutoff)}"
+    
+    def test_output_format_with_metadata(self):
+        """When return_metadata=True, returns dict with calculation details."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        result = estimate_cutoff_from_dimensions(
+            length_m=5.0, width_m=4.0, height_m=2.5, return_metadata=True
+        )
+        
+        assert isinstance(result, dict)
+        assert 'cutoff_hz' in result
+        # Should include explanation fields
+        assert 'volume_m3' in result or 'rt60_s' in result or 'furnishing' in result, \
+            "Metadata should explain the calculation"
+    
+    def test_bounds_clamped_to_reasonable_range(self):
+        """Result clamped to reasonable range (50-500 Hz)."""
+        from headmatch.room import estimate_cutoff_from_dimensions
+        
+        # Very small room would normally give very high Schroeder frequency
+        result_small = estimate_cutoff_from_dimensions(1.0, 1.0, 1.0)
+        # Very large room would normally give very low Schroeder frequency
+        result_large = estimate_cutoff_from_dimensions(20.0, 15.0, 8.0)
+        
+        if isinstance(result_small, dict):
+            cutoff_small = result_small['cutoff_hz']
+            cutoff_large = result_large['cutoff_hz']
+        else:
+            cutoff_small = result_small
+            cutoff_large = result_large
+        
+        # Both should be within reasonable bounds
+        assert 50 <= cutoff_small <= 500, f"Small room cutoff {cutoff_small} out of bounds"
+        assert 50 <= cutoff_large <= 500, f"Large room cutoff {cutoff_large} out of bounds"
