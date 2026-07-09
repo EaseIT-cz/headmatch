@@ -23,7 +23,7 @@ def _cutoff_x_position(cutoff_hz: float, freqs: np.ndarray, width: float) -> flo
     if np.isclose(log_max, log_min):
         return None
     scale = width / (log_max - log_min)
-    return (np.log10(cutoff_hz) - log_min) * scale
+    return float((np.log10(cutoff_hz) - log_min) * scale)
 
 
 def _cutoff_region_svg(cutoff_x: float, plot_x: float, plot_y: float, plot_w: float, plot_h: float) -> list[str]:

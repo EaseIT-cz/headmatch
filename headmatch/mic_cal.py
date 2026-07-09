@@ -181,5 +181,5 @@ def calibration_offset(cal: MicCalibration, freq_grid: np.ndarray) -> np.ndarray
         result[freq_grid < cal.freqs_hz[0]] = cal.gains_db[0]
     if np.any(freq_grid > cal.freqs_hz[-1]):
         result[freq_grid > cal.freqs_hz[-1]] = cal.gains_db[-1]
-    
-    return result
+
+    return result  # type: ignore[no-any-return]
