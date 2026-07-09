@@ -214,7 +214,7 @@ def build_parser(config) -> argparse.ArgumentParser:
         ),
     )
     add_common_sweep_args(p, config)
-    p.add_argument("--mic-cal", required=True, help="Path to UMIK-1 or other microphone calibration CSV file.")
+    p.add_argument("--mic-cal", default=None, help="Path to UMIK-1 or other microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
     p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz for room correction (default: 300).")
     p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
     p.add_argument("--out-dir", required=True, help="Folder for the sweep, recording, and metadata files.")
@@ -230,11 +230,12 @@ def build_parser(config) -> argparse.ArgumentParser:
     )
     add_common_sweep_args(p, config)
     p.add_argument("--recording", required=True, help="Path to room measurement recording WAV file.")
-    p.add_argument("--mic-cal", required=True, help="Path to microphone calibration CSV file.")
+    p.add_argument("--mic-cal", default=None, help="Path to microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
     p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz (default: 300).")
     p.add_argument("--recording-two", default=None, help="Optional second position recording WAV file.")
     p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV.")
     p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
+    p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
 
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")

@@ -113,7 +113,7 @@ def fit_room_bands(
     """Fit PEQ bands for room correction with band-limiting and boost constraints.
     
     Pure core function that wraps fit_peq with room-specific constraints:
-    - Band-limit: no filter above cutoff_hz
+    - Band-limit: no filter above cutoff_hz (structural: data filtered before fitting)
     - Boost ceiling: max_boost_db enforced structurally
     - Narrow mode support: Q cap for sub-100 Hz
     
@@ -128,9 +128,15 @@ def fit_room_bands(
     Returns:
         List of fitted PEQ bands
     """
+    # Structural cutoff: filter data ABOVE cutoff Hz before fitting.
+    # This ensures the residual/error signal does not see above-cutoff frequencies.
+    mask = freqs_hz <= cutoff_hz * 1.1  # Include small margin (10% above) for edge effects
+    fit_freqs_hz = freqs_hz[mask]
+    fit_eq_target_db = eq_target_db[mask]
+
     bands = fit_peq(
-        freqs_hz,
-        eq_target_db,
+        fit_freqs_hz,
+        fit_eq_target_db,
         sample_rate,
         max_filters=8,
         max_gain_db=12.0,  # Max cut depth
@@ -277,7 +283,7 @@ def _write_room_results_guide(
     lines.append('')
     lines.append('Usage')
     lines.append('-----')
-    lines.append('Load equalizer_apo.txt into Equalizer APO or'),
+    lines.append('Load equalizer_apo.txt into Equalizer APO or')
     lines.append('use the CamillaDSP YAML files with your DSP setup.')
     lines.append('')
     lines.append('Note: This correction is only valid through the fitted cutoff frequency.')
@@ -528,6 +534,9 @@ def run_room_fit(
         filter_budget=FilterBudget(family='peq', max_filters=8),
         eq_clipping_assessment=fit_report['eq_clipping_assessment'],
         generated_by=identity.as_metadata(),
+        cutoff_hz=cutoff_hz,
+        mic_cal_applied=mic_cal is not None,
+        single_point=recording_two is None,
     )
     
     # Write JSON artifacts
