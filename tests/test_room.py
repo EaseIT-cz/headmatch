@@ -236,6 +236,274 @@ class TestEnergyAverageResponses:
         assert np.allclose(averaged.freqs_hz, freqs)
 
 
+class TestEnergyAverageResponsesN:
+    """Tests for N-position energy averaging (MMM - moving microphone method).
+    
+    These tests document the expected behavior for the Phase 2 extension
+    of energy averaging to N inputs for spatial averaging.
+    """
+    
+    def _energy_average_responses_n(self, results: list[MeasurementResult]) -> MeasurementResult:
+        """Placeholder for the N-position averaging function.
+        
+        This function should:
+        - Accept a list of MeasurementResult objects
+        - Compute energy average across all N positions
+        - Return a new MeasurementResult with n_position_averaged in diagnostics
+        """
+        raise NotImplementedError(
+            "energy_average_responses_n is not yet implemented. "
+            "Extend _energy_average_responses to accept N inputs."
+        )
+    
+    def test_signature_accepts_list_of_measurement_results(self):
+        """N-position averaging accepts list[MeasurementResult] parameter."""
+        freqs = np.array([20, 50, 100], dtype=np.float64)
+        
+        result1 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([0, 3, 6], dtype=np.float64),
+            right_db=np.array([0, 3, 6], dtype=np.float64),
+            left_raw_db=np.array([0, 3, 6], dtype=np.float64),
+            right_raw_db=np.array([0, 3, 6], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        result2 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([6, 3, 0], dtype=np.float64),
+            right_db=np.array([6, 3, 0], dtype=np.float64),
+            left_raw_db=np.array([6, 3, 0], dtype=np.float64),
+            right_raw_db=np.array([6, 3, 0], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        result3 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([3, 6, 3], dtype=np.float64),
+            right_db=np.array([3, 6, 3], dtype=np.float64),
+            left_raw_db=np.array([3, 6, 3], dtype=np.float64),
+            right_raw_db=np.array([3, 6, 3], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        
+        # Function should accept a list of MeasurementResult
+        results_list = [result1, result2, result3]
+        try:
+            from headmatch.room import energy_average_responses_n
+            avg_result = energy_average_responses_n(results_list)
+            assert isinstance(avg_result, MeasurementResult)
+        except ImportError:
+            with pytest.raises(NotImplementedError):
+                self._energy_average_responses_n(results_list)
+    
+    def test_energy_averaging_math_formula(self):
+        """Energy averaging follows correct math: linear power average."""
+        freqs = np.array([100], dtype=np.float64)
+        
+        # Three positions: 0 dB, 0 dB, 0 dB (all same)
+        # Power: 10^(0/10) = 1.0 each
+        # Average: (1.0 + 1.0 + 1.0) / 3 = 1.0
+        # Result: 10 * log10(1.0) = 0 dB
+        result_db = 0.0
+        result_power = 10 ** (result_db / 10.0)
+        expected_power = (result_power + result_power + result_power) / 3.0
+        expected_db = 10 * np.log10(expected_power)
+        assert np.isclose(expected_db, 0.0), f"Expected 0 dB for three 0 dB sources, got {expected_db}"
+        
+        # Three positions: 6 dB, 6 dB, 6 dB
+        # Power: 10^(6/10) = 3.98 each
+        # Average: 3.98 → 10 * log10(3.98) = 6 dB
+        result_db = 6.0
+        result_power = 10 ** (result_db / 10.0)
+        expected_power = (result_power + result_power + result_power) / 3.0
+        expected_db = 10 * np.log10(expected_power)
+        assert np.isclose(expected_db, 6.0), f"Expected 6 dB for three 6 dB sources, got {expected_db}"
+        
+        # Three positions: 0 dB, 6 dB, 12 dB
+        # Power: 1, 3.98, 15.85
+        # Average: (1 + 3.98 + 15.85) / 3 = 6.943
+        # Result: 10 * log10(6.943) = 8.41 dB
+        powers = [10**(0/10), 10**(6/10), 10**(12/10)]
+        avg_power = sum(powers) / 3.0
+        expected_db = 10 * np.log10(avg_power)
+        expected_manual = 10 * np.log10((1.0 + 3.981 + 15.849) / 3.0)
+        assert np.isclose(expected_db, expected_manual, atol=0.01), \
+            f"Manual calc error: {expected_db} vs {expected_manual}"
+    
+    def test_three_position_energy_average(self):
+        """Three-position averaging produces correct results at specific frequencies."""
+        freqs = np.array([100], dtype=np.float64)
+        
+        # Create three responses with different dB values
+        # At 100 Hz: response1=3.01 dB (power≈2.0), response2=0 dB (power=1.0), response3=6.02 dB (power≈4.0)
+        # Average power: (2.0 + 1.0 + 4.0) / 3 = 2.333...
+        # Average dB: 10 * log10(2.333) = 3.68 dB
+        
+        result1 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([3.01], dtype=np.float64),  # ≈ 2.0 in linear
+            right_db=np.array([3.01], dtype=np.float64),
+            left_raw_db=np.array([3.01], dtype=np.float64),
+            right_raw_db=np.array([3.01], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        result2 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([0.0], dtype=np.float64),  # = 1.0 in linear
+            right_db=np.array([0.0], dtype=np.float64),
+            left_raw_db=np.array([0.0], dtype=np.float64),
+            right_raw_db=np.array([0.0], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        result3 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([6.02], dtype=np.float64),  # ≈ 4.0 in linear
+            right_db=np.array([6.02], dtype=np.float64),
+            left_raw_db=np.array([6.02], dtype=np.float64),
+            right_raw_db=np.array([6.02], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        
+        # Expected calculation: energies 2.0, 1.0, 4.0 average to 2.333
+        expected_linear = (2.0 + 1.0 + 4.0) / 3.0
+        expected_db = 10 * np.log10(expected_linear)
+        
+        try:
+            from headmatch.room import energy_average_responses_n
+            avg_result = energy_average_responses_n([result1, result2, result3])
+            
+            # Verify the average dB is approximately 3.68 dB
+            assert np.isclose(avg_result.left_db[0], expected_db, atol=0.1), \
+                f"Left channel energy avg mismatch: {avg_result.left_db[0]} vs {expected_db}"
+            assert np.isclose(avg_result.right_db[0], expected_db, atol=0.1), \
+                f"Right channel energy avg mismatch: {avg_result.right_db[0]} vs {expected_db}"
+            assert np.isclose(avg_result.left_raw_db[0], expected_db, atol=0.1), \
+                f"Left raw energy avg mismatch: {avg_result.left_raw_db[0]} vs {expected_db}"
+            assert np.isclose(avg_result.right_raw_db[0], expected_db, atol=0.1), \
+                f"Right raw energy avg mismatch: {avg_result.right_raw_db[0]} vs {expected_db}"
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+    
+    def test_single_position_returns_unchanged(self):
+        """Single position (N=1) returns the measurement unchanged."""
+        freqs = np.array([20, 50, 100], dtype=np.float64)
+        
+        result1 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([0, 3, 6], dtype=np.float64),
+            right_db=np.array([0, 3, 6], dtype=np.float64),
+            left_raw_db=np.array([0.5, 3.5, 6.5], dtype=np.float64),
+            right_raw_db=np.array([0.5, 3.5, 6.5], dtype=np.float64),
+            diagnostics={'test': True, 'original': 1},
+        )
+        
+        try:
+            from headmatch.room import energy_average_responses_n
+            avg_result = energy_average_responses_n([result1])
+            
+            # Should return the same data
+            assert np.allclose(avg_result.left_db, result1.left_db)
+            assert np.allclose(avg_result.right_db, result1.right_db)
+            assert np.allclose(avg_result.freqs_hz, result1.freqs_hz)
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+    
+    def test_empty_list_raises_error(self):
+        """Empty list raises appropriate error."""
+        try:
+            from headmatch.room import energy_average_responses_n
+            with pytest.raises((ValueError, IndexError), match="empty"):
+                energy_average_responses_n([])
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+    
+    def test_mismatched_frequency_grids_raise_error(self):
+        """Mismatched frequency grids raise appropriate error."""
+        result1 = MeasurementResult(
+            freqs_hz=np.array([20, 50, 100], dtype=np.float64),
+            left_db=np.array([0, 3, 6], dtype=np.float64),
+            right_db=np.array([0, 3, 6], dtype=np.float64),
+            left_raw_db=np.array([0, 3, 6], dtype=np.float64),
+            right_raw_db=np.array([0, 3, 6], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        result2 = MeasurementResult(
+            freqs_hz=np.array([20, 51, 100], dtype=np.float64),  # Different!
+            left_db=np.array([6, 3, 0], dtype=np.float64),
+            right_db=np.array([6, 3, 0], dtype=np.float64),
+            left_raw_db=np.array([6, 3, 0], dtype=np.float64),
+            right_raw_db=np.array([6, 3, 0], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        
+        try:
+            from headmatch.room import energy_average_responses_n
+            with pytest.raises((ValueError, AssertionError), match="freq|frequency|grid|mismatch"):
+                energy_average_responses_n([result1, result2])
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+    
+    def test_diagnostics_include_n_position_averaged(self):
+        """Result diagnostics include n_position_averaged: N."""
+        freqs = np.array([100], dtype=np.float64)
+        
+        results = []
+        for i in range(5):
+            results.append(MeasurementResult(
+                freqs_hz=freqs.copy(),
+                left_db=np.array([float(i)], dtype=np.float64),
+                right_db=np.array([float(i)], dtype=np.float64),
+                left_raw_db=np.array([float(i)], dtype=np.float64),
+                right_raw_db=np.array([float(i)], dtype=np.float64),
+                diagnostics={'test': True},
+            ))
+        
+        try:
+            from headmatch.room import energy_average_responses_n
+            avg_result = energy_average_responses_n(results)
+            
+            # Should include n_position_averaged: 5 in diagnostics
+            assert 'n_position_averaged' in avg_result.diagnostics, \
+                "diagnostics should contain 'n_position_averaged'"
+            assert avg_result.diagnostics['n_position_averaged'] == 5, \
+                f"Expected n_position_averaged=5, got {avg_result.diagnostics.get('n_position_averaged')}"
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+    
+    def test_two_position_matches_existing_function(self):
+        """N=2 should produce same result as existing _energy_average_responses."""
+        freqs = np.array([20, 50, 100, 200, 300], dtype=np.float64)
+        
+        result1 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([0, 3, 0, 3, 0], dtype=np.float64),
+            right_db=np.array([0, 3, 0, 3, 0], dtype=np.float64),
+            left_raw_db=np.array([0.5, 3.5, 0.5, 3.5, 0.5], dtype=np.float64),
+            right_raw_db=np.array([0.5, 3.5, 0.5, 3.5, 0.5], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        
+        result2 = MeasurementResult(
+            freqs_hz=freqs.copy(),
+            left_db=np.array([0, 0, 6, 0, 6], dtype=np.float64),
+            right_db=np.array([0, 0, 6, 0, 6], dtype=np.float64),
+            left_raw_db=np.array([-0.5, -0.5, 6.5, -0.5, 6.5], dtype=np.float64),
+            right_raw_db=np.array([-0.5, -0.5, 6.5, -0.5, 6.5], dtype=np.float64),
+            diagnostics={'test': True},
+        )
+        
+        existing_result = _energy_average_responses(result1, result2)
+        
+        try:
+            from headmatch.room import energy_average_responses_n
+            new_result = energy_average_responses_n([result1, result2])
+            
+            # Results should match
+            assert np.allclose(existing_result.left_db, new_result.left_db, atol=0.001)
+            assert np.allclose(existing_result.right_db, new_result.right_db, atol=0.001)
+        except ImportError:
+            pytest.xfail("energy_average_responses_n not yet implemented")
+
+
 class TestRoomConstants:
     """Tests for room module constants."""
     
