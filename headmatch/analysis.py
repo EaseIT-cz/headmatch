@@ -21,6 +21,23 @@ class MeasurementResult:
     diagnostics: Dict[str, float]
 
 
+def _coerce_room_measurement_audio(data: np.ndarray, mic_channel: int = 0) -> np.ndarray:
+    """Return a 2D array with the selected channel duplicated to both left and right.
+
+    For mono room measurements, we duplicate the single (selected) channel
+    to provide a symmetric result: left_db == right_db, and no channel mismatch.
+    """
+    if data.ndim != 2:
+        raise ValueError('Room recording must be a 2D audio array')
+    if len(data) == 0:
+        raise ValueError('Room recording is empty')
+    num_channels = data.shape[1]
+    if mic_channel >= num_channels:
+        raise ValueError(f'mic_channel {mic_channel} exceeds available channels {num_channels}')
+    selected = data[:, mic_channel:mic_channel + 1]
+    return np.repeat(selected, 2, axis=1)
+
+
 
 def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
     if data.ndim != 2:
@@ -211,4 +228,75 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         save_fr_csv(out_dir / 'measurement_right.csv', result.freqs_hz, result.right_db)
         save_fr_csv(out_dir / 'measurement_left_raw.csv', result.freqs_hz, result.left_raw_db)
         save_fr_csv(out_dir / 'measurement_right_raw.csv', result.freqs_hz, result.right_raw_db)
+    return result
+
+
+def analyze_room_measurement(
+    recording_wav: str | Path,
+    sweep_spec: SweepSpec,
+    mic_channel: int = 0,
+    out_dir: str | Path | None = None,
+) -> MeasurementResult:
+    """Analyze a mono room measurement and return symmetric frequency response.
+
+    Args:
+        recording_wav: Path to the recorded WAV file (mono or multichannel)
+        sweep_spec: SweepSpec used for the room measurement
+        mic_channel: Which channel to use (default 0) for multichannel files
+        out_dir: Optional directory to save CSV output files
+
+    Returns:
+        MeasurementResult with symmetric left/right responses (identical values)
+    """
+    recording, sr = read_wav(recording_wav)
+    recording = _coerce_room_measurement_audio(recording, mic_channel)
+    if sr != sweep_spec.sample_rate:
+        raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
+    min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
+    if len(recording) < min_len:
+        raise ValueError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
+    from .signals import generate_log_sweep
+    _, reference = generate_log_sweep(sweep_spec)
+    padded_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s + sweep_spec.post_silence_s) * sweep_spec.sample_rate))
+    padded = np.zeros(padded_len)
+    start = int(round(sweep_spec.pre_silence_s * sweep_spec.sample_rate))
+    padded[start:start + len(reference)] = reference
+    aligned, alignment_diagnostics = _align_recording_to_reference(recording, padded)
+    left = aligned[:, 0]
+    right = aligned[:, 1]
+
+    freqs_l, left_raw = _fr_from_signals(padded, left, sr)
+    freqs_r, right_raw = _fr_from_signals(padded, right, sr)
+    grid = geometric_log_grid(20, min(20000, sr / 2 - 1), 48)
+    left_interp = np.interp(grid, freqs_l, left_raw)
+    right_interp = np.interp(grid, freqs_r, right_raw)
+    left_norm = left_interp - np.interp(1000.0, grid, left_interp)
+    right_norm = right_interp - np.interp(1000.0, grid, right_interp)
+    left_s = fractional_octave_smoothing(grid, left_norm, fraction=12)
+    right_s = fractional_octave_smoothing(grid, right_norm, fraction=12)
+
+    mask = _band_mask(grid)
+    diagnostics = {
+        **alignment_diagnostics,
+        'left_roughness_db': _roughness_db(left_norm, left_s, mask),
+        'right_roughness_db': _roughness_db(right_norm, right_s, mask),
+        'channel_mismatch_rms_db': 0.0,  # Mono: no channel mismatch
+        'capture_rms_dbfs': float(20 * np.log10(max(np.sqrt(np.mean(aligned ** 2)), 1e-12))),
+    }
+
+    result = MeasurementResult(
+        freqs_hz=grid,
+        left_db=left_s,
+        right_db=right_s,
+        left_raw_db=left_norm,
+        right_raw_db=right_norm,
+        diagnostics=diagnostics,
+    )
+    if out_dir:
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        save_fr_csv(out_dir / 'room_left.csv', result.freqs_hz, result.left_db)
+        save_fr_csv(out_dir / 'room_right.csv', result.freqs_hz, result.right_db)
+        save_fr_csv(out_dir / 'room_left_raw.csv', result.freqs_hz, result.left_raw_db)
+        save_fr_csv(out_dir / 'room_right_raw.csv', result.freqs_hz, result.right_raw_db)
     return result
