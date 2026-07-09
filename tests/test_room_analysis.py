@@ -44,7 +44,7 @@ class TestEstimateSchroederCutoff:
         t = np.linspace(0, duration, int(sample_rate * duration))
         # Decay constant for ~0.5s RT60
         decay_time = 0.5
-        ir = np.exp(-t / (decay_time / (np.log(10) * 6))) * np.random.randn(len(t))
+        ir = np.exp(-t / (decay_time / (np.log(10) * 3))) * np.random.randn(len(t))
         
         # Function should accept impulse response array and sample_rate
         result = estimate_schroeder_cutoff(
@@ -69,7 +69,7 @@ class TestEstimateSchroederCutoff:
         duration = 1.0
         t = np.linspace(0, duration, int(sample_rate * duration))
         rt60_expected = 0.5
-        decay_constant = rt60_expected / (np.log(10) * 6)  # Time constant for RT60 decay
+        decay_constant = rt60_expected / (np.log(10) * 3)  # Time constant for RT60 decay
         ir = np.exp(-t / decay_constant) * np.random.randn(len(t))
         
         # Test example 1: V=50m³, RT60≈0.5s → f_schroeder ≈ 200 Hz
@@ -146,7 +146,7 @@ class TestEstimateSchroederCutoff:
         
         # Create IR with very long RT60 (~2s) for large room
         rt60_expected = 2.0
-        decay_constant = rt60_expected / (np.log(10) * 6)
+        decay_constant = rt60_expected / (np.log(10) * 3)
         ir = np.exp(-t / decay_constant) * np.random.randn(len(t))
         
         # Huge room volume should produce cutoff below 50 Hz before clamping
@@ -174,7 +174,7 @@ class TestEstimateSchroederCutoff:
         
         # Create IR with very short RT60 (~0.05s)
         rt60_expected = 0.05
-        decay_constant = rt60_expected / (np.log(10) * 6)
+        decay_constant = rt60_expected / (np.log(10) * 3)
         ir = np.exp(-t / decay_constant) * np.random.randn(len(t))
         
         # Tiny room volume should produce cutoff above 500 Hz before clamping
@@ -203,7 +203,7 @@ class TestEstimateSchroederCutoff:
             for volume in [30, 50, 100, 200]:
                 duration = max(1.0, rt60 * 3)
                 t = np.linspace(0, duration, int(sample_rate * duration))
-                decay_constant = rt60 / (np.log(10) * 6)
+                decay_constant = rt60 / (np.log(10) * 3)
                 ir = np.exp(-t / decay_constant) * np.random.randn(len(t))
                 
                 cutoff = estimate_schroeder_cutoff(
@@ -256,7 +256,7 @@ class TestFitRoomBandsAutoCutoff:
         duration = 1.0
         t = np.linspace(0, duration, int(sample_rate * duration))
         rt60_expected = 0.5
-        decay_constant = rt60_expected / (np.log(10) * 6)
+        decay_constant = rt60_expected / (np.log(10) * 3)
         ir = np.exp(-t / decay_constant) * np.random.randn(len(t))
         
         volume_m3 = 50.0

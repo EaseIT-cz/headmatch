@@ -237,6 +237,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--target-csv", default=None, help="Optional room target curve CSV (bass-only, e.g. docs/examples/targets/room_flat.csv). If omitted, fit toward a flat-through-modal-band room target.")
     p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
     p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
+    p.add_argument("--enable-tilt", action="store_true", help="Opt-in: apply a gentle house-curve tilt above the cutoff (broad, low-Q, bounded). Off by default.")
 
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
@@ -744,11 +745,15 @@ def main(argv: list[str] | None = None) -> None:
             out_dir.mkdir(parents=True, exist_ok=True)
             from .room import run_room_fit
             from .mic_cal import load_mic_calibration
-            # Handle --recording with action="append":
-            # When using append, if single --recording is provided, args.recording is a list with one element
+            # --recording uses action="append", so args.recording is a list.
+            # The first is the primary position; any extras drive N-position (MMM)
+            # energy averaging, together with --recording-two and --mmm-sweep.
             recording_list = args.recording if isinstance(args.recording, list) else [args.recording]
-            # Backward compatibility: check for --recording-two
             recording_two = getattr(args, "recording_two", None)
+            mmm_sweep = getattr(args, "mmm_sweep", None)
+            additional: list[str | Path] | None = (
+                [Path(r) for r in recording_list[1:]] if len(recording_list) > 1 else None
+            )
             mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
             run_room_fit(
                 recording=Path(recording_list[0]),
@@ -759,8 +764,15 @@ def main(argv: list[str] | None = None) -> None:
                 target_csv=getattr(args, "target_csv", None),
                 out_dir=out_dir,
                 sweep_spec=spec_from_args(args),
+                additional_recordings=additional,
+                mmm_sweep=Path(mmm_sweep) if mmm_sweep else None,
+                enable_tilt=getattr(args, "enable_tilt", False),
             )
-            print(f"Room correction EQ written to {out_dir}.")
+            n_positions = len(recording_list) + (1 if recording_two else 0) + (1 if mmm_sweep else 0)
+            if n_positions > 1:
+                print(f"Room correction EQ written to {out_dir} (averaged {n_positions} positions).")
+            else:
+                print(f"Room correction EQ written to {out_dir}.")
         elif args.cmd == "fit":
             hearing_profile = None
             if getattr(args, "with_hearing_compensation", False):

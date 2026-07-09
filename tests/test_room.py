@@ -298,8 +298,6 @@ class TestEnergyAverageResponsesN:
     
     def test_energy_averaging_math_formula(self):
         """Energy averaging follows correct math: linear power average."""
-        freqs = np.array([100], dtype=np.float64)
-        
         # Three positions: 0 dB, 0 dB, 0 dB (all same)
         # Power: 10^(0/10) = 1.0 each
         # Average: (1.0 + 1.0 + 1.0) / 3 = 1.0
@@ -564,75 +562,18 @@ class TestPerSpeakerStereo:
     def test_independent_analysis_produces_different_frequency_responses(self):
         """Left and right recordings are analyzed separately, producing different responses."""
         pytest.skip("Per-channel analysis not yet implemented")
-        
-        from headmatch.room import run_room_fit
-        from headmatch.signals import SweepSpec
-        
-        freqs = np.geomspace(20, 300, 100)
-        
-        # Create asymmetric responses:
-        # - Left has a peak at 60 Hz
-        # - Right has a peak at 120 Hz (different modal behavior)
-        left_result = self._create_asymmetric_measurement_result(
-            freqs, left_peak_db=6.0, left_peak_freq=60.0
-        )
-        right_result = self._create_asymmetric_measurement_result(
-            freqs, right_peak_db=5.0, right_peak_freq=120.0
-        )
-        
-        # This test verifies that when given separate L/R recordings,
-        # the function analyzes them independently and produces
-        # different frequency responses for each channel.
-        #
-        # Expected behavior:
-        # - result.left_response should reflect the 60 Hz peak
-        # - result.right_response should reflect the 120 Hz peak
-        # - The two responses should differ measurably
-        
-        # Implementation note: This requires extending run_room_fit to:
-        # 1. Accept separate left/right recording paths
-        # 2. Analyze each independently (not averaging them)
-        # 3. Return channel-specific responses in the result
-        
-        assert False, "Test not yet implemented - requires per-channel analysis support"
+        # When implemented, run_room_fit(recording_left=..., recording_right=...) should
+        # analyze each channel independently (not averaging them) so that, given a left
+        # capture with a 60 Hz peak and a right capture with a 120 Hz peak, the returned
+        # result.left_db and result.right_db reflect each channel's distinct modal peak.
     
     def test_independent_fitting_produces_different_peq_bands(self):
         """Each channel gets its own set of PEQ bands based on its own analysis."""
         pytest.skip("Per-channel fitting not yet implemented")
-        
-        from headmatch.room import run_room_fit
-        from headmatch.signals import SweepSpec
-        
-        # This test verifies that with asymmetric L/R modal responses,
-        # the fitted PEQ bands are channel-specific and differ appropriately.
-        
-        # Given:
-        # - Left speaker: modal peak at 60 Hz requiring -3 dB cut
-        # - Right speaker: modal peak at 120 Hz requiring -2 dB cut
-        #
-        # Expected:
-        # - left_bands targets the 60 Hz peak
-        # - right_bands targets the 120 Hz peak
-        # - left_bands and right_bands are not equal
-        
-        freqs = np.geomspace(20, 500, 200)
-        
-        # Mock responses would be created here
-        # left_recording = ... with 60 Hz peak
-        # right_recording = ... with 120 Hz peak
-        
-        # result = run_room_fit(
-        #     recording_left=left_recording,
-        #     recording_right=right_recording,
-        #     ...
-        # )
-        
-        # Verify:
-        # - result.eq_bands_left is different from result.eq_bands_right
-        # - left_bands addresses the 60 Hz region
-        # - right_bands addresses the 120 Hz region
-        
-        assert False, "Test not yet implemented - requires per-channel fitting support"
+        # When implemented, with asymmetric L/R modal responses (e.g. a 60 Hz peak on
+        # the left, a 120 Hz peak on the right), run_room_fit(recording_left=...,
+        # recording_right=...) should produce result.eq_bands_left != result.eq_bands_right,
+        # each targeting its own channel's peak.
     
     def test_lr_asymmetry_different_modal_peaks(self):
         """Given L/R with different modal peaks, verify separate EQ bands."""
@@ -958,9 +899,9 @@ class TestRoomDimensions:
         assert 180 <= cutoff <= 220, f"Expected ~200 Hz for 50m³ typical room, got {cutoff}"
     
     def test_furnishing_factor_sparse(self):
-        """Sparse furnishing assumes longer RT60 → lower cutoff."""
+        """Sparse furnishing assumes longer RT60 → higher Schroeder cutoff."""
         from headmatch.room import estimate_cutoff_from_dimensions
-        
+
         # Same room, sparse furnishing
         result_sparse = estimate_cutoff_from_dimensions(
             length_m=5.0, width_m=4.0, height_m=2.5, furnishing='sparse'
@@ -968,39 +909,41 @@ class TestRoomDimensions:
         result_typical = estimate_cutoff_from_dimensions(
             length_m=5.0, width_m=4.0, height_m=2.5, furnishing='typical'
         )
-        
+
         if isinstance(result_sparse, dict):
             cutoff_sparse = result_sparse['cutoff_hz']
             cutoff_typical = result_typical['cutoff_hz']
         else:
             cutoff_sparse = result_sparse
             cutoff_typical = result_typical
-        
-        # Sparse furnishing has longer RT60 → lower Schroeder frequency
-        assert cutoff_sparse < cutoff_typical, \
-            f"Sparse furnishing should give lower cutoff: {cutoff_sparse} vs {cutoff_typical}"
+
+        # A live/sparse room rings longer (higher RT60); by f = 2000·√(RT60/V)
+        # a longer RT60 raises the Schroeder frequency.
+        assert cutoff_sparse > cutoff_typical, \
+            f"Sparse furnishing should give higher cutoff: {cutoff_sparse} vs {cutoff_typical}"
     
     def test_furnishing_factor_heavily_furnished(self):
-        """Heavily furnished room assumes shorter RT60 → higher cutoff."""
+        """Heavily furnished room assumes shorter RT60 → lower Schroeder cutoff."""
         from headmatch.room import estimate_cutoff_from_dimensions
-        
+
         result_heavy = estimate_cutoff_from_dimensions(
             length_m=5.0, width_m=4.0, height_m=2.5, furnishing='heavily_furnished'
         )
         result_typical = estimate_cutoff_from_dimensions(
             length_m=5.0, width_m=4.0, height_m=2.5, furnishing='typical'
         )
-        
+
         if isinstance(result_heavy, dict):
             cutoff_heavy = result_heavy['cutoff_hz']
             cutoff_typical = result_typical['cutoff_hz']
         else:
             cutoff_heavy = result_heavy
             cutoff_typical = result_typical
-        
-        # Heavily furnished has shorter RT60 → higher Schroeder frequency
-        assert cutoff_heavy > cutoff_typical, \
-            f"Heavily furnished should give higher cutoff: {cutoff_heavy} vs {cutoff_typical}"
+
+        # A heavily furnished (absorptive) room decays faster (lower RT60); by
+        # f = 2000·√(RT60/V) a shorter RT60 lowers the Schroeder frequency.
+        assert cutoff_heavy < cutoff_typical, \
+            f"Heavily furnished should give lower cutoff: {cutoff_heavy} vs {cutoff_typical}"
     
     def test_default_furnishing_is_typical(self):
         """Default furnishing parameter equals 'typical'."""

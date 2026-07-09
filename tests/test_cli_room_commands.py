@@ -396,3 +396,53 @@ class TestRoomFitMultiPositionRecording:
             # Check that n_position_averaging attribute exists (will be added later)
             # For now, just verify the recordings list is accumulated
             assert hasattr(args, 'recording'), "args should have recording attribute"
+
+    def test_multiple_recordings_forwarded_for_averaging(self, tmp_path):
+        """Extra --recording positions are forwarded to run_room_fit for MMM averaging."""
+        recordings = []
+        for i in range(3):
+            rec_file = tmp_path / f"recording{i+1}.wav"
+            rec_file.write_bytes(_create_minimal_wav_header())
+            recordings.append(str(rec_file))
+
+        out_dir = tmp_path / "output"
+        out_dir.mkdir()
+
+        with mock.patch("headmatch.room.run_room_fit") as mock_fit:
+            mock_fit.return_value = self._create_mock_room_fit_result(out_dir)
+
+            main([
+                "room-fit",
+                "--recording", recordings[0],
+                "--recording", recordings[1],
+                "--recording", recordings[2],
+                "--out-dir", str(out_dir),
+            ])
+
+            kwargs = mock_fit.call_args.kwargs
+            assert kwargs["recording"] == Path(recordings[0]), "primary recording is the first"
+            # The two extra positions must be forwarded, not silently dropped.
+            assert kwargs.get("additional_recordings") == [Path(recordings[1]), Path(recordings[2])]
+
+    def test_mmm_sweep_forwarded_to_run_room_fit(self, tmp_path):
+        """--mmm-sweep is forwarded to run_room_fit."""
+        recording_file = tmp_path / "recording.wav"
+        recording_file.write_bytes(_create_minimal_wav_header())
+        mmm_file = tmp_path / "mmm.wav"
+        mmm_file.write_bytes(_create_minimal_wav_header())
+
+        out_dir = tmp_path / "output"
+        out_dir.mkdir()
+
+        with mock.patch("headmatch.room.run_room_fit") as mock_fit:
+            mock_fit.return_value = self._create_mock_room_fit_result(out_dir)
+
+            main([
+                "room-fit",
+                "--recording", str(recording_file),
+                "--mmm-sweep", str(mmm_file),
+                "--out-dir", str(out_dir),
+            ])
+
+            kwargs = mock_fit.call_args.kwargs
+            assert kwargs.get("mmm_sweep") == Path(mmm_file)
