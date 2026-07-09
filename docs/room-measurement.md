@@ -115,9 +115,9 @@ A flat response through the modal band with a gentle sub-bass rolloff below ~40 
 
 ### `room_house_curve.csv`
 
-A gentle downward tilt (house curve) intended as an **overlay reference only**. The fitter still uses a flat target within the correction band; this curve is graphed over the measured response so you can judge the uncorrected region against a sensible in-room reference target.
+A gentle **bass lift** (house curve): elevated in the deep bass, returning to 0 dB by ~200 Hz. Pass it with `--target-csv` to fit toward it, or graph it over the measured response as an in-room reference. It expresses *how much to lift the bass relative to the through-band*, so it hands off cleanly at the cutoff instead of imposing a level change there.
 
-These targets are normalized at 1 kHz like all HeadMatch targets, and follow the same CSV format (`frequency_hz, target_db`).
+Unlike headphone targets, room targets are **not** normalized at 1 kHz (they are naturally bass-only). Instead, `room-fit` anchors whatever target you pass to 0 dB at the cutoff, so only the target's *shape relative to the through-band* matters — its absolute level in the CSV is irrelevant. Targets follow the standard CSV format (`frequency_hz, target_db`); a bass-only curve (e.g. 20–300 Hz) is fine.
 
 ---
 
@@ -144,7 +144,7 @@ By default, the measurement is taken at **one seat position only**. Deep nulls a
 
 ### Bass-only correction scope
 
-The fitter **only places EQ bands at/above the cutoff** (default: ≤ 300 Hz). Reflections, comb-filtering, and speaker resonances above this are measured and graphed so you can see them, but **not corrected**. A minimum-phase parametric EQ cannot meaningfully fix these issues. Manual EQ of measured peaks above the cutoff is at your own risk.
+The fitter **only places EQ bands at or below the cutoff** (default: ≤ 300 Hz). Reflections, comb-filtering, and speaker resonances above this are measured and graphed so you can see them, but **not corrected**. A minimum-phase parametric EQ cannot meaningfully fix these issues. Manual EQ of measured peaks above the cutoff is at your own risk.
 
 ### Speaker FR is not separated
 

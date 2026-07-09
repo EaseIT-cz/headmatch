@@ -83,7 +83,9 @@ def test_run_room_fit_honors_relative_target_semantics(tmp_path):
                      pre_silence_s=0.1, post_silence_s=0.2, amplitude=0.3)
     recording = _make_room_recording(tmp_path, spec)
 
-    values = "20,3.0\n50,3.0\n100,3.0\n200,3.0\n300,3.0\n1000,3.0\n"
+    # A bass lift that returns to 0 dB at/above the cutoff, so cutoff-anchoring
+    # leaves it unchanged and the absolute-vs-relative distinction is what shows.
+    values = "20,3.0\n50,2.0\n100,1.0\n200,0.3\n300,0.0\n1000,0.0\n"
     absolute_csv = tmp_path / "abs_target.csv"
     absolute_csv.write_text("# headmatch_target_semantics=absolute\nfrequency_hz,target_db\n" + values)
     relative_csv = tmp_path / "rel_target.csv"
@@ -105,3 +107,29 @@ def test_run_room_fit_honors_relative_target_semantics(tmp_path):
     abs_gains = sorted(round(b.gain_db, 3) for b in abs_res.eq_bands)
     rel_gains = sorted(round(b.gain_db, 3) for b in rel_res.eq_bands)
     assert abs_gains != rel_gains
+
+
+def test_room_target_absolute_reference_is_irrelevant(tmp_path):
+    # room-fit anchors any target to 0 dB at the cutoff, so two absolute targets
+    # with the same shape but a different overall level must produce identical EQ.
+    spec = SweepSpec(sample_rate=48000, duration_s=1.0, f_start=20.0, f_end=20000.0,
+                     pre_silence_s=0.1, post_silence_s=0.2, amplitude=0.3)
+    recording = _make_room_recording(tmp_path, spec)
+
+    header = "# headmatch_target_semantics=absolute\nfrequency_hz,target_db\n"
+    shape = [(20, 4.0), (50, 2.7), (100, 1.3), (200, 0.1), (300, 0.0), (1000, 0.0)]
+    base_csv = tmp_path / "base.csv"
+    base_csv.write_text(header + "".join(f"{f},{v}\n" for f, v in shape))
+    shifted_csv = tmp_path / "shifted.csv"
+    shifted_csv.write_text(header + "".join(f"{f},{v + 10.0}\n" for f, v in shape))
+
+    def _fit(csv, out_name):
+        return run_room_fit(
+            recording=recording, recording_two=None, mic_cal=None,
+            cutoff_hz=300.0, max_boost_db=2.0, target_csv=csv,
+            out_dir=tmp_path / out_name, sweep_spec=spec,
+        )
+
+    base_gains = sorted(round(b.gain_db, 4) for b in _fit(base_csv, "base_out").eq_bands)
+    shifted_gains = sorted(round(b.gain_db, 4) for b in _fit(shifted_csv, "shifted_out").eq_bands)
+    assert base_gains == shifted_gains

@@ -345,6 +345,22 @@ def run_room_fit(
     else:
         target = build_room_target(result.freqs_hz, sub_bass_rolloff=True)
 
+    # Anchor the target to 0 dB at the cutoff — the handoff to the uncorrected
+    # band above it. A room target describes how much to lift/shape the bass
+    # *relative to the through-band*, so referencing every target to its own
+    # value at the cutoff makes the CSV author's choice of absolute 0 dB
+    # reference irrelevant and keeps the handoff identical to the flat target
+    # (no arbitrary offset or dip at the crossover). The default flat target is
+    # already 0 dB at the cutoff, so this is a no-op there.
+    anchor_db = float(np.interp(cutoff_hz, target.freqs_hz, target.values_db))
+    if anchor_db != 0.0:
+        target = TargetCurve(
+            freqs_hz=target.freqs_hz,
+            values_db=target.values_db - anchor_db,
+            name=target.name,
+            semantics=target.semantics,
+        )
+
     # Desired in-room response, honoring the target's semantics (must match how
     # render_fit_graphs interprets the same target). A 'relative' target holds
     # deltas about the measurement; an 'absolute' target is the response itself.
