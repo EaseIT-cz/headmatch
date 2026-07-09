@@ -300,7 +300,7 @@ def _same_sign_fraction(values: np.ndarray, sign: float) -> float:
     return float(np.mean(np.sign(values) == np.sign(sign)))
 
 
-def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float) -> PEQBand | None:
+def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: str, max_gain_db: float, max_boost_db: float | None = None) -> PEQBand | None:
     if kind == "lowshelf":
         edge_mask = freqs_hz <= 140
         compare_mean = _band_mean(freqs_hz, eq_target, 180, 600)
@@ -321,7 +321,11 @@ def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: 
         return None
     if _same_sign_fraction(edge_values, edge_mean) < 0.7:
         return None
-    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7, slope=0.7)  # type: ignore[arg-type]
+    # Boost ceiling is asymmetric: cuts may reach -max_gain_db, but positive
+    # gain is bounded by max_boost_db when set (shelves must honour the same
+    # ceiling as peaking bands — see fit_peq's max_boost_db contract).
+    gain_upper = max_gain_db if max_boost_db is None else min(max_gain_db, max_boost_db)
+    return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, gain_upper)), 0.7, slope=0.7)  # type: ignore[arg-type]
 
 
 def _max_q_for_frequency(freq_hz: float, requested_max_q: float, low_freq_q_cap: float = 2.0) -> float:
@@ -503,8 +507,8 @@ def fit_peq(
     shelf_candidates = [
         candidate
         for candidate in (
-            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="lowshelf", max_gain_db=max_gain_db),
-            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="highshelf", max_gain_db=max_gain_db),
+            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="lowshelf", max_gain_db=max_gain_db, max_boost_db=max_boost_db),
+            _edge_shelf_candidate(freqs_hz, objective.eq_target_db, kind="highshelf", max_gain_db=max_gain_db, max_boost_db=max_boost_db),
         )
         if candidate is not None
     ]
@@ -571,5 +575,5 @@ def fit_peq(
     if len(bands) >= 2:
         bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q,
                                       max_freq_hz=max_freq_hz, max_boost_db=max_boost_db,
-                                      low_freq_q_cap=low_freq_q_cap if low_freq_q_cap is not None else 2.0)
+                                      low_freq_q_cap=low_cap)
     return bands

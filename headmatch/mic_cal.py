@@ -1,11 +1,9 @@
 """Microphone calibration module for UMIK-1-style calibration files."""
 from __future__ import annotations
 
-import re
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator

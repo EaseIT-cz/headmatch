@@ -58,3 +58,33 @@ def test_asymmetric_boost_cap_survives_joint_refinement():
     assert any(b.gain_db < -2.0 for b in fit_peq(
         freqs, -eq_target, 48000, max_filters=6, max_gain_db=12.0,
         max_q=8.0, max_freq_hz=300.0, low_freq_q_cap=8.0, max_boost_db=2.0))
+
+
+def test_shelf_boost_respects_max_boost_db():
+    # A broad low-frequency deficit produces a low-shelf *boost* candidate.
+    # Shelves must honour max_boost_db just like peaking bands, otherwise room
+    # correction can emit an 8-12 dB shelf boost past the documented ceiling.
+    freqs = geometric_log_grid(20, 20000, 48)
+    eq_target = np.where(freqs <= 140.0, 8.0, 0.0)  # wants +8 dB in the bass
+    bands = fit_peq(freqs, eq_target, 48000, max_filters=6,
+                    max_gain_db=12.0, max_q=8.0, max_freq_hz=300.0,
+                    low_freq_q_cap=8.0, max_boost_db=2.0)
+    shelves = [b for b in bands if b.kind == 'lowshelf']
+    assert shelves, "expected a low-shelf boost candidate"
+    assert all(b.gain_db <= 2.0 + 1e-6 for b in bands), \
+        f"shelf/peak boost exceeded ceiling: {[(b.kind, b.gain_db) for b in bands]}"
+
+
+def test_default_low_freq_q_cap_holds_after_joint_refinement():
+    # Regression guard (design contract): on the default path (no low_freq_q_cap)
+    # the 2.0 Q ceiling below 120 Hz must hold on the RETURNED bands, i.e. even
+    # after joint Nelder-Mead refinement. Two narrow low modes force >=2 peaking
+    # bands so the refinement pass actually runs.
+    freqs = geometric_log_grid(20, 20000, 48)
+    eq_target = -(6.0 * np.exp(-0.5 * (np.log2(freqs / 45.0) / 0.12) ** 2)
+                  + 6.0 * np.exp(-0.5 * (np.log2(freqs / 80.0) / 0.12) ** 2))
+    bands = fit_peq(freqs, eq_target, 48000, max_filters=6, max_q=4.5)
+    low_bands = [b for b in bands if b.freq < 120.0]
+    assert len(low_bands) >= 2, "expected the refinement path to be exercised"
+    assert all(b.q <= 2.0 + 1e-6 for b in low_bands), \
+        f"low-freq Q exceeded default cap after refinement: {[(b.freq, b.q) for b in low_bands]}"

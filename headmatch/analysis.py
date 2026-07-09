@@ -176,9 +176,13 @@ def _channel_mismatch_db(left_db: np.ndarray, right_db: np.ndarray, mask: np.nda
 
 
 
-def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
-    recording, sr = read_wav(recording_wav)
-    recording = _coerce_measurement_audio(recording, recording_wav)
+def _analyze_stereo(recording: np.ndarray, sr: int, sweep_spec: SweepSpec) -> MeasurementResult:
+    """Shared measurement pipeline: align a coerced stereo capture against the
+    regenerated reference sweep and return a smoothed, 1 kHz-normalized FR.
+
+    Callers are responsible for coercing the raw audio to a 2-channel array
+    (headphone stereo vs. mono room capture) before invoking this.
+    """
     if sr != sweep_spec.sample_rate:
         raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
     min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
@@ -209,11 +213,12 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         **alignment_diagnostics,
         'left_roughness_db': _roughness_db(left_norm, left_s, mask),
         'right_roughness_db': _roughness_db(right_norm, right_s, mask),
+        # For mono room captures both channels are identical, so this is 0.0.
         'channel_mismatch_rms_db': _channel_mismatch_db(left_s, right_s, mask),
         'capture_rms_dbfs': float(20 * np.log10(max(np.sqrt(np.mean(aligned ** 2)), 1e-12))),
     }
 
-    result = MeasurementResult(
+    return MeasurementResult(
         freqs_hz=grid,
         left_db=left_s,
         right_db=right_s,
@@ -221,6 +226,12 @@ def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_di
         right_raw_db=right_norm,
         diagnostics=diagnostics,
     )
+
+
+def analyze_measurement(recording_wav: str | Path, sweep_spec: SweepSpec, out_dir: str | Path | None = None) -> MeasurementResult:
+    recording, sr = read_wav(recording_wav)
+    recording = _coerce_measurement_audio(recording, recording_wav)
+    result = _analyze_stereo(recording, sr, sweep_spec)
     if out_dir:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -250,48 +261,7 @@ def analyze_room_measurement(
     """
     recording, sr = read_wav(recording_wav)
     recording = _coerce_room_measurement_audio(recording, mic_channel)
-    if sr != sweep_spec.sample_rate:
-        raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
-    min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
-    if len(recording) < min_len:
-        raise ValueError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
-    from .signals import generate_log_sweep
-    _, reference = generate_log_sweep(sweep_spec)
-    padded_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s + sweep_spec.post_silence_s) * sweep_spec.sample_rate))
-    padded = np.zeros(padded_len)
-    start = int(round(sweep_spec.pre_silence_s * sweep_spec.sample_rate))
-    padded[start:start + len(reference)] = reference
-    aligned, alignment_diagnostics = _align_recording_to_reference(recording, padded)
-    left = aligned[:, 0]
-    right = aligned[:, 1]
-
-    freqs_l, left_raw = _fr_from_signals(padded, left, sr)
-    freqs_r, right_raw = _fr_from_signals(padded, right, sr)
-    grid = geometric_log_grid(20, min(20000, sr / 2 - 1), 48)
-    left_interp = np.interp(grid, freqs_l, left_raw)
-    right_interp = np.interp(grid, freqs_r, right_raw)
-    left_norm = left_interp - np.interp(1000.0, grid, left_interp)
-    right_norm = right_interp - np.interp(1000.0, grid, right_interp)
-    left_s = fractional_octave_smoothing(grid, left_norm, fraction=12)
-    right_s = fractional_octave_smoothing(grid, right_norm, fraction=12)
-
-    mask = _band_mask(grid)
-    diagnostics = {
-        **alignment_diagnostics,
-        'left_roughness_db': _roughness_db(left_norm, left_s, mask),
-        'right_roughness_db': _roughness_db(right_norm, right_s, mask),
-        'channel_mismatch_rms_db': 0.0,  # Mono: no channel mismatch
-        'capture_rms_dbfs': float(20 * np.log10(max(np.sqrt(np.mean(aligned ** 2)), 1e-12))),
-    }
-
-    result = MeasurementResult(
-        freqs_hz=grid,
-        left_db=left_s,
-        right_db=right_s,
-        left_raw_db=left_norm,
-        right_raw_db=right_norm,
-        diagnostics=diagnostics,
-    )
+    result = _analyze_stereo(recording, sr, sweep_spec)
     if out_dir:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)

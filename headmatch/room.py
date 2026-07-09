@@ -29,17 +29,12 @@ from .exporters import (
     export_equalizer_apo_parametric_txt,
 )
 from .io_utils import save_fr_csv, save_json
-from .mic_cal import MicCalibration, calibration_offset, load_mic_calibration
+from .mic_cal import MicCalibration, calibration_offset
 from .peq import PEQBand, fit_peq, peq_chain_response_db, FilterBudget
 from .pipeline_confidence import summarize_trustworthiness
 from .plots import render_fit_graphs
-from .signals import (
-    SweepSpec,
-    fractional_octave_smoothing,
-    geometric_log_grid,
-    standard_graphic_eq_grid,
-)
-from .targets import TargetCurve, create_flat_target, resample_curve
+from .signals import SweepSpec
+from .targets import TargetCurve, resample_curve
 
 
 # Constants from TASK-117
@@ -167,7 +162,8 @@ def _energy_average_responses(
     right_raw1_mag = 10 ** (result1.right_raw_db / 10.0)
     right_raw2_mag = 10 ** (result2.right_raw_db / 10.0)
     
-    # Energy average: sqrt of mean of squared magnitudes (power average)
+    # Energy (power) average: arithmetic mean of the linear power values
+    # (10^(dB/10)), converted back to dB below.
     left_avg = 0.5 * (left1_mag + left2_mag)
     right_avg = 0.5 * (right1_mag + right2_mag)
     left_raw_avg = 0.5 * (left_raw1_mag + left_raw2_mag)
@@ -193,21 +189,17 @@ def _energy_average_responses(
     )
 
 
-def _assess_room_fit_quality(
-    result: MeasurementResult,
-    eq_bands: list[PEQBand],
-    cutoff_hz: float,
-) -> dict:
-    """Assess the quality of the room fit and generate warnings."""
+def _assess_room_fit_quality(result: MeasurementResult) -> list[str]:
+    """Generate measurement-quality warnings for a room fit."""
     warnings = []
-    
+
     # Check for single-point measurement caveats
     if not result.diagnostics.get('two_position_averaged', False):
         warnings.append(
             "Single-point room measurement. Modal response varies with position. "
             "Consider averaging measurements from two or more listening positions."
         )
-    
+
     # Check for sub-cutoff issues
     min_freq = float(np.min(result.freqs_hz))
     if min_freq > 30.0:
@@ -215,80 +207,16 @@ def _assess_room_fit_quality(
             f"Low-frequency measurement starts at {min_freq:.1f} Hz. "
             "Room mode resolution below this frequency is limited."
         )
-    
-    # Channel mismatch check (should be 0 for mono, but check anyway)
-    channel_mismatch = result.diagnostics.get('channel_mismatch_rms_db', 0.0)
-    
-    # EQ boost assessment
-    if eq_bands:
-        eq_response = peq_chain_response_db(result.freqs_hz, 48000, eq_bands)
-        max_boost = float(np.max(eq_response))
-        max_cut = float(np.min(eq_response))
-    else:
-        max_boost = 0.0
-        max_cut = 0.0
-    
-    return {
-        'warnings': warnings,
-        'max_boost_db': max_boost,
-        'max_cut_db': max_cut,
-        'cutoff_hz': cutoff_hz,
-        'channel_mismatch_rms_db': channel_mismatch,
-    }
+
+    return warnings
 
 
 def _write_room_results_guide(
     out_dir: Path,
-    eq_bands: list[PEQBand],
     trust_summary: ConfidenceSummary | None,
     warnings: list[str],
 ) -> Path:
     """Write human-readable README.txt for room fit results."""
-    lines = [
-        'headmatch room measurement results',
-        '================================',
-        '',
-        'This folder contains the room measurement and EQ correction files.',
-        '',
-        'Files',
-        '-----',
-        ('room_fr.csv', 'Measured room frequency response (calibrated, averaged if two positions).'),
-        ('target_curve.csv', 'The target curve used for fitting (flat through modal band).'),
-        ('equalizer_apo.txt', 'Equalizer APO parametric preset for room correction.'),
-        ('camilladsp_full.yaml', 'Full CamillaDSP config template.'),
-        ('camilladsp_filters_only.yaml', 'Filters-only snippet for existing config.'),
-        ('fit_overview.svg', 'Room fit graph with cutoff marker.'),
-        ('run_summary.json', 'Machine-readable summary of the run.'),
-        ('fit_report.json', 'Detailed PEQ band list and diagnostics.'),
-        ('README.txt', 'This file.'),
-    ]
-    
-    lines.append('')
-    lines.append('Room-specific notes')
-    lines.append('-------------------')
-    
-    if warnings:
-        lines.append('Warnings:')
-        for w in warnings:
-            lines.append(f'  - {w}')
-    else:
-        lines.append('No warnings.')
-    
-    if trust_summary:
-        lines.append('')
-        lines.append('Trust Summary:')
-        lines.append(f"  Confidence: {trust_summary.label} ({trust_summary.score}/100)")
-        lines.append(f"  Headline: {trust_summary.headline}")
-    
-    lines.append('')
-    lines.append('Usage')
-    lines.append('-----')
-    lines.append('Load equalizer_apo.txt into Equalizer APO or')
-    lines.append('use the CamillaDSP YAML files with your DSP setup.')
-    lines.append('')
-    lines.append('Note: This correction is only valid through the fitted cutoff frequency.')
-    
-    # Create entries list for the body of README
     content = ['headmatch room measurement results', '=' * 40, '']
     content.append('This folder contains the room measurement and EQ correction files.')
     content.append('')
@@ -345,12 +273,13 @@ def run_room_fit(
     max_boost_db: float,
     target_csv: str | Path | None,
     out_dir: str | Path,
+    sweep_spec: SweepSpec,
 ) -> RoomFitResult:
     """Run full room measurement fitting workflow.
-    
+
     Orchestrates the room measurement analysis, target building,
     PEQ fitting, and artifact generation.
-    
+
     Args:
         recording: Path to primary room measurement WAV file
         recording_two: Optional path to second position measurement for averaging
@@ -359,7 +288,10 @@ def run_room_fit(
         max_boost_db: Maximum allowed boost (typically ROOM_MAX_BOOST_DB=2.0)
         target_csv: Optional custom target CSV path (uses flat target if None)
         out_dir: Output directory for results
-        
+        sweep_spec: Sweep specification the recording was made with. Must match
+            the sweep used at capture time (sample rate, duration, band); the
+            reference sweep is regenerated from it for deconvolution/alignment.
+
     Returns:
         RoomFitResult with all outputs and metadata
     """
@@ -379,17 +311,10 @@ def run_room_fit(
             "No microphone calibration: measurement accuracy is unverified."
         )
     
-    # Analyze room measurement(s)
-    sweep_spec = SweepSpec(
-        sample_rate=48000,
-        duration_s=8.0,
-        f_start=20.0,
-        f_end=20000.0,
-        pre_silence_s=0.5,
-        post_silence_s=1.0,
-        amplitude=0.2,
-    )
-    
+    # Analyze room measurement(s) using the caller's sweep spec so the
+    # regenerated reference matches how the recording was actually captured.
+    sample_rate = sweep_spec.sample_rate
+
     result1 = analyze_room_measurement(recording, sweep_spec, out_dir=None)
     
     # Energy-average two recordings if provided
@@ -411,20 +336,27 @@ def run_room_fit(
             diagnostics=result.diagnostics,
         )
     
-    # Build or load target
+    # Build or load target. Room targets are bass-only (≤ cutoff), so load
+    # user CSVs without the 1 kHz normalization that headphone targets require.
     if target_csv is not None:
         from .targets import load_curve
-        target = load_curve(target_csv)
+        target = load_curve(target_csv, normalize=False)
         target = resample_curve(target, result.freqs_hz)
     else:
         target = build_room_target(result.freqs_hz, sub_bass_rolloff=True)
-    
-    # Build EQ target: measured + target = desired
-    # For room: measured + eq = target => eq_target = target - measured
-    eq_target_db = target.values_db - result.left_db
-    
+
+    # Desired in-room response, honoring the target's semantics (must match how
+    # render_fit_graphs interprets the same target). A 'relative' target holds
+    # deltas about the measurement; an 'absolute' target is the response itself.
+    if target.semantics == 'relative':
+        desired_db = result.left_db + target.values_db
+    else:
+        desired_db = target.values_db
+
+    # For room: measured + eq = desired => eq_target = desired - measured
+    eq_target_db = desired_db - result.left_db
+
     # Fit room bands with constraints
-    sample_rate = 48000
     bands = fit_room_bands(
         result.freqs_hz,
         eq_target_db,
@@ -436,17 +368,18 @@ def run_room_fit(
     
     # Duplicate for stereo (mono room measurement uses same EQ for both channels)
     eq_bands = bands
-    
+
     # Assess fit quality and generate warnings
-    quality_assessment = _assess_room_fit_quality(result, eq_bands, cutoff_hz)
-    fit_warnings.extend(quality_assessment['warnings'])
-    
-    # Compute predicted error
+    fit_warnings.extend(_assess_room_fit_quality(result))
+
+    # Compute predicted error against the desired response (semantics honored above)
     eq_response = peq_chain_response_db(result.freqs_hz, sample_rate, eq_bands)
-    residual = result.left_db + eq_response - target.values_db
-    
-    # Compute error only within the fitted band (up to cutoff)
-    fit_mask = result.freqs_hz <= cutoff_hz * 1.5  # Include some above for context
+    residual = result.left_db + eq_response - desired_db
+
+    # Compute error only within the corrected band (≤ cutoff). Bands are limited
+    # to ≤ cutoff, so including higher frequencies would inflate the error with
+    # deviations the fit never attempted to correct.
+    fit_mask = result.freqs_hz <= cutoff_hz
     if np.any(fit_mask):
         predicted_rms = float(np.sqrt(np.mean(residual[fit_mask] ** 2)))
         predicted_max = float(np.max(np.abs(residual[fit_mask])))
@@ -544,7 +477,7 @@ def run_room_fit(
     save_json(out_dir / 'fit_report.json', fit_report)
     
     # Write README
-    _write_room_results_guide(out_dir, eq_bands, trust_summary, fit_warnings)
+    _write_room_results_guide(out_dir, trust_summary, fit_warnings)
     
     return RoomFitResult(
         result=result,

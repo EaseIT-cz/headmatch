@@ -233,7 +233,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     p.add_argument("--mic-cal", default=None, help="Path to microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
     p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz (default: 300).")
     p.add_argument("--recording-two", default=None, help="Optional second position recording WAV file.")
-    p.add_argument("--target-csv", default=config.preferred_target_csv, help="Optional target curve CSV.")
+    p.add_argument("--target-csv", default=None, help="Optional room target curve CSV (bass-only, e.g. docs/examples/targets/room_flat.csv). If omitted, fit toward a flat-through-modal-band room target.")
     p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
     p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
 
@@ -753,6 +753,7 @@ def main(argv: list[str] | None = None) -> None:
                 max_boost_db=getattr(args, "max_boost_db", 2.0),
                 target_csv=getattr(args, "target_csv", None),
                 out_dir=out_dir,
+                sweep_spec=spec_from_args(args),
             )
             print(f"Room correction EQ written to {out_dir}.")
         elif args.cmd == "fit":
