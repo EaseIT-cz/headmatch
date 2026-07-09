@@ -14,6 +14,29 @@ PLOT_Y_MIN = -18.0
 PLOT_Y_MAX = 18.0
 
 
+def _cutoff_x_position(cutoff_hz: float, freqs: np.ndarray, width: float) -> float | None:
+    """Calculate x-coordinate for cutoff frequency on log axis."""
+    if cutoff_hz < freqs[0] or cutoff_hz > freqs[-1]:
+        return None
+    log_min = np.log10(float(freqs[0]))
+    log_max = np.log10(float(freqs[-1]))
+    if np.isclose(log_max, log_min):
+        return None
+    scale = width / (log_max - log_min)
+    return (np.log10(cutoff_hz) - log_min) * scale
+
+
+def _cutoff_region_svg(cutoff_x: float, plot_x: float, plot_y: float, plot_w: float, plot_h: float) -> list[str]:
+    """Generate SVG elements for the cutoff marker and shaded region."""
+    x = plot_x + cutoff_x
+    elements: list[str] = []
+    # Shaded region to the right of cutoff (measured-only region)
+    elements.append(f'<rect x="{x:.2f}" y="{plot_y:.2f}" width="{plot_x + plot_w - x:.2f}" height="{plot_h:.2f}" fill="#f3f4f6" stroke="none" />')
+    # Vertical line at cutoff
+    elements.append(f'<line x1="{x:.2f}" y1="{plot_y:.2f}" x2="{x:.2f}" y2="{plot_y + plot_h:.2f}" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="3 3" />')
+    return elements
+
+
 def _log_x_positions(freqs: np.ndarray, width: float, domain: np.ndarray | None = None) -> np.ndarray:
     source = domain if domain is not None else freqs
     log_min = np.log10(float(source[0]))
@@ -67,9 +90,13 @@ def _grid_lines(freqs: np.ndarray, plot_x: float, plot_y: float, plot_w: float, 
     return lines
 
 
-def _draw_panel(title: str, freqs: np.ndarray, series: list[tuple[str, np.ndarray, str, str]], x: float, y: float, w: float, h: float) -> list[str]:
+def _draw_panel(title: str, freqs: np.ndarray, series: list[tuple[str, np.ndarray, str, str]], x: float, y: float, w: float, h: float, cutoff_hz: float | None = None) -> list[str]:
     parts = [f'<text x="{x:.2f}" y="{y - 14:.2f}" font-size="16" font-weight="bold">{escape(title)}</text>']
     parts.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" fill="white" stroke="#9ca3af" />')
+    if cutoff_hz is not None:
+        cutoff_x = _cutoff_x_position(cutoff_hz, freqs, w)
+        if cutoff_x is not None:
+            parts.extend(_cutoff_region_svg(cutoff_x, x, y, w, h))
     parts.extend(_grid_lines(freqs, x, y, w, h))
     for label, values, color, dash in series:
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ''
@@ -100,6 +127,7 @@ def render_fit_graphs(
     sample_rate: int,
     left_bands: list[PEQBand],
     right_bands: list[PEQBand],
+    cutoff_hz: float | None = None,
 ) -> dict[str, str]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -139,6 +167,7 @@ def render_fit_graphs(
             80,
             1030,
             250,
+            cutoff_hz=cutoff_hz,
         )
     )
     overview_body.extend(
@@ -155,6 +184,7 @@ def render_fit_graphs(
             390,
             1030,
             250,
+            cutoff_hz=cutoff_hz,
         )
     )
     _write_svg(Path(paths['overview']), 1180, 690, 'HeadMatch fit overview', overview_body)
@@ -181,6 +211,7 @@ def render_fit_graphs(
                 80,
                 1030,
                 250,
+                cutoff_hz=cutoff_hz,
             )
         )
         _write_svg(Path(paths[side]), 1180, 390, f'HeadMatch {side} fit', body)
