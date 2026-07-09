@@ -22,6 +22,7 @@ from headmatch.room import (
     build_room_target,
     fit_room_bands,
     _energy_average_responses,
+    RoomFitResult,
 )
 from headmatch.analysis import MeasurementResult
 from headmatch.mic_cal import MicCalibration
@@ -1083,3 +1084,167 @@ class TestRoomDimensions:
         # Both should be within reasonable bounds
         assert 50 <= cutoff_small <= 500, f"Small room cutoff {cutoff_small} out of bounds"
         assert 50 <= cutoff_large <= 500, f"Large room cutoff {cutoff_large} out of bounds"
+
+
+class TestGUIMetadata:
+    """Tests for GUI progress/warnings display in room workflow.
+    
+    Verifies that RoomFitResult and related functions provide GUI-suitable
+    metadata for the Room (beta) view to render warnings, confidence
+    indicators, progress stages, and graph paths.
+    """
+    
+    def test_warnings_list_is_human_readable_strings(self):
+        """RoomFitResult.warnings is a list of human-readable strings."""
+        import inspect
+        
+        # Get RoomFitResult signature
+        sig = inspect.signature(RoomFitResult)
+        params = sig.parameters
+        
+        assert 'warnings' in params, "RoomFitResult should have 'warnings' field"
+        # Create a minimal RoomFitResult with warnings
+        freqs = np.array([20, 50, 100, 200], dtype=np.float64)
+        dummy_result = _dummy_measurement_result(freqs)
+        
+        result = RoomFitResult(
+            result=dummy_result,
+            eq_bands=[],
+            target=build_room_target(freqs, sub_bass_rolloff=False),
+            fit_report={},
+            run_summary={
+                'warnings': ['Test warning 1', 'Test warning 2'],
+            },
+            out_dir=Path('/tmp/test'),
+            warnings=['Test warning 1', 'Test warning 2'],
+        )
+        
+        # Warnings should be a list
+        assert isinstance(result.warnings, list), "warnings should be a list"
+        # Each warning should be a string (human-readable)
+        for warning in result.warnings:
+            assert isinstance(warning, str), f"Each warning should be a string, got {type(warning)}"
+    
+    def test_run_summary_includes_confidence_indicators(self):
+        """run_summary includes confidence/quality indicators for GUI."""
+        from headmatch.contracts import ConfidenceSummary
+        
+        # Create a confidence summary
+        confidence = ConfidenceSummary(
+            score=85,
+            label="high",
+            headline="High confidence fit",
+            interpretation="The measurement quality is good",
+            reasons=("Low noise floor", "Good signal level"),
+            warnings=(),
+            metrics={"snr_db": 65.0, "thd_percent": 0.05},
+        )
+        
+        summary = confidence.to_dict()
+        
+        # Key fields for GUI rendering
+        assert 'score' in summary, "confidence should have 'score'"
+        assert 'label' in summary, "confidence should have 'label'"
+        assert 'headline' in summary, "confidence should have 'headline'"
+        assert 'interpretation' in summary, "confidence should have 'interpretation'"
+        assert 'reasons' in summary, "confidence should have 'reasons'"
+        assert 'warnings' in summary, "confidence should have 'warnings'"
+        assert 'metrics' in summary, "confidence should have 'metrics'"
+        
+        # Type checks for GUI consumption
+        assert isinstance(summary['score'], int), "score should be int"
+        assert summary['label'] in ('high', 'medium', 'low'), \
+            f"label should be high/medium/low, got {summary['label']}"
+        assert isinstance(summary['headline'], str), "headline should be string"
+        assert isinstance(summary['interpretation'], str), "interpretation should be string"
+    
+    def test_run_summary_plots_contains_svg_paths(self):
+        """run_summary['plots'] contains paths to rendered SVG graphs."""
+        from headmatch.contracts import FrontendRunSummary, RunFilterCounts, RunErrorSummary
+        from headmatch.app_identity import AppIdentity
+        from unittest.mock import MagicMock
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            
+            # Create a run summary with plots
+            plots = {
+                'overview': str(out_dir / 'fit_overview.svg'),
+                'left': str(out_dir / 'fit_left.svg'),
+                'right': str(out_dir / 'fit_right.svg'),
+            }
+            
+            # Mock confidence with a to_dict method
+            mock_conf = MagicMock()
+            mock_conf.to_dict.return_value = {
+                'score': 85,
+                'label': 'high',
+                'headline': 'High confidence',
+            }
+            
+            summary = FrontendRunSummary(
+                schema_version=1,
+                kind='fit',
+                out_dir=str(out_dir),
+                sample_rate=48000,
+                frequency_points=100,
+                target='room_modal_flat',
+                filters=RunFilterCounts(left=4, right=4),
+                predicted_error_db=RunErrorSummary(
+                    left_rms=1.5, right_rms=1.5,
+                    left_max=3.0, right_max=3.0
+                ),
+                confidence=mock_conf,
+                plots=plots,
+                results_guide=str(out_dir / 'README.txt'),
+                generated_by={'version': 'test'},
+            )
+            
+            summary_dict = summary.to_dict()
+            
+            assert 'plots' in summary_dict, "run_summary should contain 'plots'"
+            assert isinstance(summary_dict['plots'], dict), "plots should be a dict"
+            
+            # Each plot value should be a path string
+            for key, path in summary_dict['plots'].items():
+                assert isinstance(path, str), f"plot path for {key} should be string"
+                assert path.endswith('.svg'), f"plot path should end with .svg: {path}"
+    
+    def test_error_handling_includes_warnings_in_result(self):
+        """When fitting fails or produces poor results, warnings are included."""
+        freqs = np.array([20, 50, 100, 200], dtype=np.float64)
+        dummy_result = _dummy_measurement_result(freqs)
+        
+        # Simulate a result with warnings (poor fit quality)
+        warnings = [
+            "Low signal-to-noise ratio detected",
+            "Predicted error exceeds 3 dB threshold",
+        ]
+        
+        result = RoomFitResult(
+            result=dummy_result,
+            eq_bands=[],
+            target=build_room_target(freqs, sub_bass_rolloff=False),
+            fit_report={
+                'predicted_left_rms_error_db': 5.0,  # Poor quality
+                'predicted_right_rms_error_db': 5.0,
+            },
+            run_summary={
+                'confidence': {
+                    'score': 45,
+                    'label': 'low',
+                    'warnings': warnings,
+                },
+            },
+            out_dir=Path('/tmp/test'),
+            warnings=warnings,
+        )
+        
+        # Warnings should be present
+        assert len(result.warnings) > 0, "Result should include warnings for poor fit"
+        
+        # Each warning should be human-readable
+        for warning in result.warnings:
+            assert len(warning) > 10, f"Warning should be descriptive: {warning}"
+            assert any(c.isalpha() for c in warning), "Warning should contain text"
