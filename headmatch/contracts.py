@@ -22,6 +22,7 @@ WorkflowName = Literal[
     "clone-target",
     "hearing-test",
     "hearing-fit",
+    "room",
 ]
 
 RunMode = Literal["online", "offline", "analysis-only", "clone-target"]
@@ -34,6 +35,7 @@ class FrontendConfig:
     schema_version: int = CONFIG_SCHEMA_VERSION
     default_output_dir: Optional[str] = None
     preferred_target_csv: Optional[str] = None
+    preferred_mic_cal_csv: Optional[str] = None
     pipewire_output_target: Optional[str] = None
     pipewire_input_target: Optional[str] = None
     sample_rate: int = 48000
@@ -131,6 +133,10 @@ class FrontendRunSummary:
     results_guide: str
     eq_clipping_assessment: dict[str, Any] | None = None
     filter_budget: "FilterBudget | None" = None
+    # Room workflow fields (optional, room-specific)
+    cutoff_hz: float | None = None
+    mic_cal_applied: bool | None = None
+    single_point: bool | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -153,6 +159,9 @@ class FrontendRunSummary:
                 "profile": self.filter_budget.profile,
             },
             "eq_clipping_assessment": self.eq_clipping_assessment,
+            "cutoff_hz": self.cutoff_hz,
+            "mic_cal_applied": self.mic_cal_applied,
+            "single_point": self.single_point,
         }
 
     @classmethod
@@ -187,4 +196,7 @@ class FrontendRunSummary:
             plots=dict(payload.get("plots", {})),
             results_guide=payload.get("results_guide", str(Path(payload["out_dir"]) / "README.txt")),
             filter_budget=filter_budget,
+            cutoff_hz=payload.get("cutoff_hz"),
+            mic_cal_applied=payload.get("mic_cal_applied"),
+            single_point=payload.get("single_point"),
         )

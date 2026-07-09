@@ -546,3 +546,90 @@ def run_room_fit(
         out_dir=out_dir,
         warnings=fit_warnings,
     )
+
+
+def prepare_room_measurement(
+    spec: SweepSpec,
+    mic_cal: MicCalibration | None,
+    cutoff_hz: float,
+    max_boost_db: float,
+    listen_position_two: bool,
+    out_dir: Path,
+) -> dict:
+    """Prepare offline measurement package for room correction.
+
+    Generates a sweep WAV and metadata JSON for manual room measurement.
+    The generated package can be played through speakers and recorded
+    at the listening position(s).
+
+    Args:
+        spec: Sweep specification for the measurement signal
+        mic_cal: Optional microphone calibration for field measurements
+        cutoff_hz: Maximum frequency for EQ correction
+        max_boost_db: Maximum allowed boost
+        listen_position_two: If True, prepare for two-position measurement
+        out_dir: Directory to write output files
+
+    Returns:
+        Dictionary with file paths and configuration
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    from .measure import render_sweep_file, save_json
+    from .app_identity import get_app_identity
+
+    sweep_wav = out_dir / "room_sweep.wav"
+    metadata_json = out_dir / "room_measurement.json"
+
+    render_sweep_file(spec, sweep_wav)
+
+    identity = get_app_identity()
+
+    mic_cal_path = mic_cal.source_file if mic_cal else None
+
+    metadata = {
+        "generated_by": identity.as_metadata(),
+        "mode": "room_offline",
+        "recommended_recorder": "UMIK-1 with USB interface",
+        "mic_calibration": {
+            "applied": mic_cal is not None,
+            "source_file": str(mic_cal_path) if mic_cal_path else None,
+        },
+        "measurement_config": {
+            "cutoff_hz": cutoff_hz,
+            "max_boost_db": max_boost_db,
+            "single_point": not listen_position_two,
+        },
+        "sweep": {
+            "sample_rate": spec.sample_rate,
+            "duration_s": spec.duration_s,
+            "f_start": spec.f_start,
+            "f_end": spec.f_end,
+            "pre_silence_s": spec.pre_silence_s,
+            "post_silence_s": spec.post_silence_s,
+            "amplitude": spec.amplitude,
+        },
+        "instructions": [
+            "Connect the measurement microphone to a USB audio interface.",
+            "Position the microphone at the primary listening position (ear height).",
+            "Disable auto gain, limiter, low cut, and any other processing.",
+            "Ensure the room is quiet during measurement.",
+            *([
+                "Record sweep at position 1, then move mic and repeat for position 2."
+            ] if listen_position_two else [
+                "Record the sweep from primary listening position only."
+            ]),
+        ],
+        "files": {
+            "sweep_wav": str(sweep_wav),
+        },
+    }
+
+    save_json(metadata_json, metadata)
+
+    return {
+        "sweep_wav": sweep_wav,
+        "metadata_json": metadata_json,
+        "config": metadata["measurement_config"],
+    }
