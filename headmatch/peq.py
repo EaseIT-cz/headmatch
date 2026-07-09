@@ -324,9 +324,9 @@ def _edge_shelf_candidate(freqs_hz: np.ndarray, eq_target: np.ndarray, *, kind: 
     return PEQBand(kind, freq, float(np.clip(edge_mean, -max_gain_db, max_gain_db)), 0.7, slope=0.7)  # type: ignore[arg-type]
 
 
-def _max_q_for_frequency(freq_hz: float, requested_max_q: float) -> float:
+def _max_q_for_frequency(freq_hz: float, requested_max_q: float, low_freq_q_cap: float = 2.0) -> float:
     if freq_hz < 120:
-        return min(requested_max_q, 2.0)
+        return min(requested_max_q, low_freq_q_cap)
     if freq_hz > 6000:
         return min(requested_max_q, 3.0)
     return requested_max_q
@@ -351,9 +351,15 @@ def _peaking_candidate(
     max_gain_db: float,
     max_q: float,
     raw_residual: np.ndarray | None = None,
+    max_freq_hz: float | None = None,
+    low_freq_q_cap: float = 2.0,
+    max_boost_db: float | None = None,
 ) -> PEQBand:
     peak_db = float(residual[idx])
-    fc = float(np.clip(objective.freqs_hz[idx], 35.0, objective.sample_rate / 2 - 500.0))
+    freq_upper = objective.sample_rate / 2 - 500.0
+    if max_freq_hz is not None:
+        freq_upper = min(freq_upper, max_freq_hz)
+    fc = float(np.clip(objective.freqs_hz[idx], 35.0, freq_upper))
 
     # Use raw (unsmoothed) residual for bandwidth estimation when available,
     # so narrow features are not broadened by the 10th-octave smoother.
@@ -368,9 +374,12 @@ def _peaking_candidate(
     f1 = max(objective.freqs_hz[l], 20.0)
     f2 = min(objective.freqs_hz[r], objective.sample_rate / 2 - 100)
     bw_oct = max(np.log2(f2 / f1), 0.12)
-    q_limit = _max_q_for_frequency(fc, max_q)
+    q_limit = _max_q_for_frequency(fc, max_q, low_freq_q_cap=low_freq_q_cap)
     q = float(np.clip(1.0 / bw_oct, 0.45, q_limit))
-    gain = float(np.clip(peak_db, -max_gain_db, max_gain_db))
+    gain_upper = max_gain_db
+    if max_boost_db is not None:
+        gain_upper = min(gain_upper, max_boost_db)
+    gain = float(np.clip(peak_db, -max_gain_db, gain_upper))
     if q >= 2.8:
         gain *= 0.85
     return PEQBand("peaking", fc, gain, q)
@@ -386,6 +395,9 @@ def _select_peaking_candidate(
     min_peak_db: float,
     min_gain_db: float,
     allow_nearby_same_sign: bool,
+    max_freq_hz: float | None = None,
+    low_freq_q_cap: float = 2.0,
+    max_boost_db: float | None = None,
 ) -> PEQBand | None:
     raw_residual = objective.raw_residual_db(bands)
     weighted = residual * objective.weights
@@ -393,7 +405,10 @@ def _select_peaking_candidate(
         peak_db = float(weighted[idx] / objective.weights[idx])
         if abs(peak_db) < min_peak_db:
             break
-        candidate = _peaking_candidate(objective, residual, int(idx), max_gain_db=max_gain_db, max_q=max_q, raw_residual=raw_residual)
+        candidate = _peaking_candidate(
+            objective, residual, int(idx), max_gain_db=max_gain_db, max_q=max_q,
+            raw_residual=raw_residual, max_freq_hz=max_freq_hz, low_freq_q_cap=low_freq_q_cap,
+            max_boost_db=max_boost_db)
         if abs(candidate.gain_db) < min_gain_db:
             continue
         if not allow_nearby_same_sign and _nearby_same_sign_band_exists(bands, candidate):
@@ -408,6 +423,9 @@ def _refine_bands_jointly(
     *,
     max_gain_db: float,
     max_q: float,
+    max_freq_hz: float | None = None,
+    max_boost_db: float | None = None,
+    low_freq_q_cap: float = 2.0,
 ) -> List[PEQBand]:
     """Joint Nelder-Mead refinement of peaking bands only. Shelves stay fixed."""
     from scipy.optimize import minimize
@@ -418,10 +436,17 @@ def _refine_bands_jointly(
 
     def _bands_from_params(params: np.ndarray) -> List[PEQBand]:
         result = list(bands)
+        freq_upper = objective.sample_rate / 2 - 200
+        if max_freq_hz is not None:
+            freq_upper = min(freq_upper, max_freq_hz)
+        gain_upper = max_gain_db
+        if max_boost_db is not None:
+            gain_upper = min(gain_upper, max_boost_db)
         for pi, i in enumerate(peaking_indices):
-            freq = float(np.clip(params[pi * 3], 25.0, objective.sample_rate / 2 - 200))
-            gain = float(np.clip(params[pi * 3 + 1], -max_gain_db, max_gain_db))
-            q = float(np.clip(params[pi * 3 + 2], 0.3, max_q))
+            freq = float(np.clip(params[pi * 3], 25.0, freq_upper))
+            gain = float(np.clip(params[pi * 3 + 1], -max_gain_db, gain_upper))
+            q_limit = _max_q_for_frequency(freq, max_q, low_freq_q_cap=low_freq_q_cap)
+            q = float(np.clip(params[pi * 3 + 2], 0.3, q_limit))
             result[i] = PEQBand('peaking', freq, gain, q)
         return result
 
@@ -454,6 +479,9 @@ def fit_peq(
     max_q: float = 4.5,
     *,
     budget: FilterBudget | None = None,
+    max_freq_hz: float | None = None,
+    low_freq_q_cap: float | None = None,
+    max_boost_db: float | None = None,
 ) -> List[PEQBand]:
     """Greedy fitter for PEQ and fixed-band GraphicEQ models."""
     budget = (budget or FilterBudget(max_filters=max_filters)).normalized()
@@ -468,6 +496,7 @@ def fit_peq(
     if budget.family != "peq":
         raise ValueError(f"Unsupported filter family: {budget.family}")
 
+    low_cap = 2.0 if low_freq_q_cap is None else low_freq_q_cap
     objective = FitObjective.from_target(freqs_hz, target_eq_db, sample_rate)
     bands: List[PEQBand] = []
 
@@ -493,6 +522,9 @@ def fit_peq(
             min_peak_db=0.75,
             min_gain_db=0.6,
             allow_nearby_same_sign=False,
+            max_freq_hz=max_freq_hz,
+            low_freq_q_cap=low_cap,
+            max_boost_db=max_boost_db,
         )
         if candidate is not None:
             bands.append(candidate)
@@ -509,6 +541,9 @@ def fit_peq(
             min_peak_db=0.0,
             min_gain_db=0.0,
             allow_nearby_same_sign=False,
+            max_freq_hz=max_freq_hz,
+            low_freq_q_cap=low_cap,
+            max_boost_db=max_boost_db,
         )
         if candidate is None:
             candidate = _select_peaking_candidate(
@@ -520,6 +555,9 @@ def fit_peq(
                 min_peak_db=0.0,
                 min_gain_db=0.0,
                 allow_nearby_same_sign=True,
+                max_freq_hz=max_freq_hz,
+                low_freq_q_cap=low_cap,
+                max_boost_db=max_boost_db,
             )
         if candidate is None:
             break
@@ -531,5 +569,7 @@ def fit_peq(
     # Nelder-Mead to reduce total weighted residual. This catches cases
     # where greedy placement left suboptimal parameter combinations.
     if len(bands) >= 2:
-        bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q)
+        bands = _refine_bands_jointly(objective, bands, max_gain_db=max_gain_db, max_q=max_q,
+                                      max_freq_hz=max_freq_hz, max_boost_db=max_boost_db,
+                                      low_freq_q_cap=low_freq_q_cap if low_freq_q_cap is not None else 2.0)
     return bands
