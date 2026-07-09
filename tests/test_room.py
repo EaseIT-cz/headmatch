@@ -513,6 +513,186 @@ class TestRoomConstants:
         assert ROOM_MAX_BOOST_DB == 2.0
 
 
+class TestFullRangeTilt:
+    """Tests for full-range tilt EQ above cutoff (Phase 2 item 4).
+    
+    Optional, heavily smoothed broadband tilt/target above the cutoff
+    for gentle house-curve shaping. Must be explicitly opt-in with
+    guardrails to prevent chasing narrow above-cutoff features.
+    """
+    
+    def test_function_exists(self):
+        """fit_full_range_tilt function exists in room module."""
+        from headmatch.room import fit_full_range_tilt
+        assert callable(fit_full_range_tilt)
+    
+    def test_opt_in_only_tilt_not_applied_by_default(self):
+        """Tilt EQ is only applied when enable_tilt=True parameter is passed."""
+        from headmatch.room import fit_room_bands, fit_full_range_tilt
+        
+        freqs = np.geomspace(20, 20000, 500)
+        eq_target = np.zeros_like(freqs)
+        
+        # Without enable_tilt, no tilt bands should be generated
+        bands_no_tilt = fit_room_bands(
+            freqs_hz=freqs,
+            eq_target_db=eq_target,
+            sample_rate=48000,
+            cutoff_hz=300.0,
+        )
+        
+        # All bands should be below cutoff
+        for band in bands_no_tilt:
+            assert band.freq <= 300.0, f"Unexpected above-cutoff band at {band.freq} Hz"
+        
+        # With enable_tilt=True, should include tilt bands above cutoff
+        bands_with_tilt = fit_room_bands(
+            freqs_hz=freqs,
+            eq_target_db=eq_target,
+            sample_rate=48000,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # Should have additional bands above cutoff
+        above_cutoff_bands = [b for b in bands_with_tilt if b.freq > 300.0]
+        assert len(above_cutoff_bands) > 0, "Expected tilt bands above cutoff when enable_tilt=True"
+    
+    def test_above_cutoff_domain_only(self):
+        """Tilt bands only generated for frequencies > cutoff_hz."""
+        from headmatch.room import fit_full_range_tilt
+        
+        freqs = np.geomspace(20, 20000, 500)
+        # Simulate a gentle downtrend for house curve
+        response_db = -3.0 * np.log10(freqs / 1000.0)  # -3 dB per decade
+        
+        tilt_bands = fit_full_range_tilt(
+            freqs_hz=freqs,
+            measured_db=response_db,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # All tilt bands must be above cutoff
+        for band in tilt_bands:
+            assert band.freq > 300.0, f"Tilt band at {band.freq} Hz should be above cutoff 300 Hz"
+    
+    def test_smooth_constraint_low_q_only(self):
+        """Above-cutoff bands must have very low Q (Q ≤ 2) for smooth shaping."""
+        from headmatch.room import fit_full_range_tilt
+        
+        freqs = np.geomspace(20, 20000, 500)
+        response_db = -2.0 * np.log10(freqs / 1000.0)
+        
+        tilt_bands = fit_full_range_tilt(
+            freqs_hz=freqs,
+            measured_db=response_db,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # All tilt bands should have very low Q
+        for band in tilt_bands:
+            assert band.q <= 2.0, f"Tilt band Q={band.q} exceeds soft Q limit (should be ≤ 2 for smooth shaping)"
+    
+    def test_magnitude_limit_safe_gain_range(self):
+        """Tilt gain limited to safe range (±6 dB maximum)."""
+        from headmatch.room import fit_full_range_tilt
+        
+        freqs = np.geomspace(20, 20000, 500)
+        response_db = np.zeros_like(freqs)
+        
+        tilt_bands = fit_full_range_tilt(
+            freqs_hz=freqs,
+            measured_db=response_db,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # All tilt gains must be within ±6 dB
+        for band in tilt_bands:
+            assert abs(band.gain_db) <= 6.0, f"Tilt gain {band.gain_db} dB exceeds ±6 dB limit"
+    
+    def test_integration_includes_modal_and_tilt_bands(self):
+        """With enable_tilt=True, output includes both below-cutoff modal and above-cutoff tilt bands."""
+        from headmatch.room import fit_room_bands
+        
+        freqs = np.geomspace(20, 20000, 500)
+        # Create a response with modal issues below 300 Hz and gentle downtrend above
+        eq_target = np.zeros_like(freqs)
+        # Add modal peak at 80 Hz
+        eq_target += 8.0 * np.exp(-((freqs - 80) ** 2) / (2 * 20 ** 2))
+        # Above-cutoff: gentle downtrend
+        mask_above = freqs > 300
+        eq_target[mask_above] += -3.0 * np.log10(freqs[mask_above] / 1000.0)
+        
+        bands = fit_room_bands(
+            freqs_hz=freqs,
+            eq_target_db=eq_target,
+            sample_rate=48000,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # Should have bands in both ranges
+        below_cutoff = [b for b in bands if b.freq <= 300.0]
+        above_cutoff = [b for b in bands if b.freq > 300.0]
+        
+        assert len(below_cutoff) > 0, "Expected modal correction bands below cutoff"
+        assert len(above_cutoff) > 0, "Expected tilt bands above cutoff"
+        
+        # Modal correction bands can have higher Q (e.g., Q=3-12)
+        # Tilt bands must have low Q
+        for band in above_cutoff:
+            assert band.q <= 2.0, f"Above-cutoff tilt band should have Q ≤ 2, got {band.q}"
+    
+    def test_guardrail_ignores_sharp_above_cutoff_features(self):
+        """Sharp above-cutoff features (>±3 dB at high Q) are ignored/not fitted."""
+        from headmatch.room import fit_full_range_tilt, fit_room_bands
+        
+        freqs = np.geomspace(20, 20000, 500)
+        # Create a response with:
+        # - Gentle trend above cutoff (acceptable)
+        # - Sharp +5 dB peak at 1 kHz with narrow width (should be ignored)
+        response_db = np.zeros_like(freqs)
+        # Gentle trend
+        mask_above = freqs > 300
+        response_db[mask_above] = -2.0 * np.log10(freqs[mask_above] / 1000.0)
+        # Sharp peak at 1 kHz (high Q feature - should be ignored)
+        response_db += 5.0 * np.exp(-((freqs - 1000) ** 2) / (2 * 30 ** 2))
+        
+        tilt_bands = fit_full_range_tilt(
+            freqs_hz=freqs,
+            measured_db=response_db,
+            cutoff_hz=300.0,
+            enable_tilt=True,
+        )
+        
+        # The fit should not create a narrow band to address the 1 kHz peak
+        # All tilt bands should be low-Q (smooth)
+        for band in tilt_bands:
+            assert band.q <= 2.0, f"Sharp features should be ignored; band Q={band.q} exceeds 2"
+            # Band should not be a sharp correction at ~1 kHz
+            if abs(band.freq - 1000) < 100:
+                assert abs(band.gain_db) <= 3.0, f"Sharp peak correction should be limited, got {band.gain_db} dB"
+    
+    def test_enable_tilt_false_returns_empty(self):
+        """enable_tilt=False returns empty band list."""
+        from headmatch.room import fit_full_range_tilt
+        
+        freqs = np.geomspace(20, 20000, 500)
+        response_db = np.zeros_like(freqs)
+        
+        bands = fit_full_range_tilt(
+            freqs_hz=freqs,
+            measured_db=response_db,
+            cutoff_hz=300.0,
+            enable_tilt=False,
+        )
+        
+        assert bands == [], f"Expected empty list when enable_tilt=False, got {bands}"
+
+
 class TestRoomDimensions:
     """Tests for estimate_cutoff_from_dimensions function.
     
