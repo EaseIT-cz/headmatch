@@ -586,7 +586,7 @@ def prepare_room_measurement(
 
     identity = get_app_identity()
 
-    mic_cal_path = mic_cal.source_file if mic_cal else None
+    mic_cal_path = mic_cal.source if mic_cal else None
 
     metadata = {
         "generated_by": identity.as_metadata(),
