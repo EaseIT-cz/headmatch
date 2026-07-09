@@ -12,6 +12,8 @@ EXAMPLE_TARGETS = [
     "ief_neutral_crinacle_example.csv",
     "v_shape_example.csv",
     "flat_studio_example.csv",
+    "room_flat.csv",
+    "room_house_curve.csv",
 ]
 
 

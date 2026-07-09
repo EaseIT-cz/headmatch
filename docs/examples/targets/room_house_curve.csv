@@ -1,0 +1,20 @@
+# Room target: gentle downward tilt house curve for overlay reference
+# headmatch_target_semantics=absolute
+frequency_hz,target_db
+20,4.0
+30,3.5
+40,3.0
+50,2.5
+63,2.0
+80,1.5
+100,1.0
+125,0.5
+160,0.0
+200,-0.5
+250,-1.0
+315,-1.5
+400,-2.0
+500,-2.5
+630,-3.0
+800,-3.5
+1000,-4.0
