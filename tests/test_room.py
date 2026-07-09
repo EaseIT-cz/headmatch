@@ -504,6 +504,240 @@ class TestEnergyAverageResponsesN:
             pytest.xfail("energy_average_responses_n not yet implemented")
 
 
+class TestPerSpeakerStereo:
+    """Tests for per-channel room fit (Phase 2 item 5).
+    
+    Verifies that run_room_fit supports independent L/R analysis and fitting
+    for rooms where the two speakers' modal interaction differs at the
+    listening position. This is a separate correction path from independent
+    channel measurements.
+    """
+    
+    def _create_asymmetric_measurement_result(
+        self,
+        freqs_hz: np.ndarray,
+        left_peak_db: float = 0.0,
+        left_peak_freq: float = 60.0,
+        right_peak_db: float = 0.0,
+        right_peak_freq: float = 100.0,
+    ) -> MeasurementResult:
+        """Create a measurement with asymmetric L/R modal responses."""
+        base_response = np.zeros_like(freqs_hz, dtype=np.float64)
+        
+        # Left channel peak
+        left_response = base_response.copy()
+        if left_peak_db > 0:
+            left_response += left_peak_db * np.exp(
+                -((freqs_hz - left_peak_freq) ** 2) / (2 * 20 ** 2)
+            )
+        
+        # Right channel peak (different frequency and/or magnitude)
+        right_response = base_response.copy()
+        if right_peak_db > 0:
+            right_response += right_peak_db * np.exp(
+                -((freqs_hz - right_peak_freq) ** 2) / (2 * 25 ** 2)
+            )
+        
+        return MeasurementResult(
+            freqs_hz=freqs_hz.copy(),
+            left_db=left_response,
+            right_db=right_response,
+            left_raw_db=left_response + np.random.randn(len(freqs_hz)) * 0.3,
+            right_raw_db=right_response + np.random.randn(len(freqs_hz)) * 0.3,
+            diagnostics={'test_asymmetric': True},
+        )
+    
+    def test_per_channel_input_parameters_exist(self):
+        """run_room_fit accepts recording_left and recording_right parameters."""
+        import inspect
+        from headmatch.room import run_room_fit
+        
+        sig = inspect.signature(run_room_fit)
+        param_names = list(sig.parameters.keys())
+        
+        assert 'recording_left' in param_names, \
+            "run_room_fit should accept 'recording_left' parameter"
+        assert 'recording_right' in param_names, \
+            "run_room_fit should accept 'recording_right' parameter"
+    
+    def test_independent_analysis_produces_different_frequency_responses(self):
+        """Left and right recordings are analyzed separately, producing different responses."""
+        pytest.skip("Per-channel analysis not yet implemented")
+        
+        from headmatch.room import run_room_fit
+        from headmatch.signals import SweepSpec
+        
+        freqs = np.geomspace(20, 300, 100)
+        
+        # Create asymmetric responses:
+        # - Left has a peak at 60 Hz
+        # - Right has a peak at 120 Hz (different modal behavior)
+        left_result = self._create_asymmetric_measurement_result(
+            freqs, left_peak_db=6.0, left_peak_freq=60.0
+        )
+        right_result = self._create_asymmetric_measurement_result(
+            freqs, right_peak_db=5.0, right_peak_freq=120.0
+        )
+        
+        # This test verifies that when given separate L/R recordings,
+        # the function analyzes them independently and produces
+        # different frequency responses for each channel.
+        #
+        # Expected behavior:
+        # - result.left_response should reflect the 60 Hz peak
+        # - result.right_response should reflect the 120 Hz peak
+        # - The two responses should differ measurably
+        
+        # Implementation note: This requires extending run_room_fit to:
+        # 1. Accept separate left/right recording paths
+        # 2. Analyze each independently (not averaging them)
+        # 3. Return channel-specific responses in the result
+        
+        assert False, "Test not yet implemented - requires per-channel analysis support"
+    
+    def test_independent_fitting_produces_different_peq_bands(self):
+        """Each channel gets its own set of PEQ bands based on its own analysis."""
+        pytest.skip("Per-channel fitting not yet implemented")
+        
+        from headmatch.room import run_room_fit
+        from headmatch.signals import SweepSpec
+        
+        # This test verifies that with asymmetric L/R modal responses,
+        # the fitted PEQ bands are channel-specific and differ appropriately.
+        
+        # Given:
+        # - Left speaker: modal peak at 60 Hz requiring -3 dB cut
+        # - Right speaker: modal peak at 120 Hz requiring -2 dB cut
+        #
+        # Expected:
+        # - left_bands targets the 60 Hz peak
+        # - right_bands targets the 120 Hz peak
+        # - left_bands and right_bands are not equal
+        
+        freqs = np.geomspace(20, 500, 200)
+        
+        # Mock responses would be created here
+        # left_recording = ... with 60 Hz peak
+        # right_recording = ... with 120 Hz peak
+        
+        # result = run_room_fit(
+        #     recording_left=left_recording,
+        #     recording_right=right_recording,
+        #     ...
+        # )
+        
+        # Verify:
+        # - result.eq_bands_left is different from result.eq_bands_right
+        # - left_bands addresses the 60 Hz region
+        # - right_bands addresses the 120 Hz region
+        
+        assert False, "Test not yet implemented - requires per-channel fitting support"
+    
+    def test_lr_asymmetry_different_modal_peaks(self):
+        """Given L/R with different modal peaks, verify separate EQ bands."""
+        pytest.skip("L/R asymmetry handling not yet implemented")
+        
+        # This is the key acceptance test for Phase 2 item 5.
+        # 
+        # Scenario: Room where left and right speakers have different modal
+        # coupling at the listening position.
+        #
+        # Test case:
+        # - Left recording: +8 dB peak at 45 Hz (left speaker corner loading)
+        # - Right recording: +6 dB peak at 70 Hz (right speaker different boundary)
+        #
+        # Expected result:
+        # - left_bands should include a cut near 45 Hz
+        # - right_bands should include a cut near 70 Hz
+        # - The two band sets should not be identical
+        
+        assert False, "Test not yet implemented"
+    
+    def test_backward_compatibility_mono_eq_fallback(self):
+        """When only 'recording' is provided, fall back to mono EQ for both channels."""
+        from headmatch.room import run_room_fit
+        
+        # Current behavior: single recording produces same EQ for both channels
+        # This test ensures backward compatibility is maintained.
+        
+        # Given: Only the legacy 'recording' parameter
+        # When: run_room_fit is called (current signature)
+        # Then: Both channels get the same EQ (mono EQ duplicated)
+        
+        import inspect
+        sig = inspect.signature(run_room_fit)
+        
+        # 'recording' parameter should still exist for backward compat
+        assert 'recording' in sig.parameters, \
+            "Legacy 'recording' parameter must be preserved for backward compatibility"
+        
+        # When called with only 'recording', the existing behavior should
+        # produce identical left/right bands (mono EQ duplicated)
+        # This is the current behavior and should remain working.
+    
+    def test_room_fit_result_includes_separate_eq_bands_fields(self):
+        """RoomFitResult has eq_bands_left and eq_bands_right fields."""
+        pytest.skip("RoomFitResult extension not yet implemented")
+        
+        from headmatch.room import RoomFitResult
+        
+        # Verify that RoomFitResult dataclass has the expected fields
+        # for per-channel EQ bands.
+        
+        # Current: RoomFitResult has 'eq_bands: list[PEQBand]'
+        # Expected: RoomFitResult should also have:
+        #   - eq_bands_left: list[PEQBand]
+        #   - eq_bands_right: list[PEQBand]
+        
+        # Check that the new fields exist
+        import inspect
+        sig = inspect.signature(RoomFitResult)
+        params = list(sig.parameters.keys())
+        
+        assert 'eq_bands_left' in params, \
+            "RoomFitResult should have 'eq_bands_left' field"
+        assert 'eq_bands_right' in params, \
+            "RoomFitResult should have 'eq_bands_right' field"
+        
+        # For backward compatibility, 'eq_bands' may be retained
+        # or aliased to 'eq_bands_left' during transition
+    
+    def test_per_channel_recording_paths_accept_path_types(self):
+        """recording_left and recording_right accept str and Path."""
+        pytest.skip("Per-channel parameter types not yet implemented")
+        
+        from headmatch.room import run_room_fit
+        import inspect
+        
+        sig = inspect.signature(run_room_fit)
+        
+        left_param = sig.parameters.get('recording_left')
+        right_param = sig.parameters.get('recording_right')
+        
+        assert left_param is not None and right_param is not None, \
+            "Parameters should exist"
+        
+        # Should accept Union[str, Path, None] similar to recording parameter
+        # This test verifies the type annotations
+        
+        assert False, "Test not yet implemented"
+    
+    def test_mutual_exclusivity_recording_vs_per_channel(self):
+        """Cannot provide both legacy 'recording' and new 'recording_left/right'."""
+        pytest.skip("Parameter validation not yet implemented")
+        
+        # Test that providing both legacy and per-channel parameters
+        # raises an appropriate error.
+        
+        # Given:
+        # - recording='path/to/rec.wav' AND
+        # - recording_left='path/to/left.wav'
+        #
+        # Expected: ValueError or TypeError with clear message
+        
+        assert False, "Test not yet implemented"
+
+
 class TestRoomConstants:
     """Tests for room module constants."""
     
