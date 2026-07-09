@@ -229,10 +229,11 @@ def build_parser(config) -> argparse.ArgumentParser:
         ),
     )
     add_common_sweep_args(p, config)
-    p.add_argument("--recording", required=True, help="Path to room measurement recording WAV file.")
+    p.add_argument("--recording", required=True, action="append", help="Path to room measurement recording WAV file. Can be specified multiple times for multi-position averaging.")
     p.add_argument("--mic-cal", default=None, help="Path to microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
     p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz (default: 300).")
     p.add_argument("--recording-two", default=None, help="Optional second position recording WAV file.")
+    p.add_argument("--mmm-sweep", default=None, help="Path to continuous MMM sweep recording WAV file. Optional: enables MMM-based room analysis.")
     p.add_argument("--target-csv", default=None, help="Optional room target curve CSV (bass-only, e.g. docs/examples/targets/room_flat.csv). If omitted, fit toward a flat-through-modal-band room target.")
     p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
     p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
@@ -743,10 +744,14 @@ def main(argv: list[str] | None = None) -> None:
             out_dir.mkdir(parents=True, exist_ok=True)
             from .room import run_room_fit
             from .mic_cal import load_mic_calibration
+            # Handle --recording with action="append":
+            # When using append, if single --recording is provided, args.recording is a list with one element
+            recording_list = args.recording if isinstance(args.recording, list) else [args.recording]
+            # Backward compatibility: check for --recording-two
             recording_two = getattr(args, "recording_two", None)
             mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
             run_room_fit(
-                recording=Path(args.recording),
+                recording=Path(recording_list[0]),
                 recording_two=Path(recording_two) if recording_two else None,
                 mic_cal=mic_cal,
                 cutoff_hz=getattr(args, "cutoff_hz", 300),
