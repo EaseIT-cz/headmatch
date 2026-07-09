@@ -42,6 +42,29 @@ ROOM_CUTOFF_DEFAULT_HZ = 300.0
 ROOM_MAX_BOOST_DB = 2.0
 ROOM_LOW_FREQ_Q_CAP = 12.0
 
+# Adaptive-cutoff bounds (Phase 2): the Schroeder estimate is clamped to a
+# sane range so a noisy RT60 or an extreme room volume can't produce a useless
+# correction band.
+ROOM_CUTOFF_MIN_HZ = 50.0
+ROOM_CUTOFF_MAX_HZ = 500.0
+
+# Rough RT60 assumptions (seconds) for the dimensions-only Schroeder estimate.
+# A "typical" domestic room lands ~0.5 s; a live/sparse room rings longer, a
+# heavily furnished (absorptive) room decays faster. Per Schroeder
+# (f = 2000·√(RT60/V)), a longer RT60 raises the modal cutoff.
+ROOM_FURNISHING_RT60_S = {
+    "sparse": 0.6,
+    "typical": 0.5,
+    "heavily_furnished": 0.4,
+}
+
+# Full-range tilt (Phase 2, opt-in): a gentle house-curve downslope applied
+# ABOVE the cutoff. Kept deliberately broad (low Q) and bounded so it shapes
+# the through-band as a preference without ever chasing narrow reflections.
+ROOM_TILT_Q = 1.0
+ROOM_TILT_MAX_GAIN_DB = 6.0
+ROOM_TILT_SLOPE_DB_PER_OCT = -0.75
+
 
 @dataclass
 class RoomFitResult:
@@ -63,6 +86,10 @@ class RoomFitResult:
     run_summary: dict[str, Any]
     out_dir: Path
     warnings: list[str]
+    # Per-speaker stereo (Phase 2): populated when recording_left/recording_right
+    # are used; otherwise both mirror the mono `eq_bands`.
+    eq_bands_left: list[PEQBand] | None = None
+    eq_bands_right: list[PEQBand] | None = None
 
 
 def build_room_target(
@@ -101,28 +128,47 @@ def fit_room_bands(
     freqs_hz: np.ndarray,
     eq_target_db: np.ndarray,
     sample_rate: int,
-    cutoff_hz: float,
+    cutoff_hz: float | str,
     max_boost_db: float = ROOM_MAX_BOOST_DB,
     low_freq_q_cap: float = ROOM_LOW_FREQ_Q_CAP,
+    *,
+    impulse_response: np.ndarray | None = None,
+    room_volume_m3: float | None = None,
+    enable_tilt: bool = False,
 ) -> list[PEQBand]:
     """Fit PEQ bands for room correction with band-limiting and boost constraints.
-    
+
     Pure core function that wraps fit_peq with room-specific constraints:
     - Band-limit: no filter above cutoff_hz (structural: data filtered before fitting)
     - Boost ceiling: max_boost_db enforced structurally
     - Narrow mode support: Q cap for sub-100 Hz
-    
+
     Args:
         freqs_hz: Frequency grid in Hz
         eq_target_db: EQ target (desired response) in dB
         sample_rate: Sample rate
-        cutoff_hz: Maximum frequency for fitted bands
+        cutoff_hz: Maximum frequency for fitted bands, or ``'auto'`` to derive an
+            RT60-based Schroeder cutoff from ``impulse_response``/``room_volume_m3``.
         max_boost_db: Maximum allowed boost (positive gain)
         low_freq_q_cap: Maximum Q for low frequencies (< 120 Hz)
-        
+        impulse_response: Optional room impulse response, used only for ``cutoff_hz='auto'``.
+        room_volume_m3: Optional room volume in m³, used only for ``cutoff_hz='auto'``.
+        enable_tilt: When True, append an opt-in gentle house-curve tilt above the
+            cutoff (see :func:`fit_full_range_tilt`).
+
     Returns:
-        List of fitted PEQ bands
+        List of fitted PEQ bands (modal bands ≤ cutoff, plus optional tilt bands above).
     """
+    if isinstance(cutoff_hz, str):
+        if cutoff_hz != 'auto':
+            raise ValueError(f"cutoff_hz must be a number or 'auto', got {cutoff_hz!r}")
+        cutoff_hz = estimate_schroeder_cutoff(
+            impulse_response,
+            sample_rate,
+            room_volume_m3 if room_volume_m3 is not None else 50.0,
+        )
+    cutoff_hz = float(cutoff_hz)
+
     # Structural cutoff: filter data ABOVE cutoff Hz before fitting.
     # This ensures the residual/error signal does not see above-cutoff frequencies.
     mask = freqs_hz <= cutoff_hz * 1.1  # Include small margin (10% above) for edge effects
@@ -140,6 +186,163 @@ def fit_room_bands(
         low_freq_q_cap=low_freq_q_cap,
         max_boost_db=max_boost_db,
     )
+
+    if enable_tilt:
+        bands = bands + fit_full_range_tilt(
+            freqs_hz, eq_target_db, cutoff_hz, enable_tilt=True
+        )
+    return bands
+
+
+def _estimate_rt60(impulse_response: np.ndarray, sample_rate: int) -> float | None:
+    """Estimate RT60 (s) from an impulse response via Schroeder backward integration.
+
+    Uses a T20 fit (energy decay curve from −5 dB to −25 dB, extrapolated to 60 dB).
+    Returns ``None`` when the IR is too short or too noisy to yield a decay slope.
+    """
+    ir = np.asarray(impulse_response, dtype=np.float64).ravel()
+    # Need a meaningful decay window; a handful of samples cannot yield RT60.
+    if ir.size < int(0.05 * sample_rate):
+        return None
+
+    energy = ir ** 2
+    # Schroeder energy decay curve: reverse cumulative integral of the energy.
+    edc = np.cumsum(energy[::-1])[::-1]
+    if edc[0] <= 0:
+        return None
+    edc_db = 10.0 * np.log10(edc / edc[0] + 1e-20)
+
+    below_5 = np.where(edc_db <= -5.0)[0]
+    below_25 = np.where(edc_db <= -25.0)[0]
+    if below_5.size == 0 or below_25.size == 0:
+        return None
+    i_start = int(below_5[0])
+    i_end = int(below_25[0])
+    if i_end <= i_start:
+        return None
+
+    t = np.arange(i_start, i_end + 1) / float(sample_rate)
+    slope = float(np.polyfit(t, edc_db[i_start:i_end + 1], 1)[0])  # dB/s (negative)
+    if slope >= 0:
+        return None
+    rt60 = -60.0 / slope
+    if not np.isfinite(rt60) or rt60 <= 0:
+        return None
+    return rt60
+
+
+def estimate_schroeder_cutoff(
+    impulse_response: np.ndarray | None,
+    sample_rate: int,
+    room_volume_m3: float,
+) -> float:
+    """Estimate the modal cutoff from RT60 and room volume via the Schroeder formula.
+
+    ``f_schroeder ≈ 2000 · √(RT60 / V)``. RT60 is derived from the impulse response
+    (Schroeder backward integration). When the IR is unavailable or too short/noisy
+    to yield RT60, falls back to :data:`ROOM_CUTOFF_DEFAULT_HZ`. The result is clamped
+    to [:data:`ROOM_CUTOFF_MIN_HZ`, :data:`ROOM_CUTOFF_MAX_HZ`].
+    """
+    if impulse_response is None or room_volume_m3 <= 0:
+        return ROOM_CUTOFF_DEFAULT_HZ
+
+    rt60 = _estimate_rt60(impulse_response, sample_rate)
+    if rt60 is None:
+        return ROOM_CUTOFF_DEFAULT_HZ
+
+    cutoff = 2000.0 * np.sqrt(rt60 / room_volume_m3)
+    return float(np.clip(cutoff, ROOM_CUTOFF_MIN_HZ, ROOM_CUTOFF_MAX_HZ))
+
+
+def estimate_cutoff_from_dimensions(
+    length_m: float,
+    width_m: float,
+    height_m: float,
+    furnishing: str = "typical",
+    return_metadata: bool = False,
+) -> float | dict[str, Any]:
+    """Rough modal cutoff from room dimensions, without a measured RT60.
+
+    Computes volume from L×W×H and assumes an RT60 by furnishing level, then applies
+    the Schroeder formula ``f = 2000·√(RT60/V)``. A live/sparse room rings longer
+    (higher RT60 → higher cutoff); a heavily furnished, absorptive room decays faster
+    (lower RT60 → lower cutoff). The result is clamped to the adaptive-cutoff range.
+
+    Args:
+        length_m, width_m, height_m: Room dimensions in metres (0.1–100 each).
+        furnishing: One of ``'sparse'``, ``'typical'`` (default), ``'heavily_furnished'``.
+        return_metadata: When True, return a dict with the cutoff and the inputs used.
+
+    Raises:
+        ValueError: on non-positive, implausibly small (<0.1 m), or large (>100 m)
+            dimensions, or an unknown furnishing level.
+    """
+    for name, value in (("length_m", length_m), ("width_m", width_m), ("height_m", height_m)):
+        if value <= 0:
+            raise ValueError(f"{name} must be positive, got {value}")
+        if value < 0.1:
+            raise ValueError(f"{name}={value} m is implausibly small (min 0.1 m)")
+        if value > 100.0:
+            raise ValueError(f"{name}={value} m is implausibly large (max 100 m)")
+
+    if furnishing not in ROOM_FURNISHING_RT60_S:
+        raise ValueError(
+            f"furnishing must be one of {sorted(ROOM_FURNISHING_RT60_S)}, got {furnishing!r}"
+        )
+
+    volume_m3 = length_m * width_m * height_m
+    rt60_s = ROOM_FURNISHING_RT60_S[furnishing]
+    cutoff = float(
+        np.clip(2000.0 * np.sqrt(rt60_s / volume_m3), ROOM_CUTOFF_MIN_HZ, ROOM_CUTOFF_MAX_HZ)
+    )
+
+    if return_metadata:
+        return {
+            "cutoff_hz": cutoff,
+            "volume_m3": volume_m3,
+            "rt60_s": rt60_s,
+            "furnishing": furnishing,
+        }
+    return cutoff
+
+
+def fit_full_range_tilt(
+    freqs_hz: np.ndarray,
+    measured_db: np.ndarray,
+    cutoff_hz: float,
+    enable_tilt: bool = False,
+) -> list[PEQBand]:
+    """Opt-in gentle house-curve tilt applied ABOVE the cutoff.
+
+    Emits a small set of deliberately broad, low-Q peaking bands that impose a gentle
+    downward slope above the modal cutoff (a listener-preference tilt), leaving the
+    below-cutoff modal correction to the main fitter. Guardrails, by construction:
+
+    - only bands with centre frequency > ``cutoff_hz`` are produced,
+    - Q is fixed low (:data:`ROOM_TILT_Q` ≤ 2) so nothing chases narrow reflections,
+    - gain is bounded to ±:data:`ROOM_TILT_MAX_GAIN_DB`.
+
+    Returns an empty list when ``enable_tilt`` is False. ``measured_db`` is accepted for
+    signature symmetry with the modal fitter and future measurement-aware shaping; the
+    MVP tilt is a fixed preference slope and does not fit measured features.
+    """
+    if not enable_tilt:
+        return []
+
+    freqs = np.asarray(freqs_hz, dtype=np.float64)
+    nyquist = float(freqs[-1]) if freqs.size else 0.0
+
+    bands: list[PEQBand] = []
+    # Place one broad band per octave above the cutoff, implementing a gentle
+    # downward slope referenced to 0 dB at the cutoff. Octave centres start one
+    # octave above the cutoff, so no band lands on a specific feature frequency.
+    fc = cutoff_hz * 2.0
+    while fc < nyquist:
+        gain = ROOM_TILT_SLOPE_DB_PER_OCT * np.log2(fc / cutoff_hz)
+        gain = float(np.clip(gain, -ROOM_TILT_MAX_GAIN_DB, ROOM_TILT_MAX_GAIN_DB))
+        if abs(gain) >= 0.1:  # skip negligible bands
+            bands.append(PEQBand("peaking", float(fc), gain, ROOM_TILT_Q))
+        fc *= 2.0
     return bands
 
 
@@ -178,13 +381,70 @@ def _energy_average_responses(
     # Merge diagnostics: use result1 but flag that this is averaged
     diagnostics = dict(result1.diagnostics)
     diagnostics['two_position_averaged'] = True
-    
+
     return MeasurementResult(
         freqs_hz=result1.freqs_hz.copy(),
         left_db=left_db,
         right_db=right_db,
         left_raw_db=left_raw_db,
         right_raw_db=right_raw_db,
+        diagnostics=diagnostics,
+    )
+
+
+def energy_average_responses_n(results: list[MeasurementResult]) -> MeasurementResult:
+    """Energy-average N room measurements (moving-microphone / multi-point method).
+
+    Generalizes :func:`_energy_average_responses` to N positions: each channel is
+    converted from dB to linear power (10^(dB/10)), averaged across positions, and
+    converted back to dB. A single position is returned unchanged. The result's
+    diagnostics carry ``n_position_averaged`` = N.
+
+    Raises:
+        ValueError: if the list is empty or the frequency grids differ.
+    """
+    if not results:
+        raise ValueError("energy_average_responses_n requires a non-empty list of results")
+
+    reference_freqs = results[0].freqs_hz
+    for other in results[1:]:
+        if other.freqs_hz.shape != reference_freqs.shape or not np.allclose(
+            other.freqs_hz, reference_freqs
+        ):
+            raise ValueError(
+                "Cannot average measurements with mismatched frequency grids"
+            )
+
+    if len(results) == 1:
+        only = results[0]
+        diagnostics = dict(only.diagnostics)
+        diagnostics['n_position_averaged'] = 1
+        return MeasurementResult(
+            freqs_hz=only.freqs_hz.copy(),
+            left_db=only.left_db.copy(),
+            right_db=only.right_db.copy(),
+            left_raw_db=only.left_raw_db.copy(),
+            right_raw_db=only.right_raw_db.copy(),
+            diagnostics=diagnostics,
+        )
+
+    def _avg(attr: str) -> np.ndarray:
+        power = np.mean([10 ** (getattr(r, attr) / 10.0) for r in results], axis=0)
+        return 10 * np.log10(power + 1e-12)  # type: ignore[no-any-return]
+
+    diagnostics = dict(results[0].diagnostics)
+    diagnostics['n_position_averaged'] = len(results)
+    if len(results) == 2:
+        # Keep the existing two-position flag so downstream single-point checks
+        # continue to treat a 2-position average the same way.
+        diagnostics['two_position_averaged'] = True
+
+    return MeasurementResult(
+        freqs_hz=reference_freqs.copy(),
+        left_db=_avg('left_db'),
+        right_db=_avg('right_db'),
+        left_raw_db=_avg('left_raw_db'),
+        right_raw_db=_avg('right_raw_db'),
         diagnostics=diagnostics,
     )
 
@@ -266,14 +526,20 @@ def _write_room_results_guide(
 
 
 def run_room_fit(
-    recording: str | Path,
-    recording_two: str | Path | None,
-    mic_cal: MicCalibration | None,
-    cutoff_hz: float,
-    max_boost_db: float,
-    target_csv: str | Path | None,
-    out_dir: str | Path,
-    sweep_spec: SweepSpec,
+    recording: str | Path | None = None,
+    recording_two: str | Path | None = None,
+    mic_cal: MicCalibration | None = None,
+    cutoff_hz: float = ROOM_CUTOFF_DEFAULT_HZ,
+    max_boost_db: float = ROOM_MAX_BOOST_DB,
+    target_csv: str | Path | None = None,
+    out_dir: str | Path | None = None,
+    sweep_spec: SweepSpec | None = None,
+    *,
+    additional_recordings: list[str | Path] | None = None,
+    mmm_sweep: str | Path | None = None,
+    recording_left: str | Path | None = None,
+    recording_right: str | Path | None = None,
+    enable_tilt: bool = False,
 ) -> RoomFitResult:
     """Run full room measurement fitting workflow.
 
@@ -281,8 +547,8 @@ def run_room_fit(
     PEQ fitting, and artifact generation.
 
     Args:
-        recording: Path to primary room measurement WAV file
-        recording_two: Optional path to second position measurement for averaging
+        recording: Path to primary room measurement WAV file (mono correction path).
+        recording_two: Optional second position measurement, energy-averaged with the first.
         mic_cal: Optional microphone calibration (applies calibration_offset)
         cutoff_hz: Maximum frequency for EQ correction
         max_boost_db: Maximum allowed boost (typically ROOM_MAX_BOOST_DB=2.0)
@@ -291,15 +557,26 @@ def run_room_fit(
         sweep_spec: Sweep specification the recording was made with. Must match
             the sweep used at capture time (sample rate, duration, band); the
             reference sweep is regenerated from it for deconvolution/alignment.
+        additional_recordings: Extra position recordings for N-position (MMM) energy
+            averaging, combined with ``recording``/``recording_two``.
+        mmm_sweep: Optional continuous moving-microphone capture, treated as one more
+            position in the energy average.
+        recording_left, recording_right: Per-speaker stereo path. When both are given,
+            each channel is analyzed and fit independently, producing separate L/R EQ.
+        enable_tilt: Opt-in gentle house-curve tilt above the cutoff (see fit_full_range_tilt).
 
     Returns:
         RoomFitResult with all outputs and metadata
     """
+    if out_dir is None:
+        raise ValueError("run_room_fit requires out_dir")
+    if sweep_spec is None:
+        raise ValueError("run_room_fit requires sweep_spec")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     fit_warnings: list[str] = []
-    
+
     # Validate mic_cal - warn if missing
     if mic_cal is None:
         warnings.warn(
@@ -310,32 +587,68 @@ def run_room_fit(
         fit_warnings.append(
             "No microphone calibration: measurement accuracy is unverified."
         )
-    
+
     # Analyze room measurement(s) using the caller's sweep spec so the
     # regenerated reference matches how the recording was actually captured.
     sample_rate = sweep_spec.sample_rate
 
-    result1 = analyze_room_measurement(recording, sweep_spec, out_dir=None)
-    
-    # Energy-average two recordings if provided
-    if recording_two is not None:
-        result2 = analyze_room_measurement(recording_two, sweep_spec, out_dir=None)
-        result = _energy_average_responses(result1, result2)
-    else:
-        result = result1
-    
-    # Apply mic calibration offset if provided
-    if mic_cal is not None:
-        offset_db = calibration_offset(mic_cal, result.freqs_hz)
-        result = MeasurementResult(
-            freqs_hz=result.freqs_hz,
-            left_db=result.left_db - offset_db,
-            right_db=result.right_db - offset_db,
-            left_raw_db=result.left_raw_db - offset_db,
-            right_raw_db=result.right_raw_db - offset_db,
-            diagnostics=result.diagnostics,
+    def _measure(path: str | Path) -> MeasurementResult:
+        res = analyze_room_measurement(path, sweep_spec, out_dir=None)
+        if mic_cal is None:
+            return res
+        offset_db = calibration_offset(mic_cal, res.freqs_hz)
+        return MeasurementResult(
+            freqs_hz=res.freqs_hz,
+            left_db=res.left_db - offset_db,
+            right_db=res.right_db - offset_db,
+            left_raw_db=res.left_raw_db - offset_db,
+            right_raw_db=res.right_raw_db - offset_db,
+            diagnostics=res.diagnostics,
         )
-    
+
+    per_channel = recording_left is not None and recording_right is not None
+    if per_channel:
+        if recording is not None:
+            raise ValueError(
+                "Provide either 'recording' (mono) or recording_left+recording_right "
+                "(per-speaker), not both."
+            )
+        res_l = _measure(recording_left)  # type: ignore[arg-type]
+        res_r = _measure(recording_right)  # type: ignore[arg-type]
+        diagnostics = dict(res_l.diagnostics)
+        diagnostics['per_channel'] = True
+        # Combined result carries the real L/R responses for graphs/report.
+        result = MeasurementResult(
+            freqs_hz=res_l.freqs_hz,
+            left_db=res_l.left_db,
+            right_db=res_r.left_db,
+            left_raw_db=res_l.left_raw_db,
+            right_raw_db=res_r.left_raw_db,
+            diagnostics=diagnostics,
+        )
+        measured_left_db = res_l.left_db
+        measured_right_db = res_r.left_db
+        n_positions = 1
+        single_point = True
+    else:
+        if recording is None:
+            raise ValueError(
+                "run_room_fit requires 'recording' (or recording_left+recording_right)"
+            )
+        recordings: list[str | Path] = [recording]
+        if recording_two is not None:
+            recordings.append(recording_two)
+        if additional_recordings:
+            recordings.extend(additional_recordings)
+        if mmm_sweep is not None:
+            recordings.append(mmm_sweep)
+        results = [_measure(r) for r in recordings]
+        result = energy_average_responses_n(results) if len(results) > 1 else results[0]
+        measured_left_db = result.left_db
+        measured_right_db = result.right_db
+        n_positions = len(recordings)
+        single_point = n_positions == 1
+
     # Build or load target. Room targets are bass-only (≤ cutoff), so load
     # user CSVs without the 1 kHz normalization that headphone targets require.
     if target_csv is not None:
@@ -361,102 +674,119 @@ def run_room_fit(
             semantics=target.semantics,
         )
 
-    # Desired in-room response, honoring the target's semantics (must match how
-    # render_fit_graphs interprets the same target). A 'relative' target holds
-    # deltas about the measurement; an 'absolute' target is the response itself.
-    if target.semantics == 'relative':
-        desired_db = result.left_db + target.values_db
+    def _desired_and_eq_target(measured_db: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        # Desired in-room response, honoring the target's semantics (must match how
+        # render_fit_graphs interprets the same target). A 'relative' target holds
+        # deltas about the measurement; an 'absolute' target is the response itself.
+        if target.semantics == 'relative':
+            desired = measured_db + target.values_db
+        else:
+            desired = target.values_db
+        # For room: measured + eq = desired => eq_target = desired - measured
+        return desired, desired - measured_db
+
+    def _fit(measured_db: np.ndarray) -> list[PEQBand]:
+        _, eq_target_db = _desired_and_eq_target(measured_db)
+        return fit_room_bands(
+            result.freqs_hz,
+            eq_target_db,
+            sample_rate,
+            cutoff_hz=cutoff_hz,
+            max_boost_db=max_boost_db,
+            low_freq_q_cap=ROOM_LOW_FREQ_Q_CAP,
+            enable_tilt=enable_tilt,
+        )
+
+    desired_left_db, _ = _desired_and_eq_target(measured_left_db)
+    if per_channel:
+        desired_right_db, _ = _desired_and_eq_target(measured_right_db)
+        eq_bands_left = _fit(measured_left_db)
+        eq_bands_right = _fit(measured_right_db)
     else:
-        desired_db = target.values_db
+        desired_right_db = desired_left_db
+        eq_bands_left = _fit(measured_left_db)
+        eq_bands_right = eq_bands_left
 
-    # For room: measured + eq = desired => eq_target = desired - measured
-    eq_target_db = desired_db - result.left_db
-
-    # Fit room bands with constraints
-    bands = fit_room_bands(
-        result.freqs_hz,
-        eq_target_db,
-        sample_rate,
-        cutoff_hz=cutoff_hz,
-        max_boost_db=max_boost_db,
-        low_freq_q_cap=ROOM_LOW_FREQ_Q_CAP,
-    )
-    
-    # Duplicate for stereo (mono room measurement uses same EQ for both channels)
-    eq_bands = bands
+    # Legacy single-list field mirrors the left channel (identical to right in mono).
+    eq_bands = eq_bands_left
 
     # Assess fit quality and generate warnings
     fit_warnings.extend(_assess_room_fit_quality(result))
 
-    # Compute predicted error against the desired response (semantics honored above)
-    eq_response = peq_chain_response_db(result.freqs_hz, sample_rate, eq_bands)
-    residual = result.left_db + eq_response - desired_db
-
-    # Compute error only within the corrected band (≤ cutoff). Bands are limited
-    # to ≤ cutoff, so including higher frequencies would inflate the error with
-    # deviations the fit never attempted to correct.
+    # Compute predicted error per channel against the desired response.
+    # Bands are limited to ≤ cutoff, so error is measured only within the
+    # corrected band (higher frequencies would inflate it with uncorrected deviation).
     fit_mask = result.freqs_hz <= cutoff_hz
-    if np.any(fit_mask):
-        predicted_rms = float(np.sqrt(np.mean(residual[fit_mask] ** 2)))
-        predicted_max = float(np.max(np.abs(residual[fit_mask])))
-    else:
-        predicted_rms = 0.0
-        predicted_max = 0.0
-    
+
+    def _predicted_error(measured_db: np.ndarray, desired_db: np.ndarray, bands: list[PEQBand]) -> tuple[float, float]:
+        residual = measured_db + peq_chain_response_db(result.freqs_hz, sample_rate, bands) - desired_db
+        if np.any(fit_mask):
+            return (
+                float(np.sqrt(np.mean(residual[fit_mask] ** 2))),
+                float(np.max(np.abs(residual[fit_mask]))),
+            )
+        return 0.0, 0.0
+
+    predicted_left_rms, predicted_left_max = _predicted_error(measured_left_db, desired_left_db, eq_bands_left)
+    predicted_right_rms, predicted_right_max = _predicted_error(measured_right_db, desired_right_db, eq_bands_right)
+
     # Build report
     fit_report: dict[str, Any] = {
         'peq_bands_left': [
             {'kind': b.kind, 'freq': b.freq, 'gain_db': b.gain_db, 'q': b.q}
-            for b in eq_bands
+            for b in eq_bands_left
         ],
         'peq_bands_right': [
             {'kind': b.kind, 'freq': b.freq, 'gain_db': b.gain_db, 'q': b.q}
-            for b in eq_bands
+            for b in eq_bands_right
         ],
-        'predicted_left_rms_error_db': predicted_rms,
-        'predicted_right_rms_error_db': predicted_rms,
-        'predicted_left_max_error_db': predicted_max,
-        'predicted_right_max_error_db': predicted_max,
+        'predicted_left_rms_error_db': predicted_left_rms,
+        'predicted_right_rms_error_db': predicted_right_rms,
+        'predicted_left_max_error_db': predicted_left_max,
+        'predicted_right_max_error_db': predicted_right_max,
         'cutoff_hz': cutoff_hz,
         'max_boost_db': max_boost_db,
         'low_freq_q_cap': ROOM_LOW_FREQ_Q_CAP,
-        'qualitative': 'acceptable' if (predicted_rms < 3.0) else 'marginal',
-        'single_point': recording_two is None,
+        'qualitative': 'acceptable' if (max(predicted_left_rms, predicted_right_rms) < 3.0) else 'marginal',
+        'single_point': single_point,
+        'n_positions': n_positions,
+        'per_channel': per_channel,
+        'tilt_enabled': enable_tilt,
     }
-    
+
     # EQ clipping assessment
-    clipping = assess_eq_clipping(result.freqs_hz, sample_rate, eq_bands, eq_bands)
+    clipping = assess_eq_clipping(result.freqs_hz, sample_rate, eq_bands_left, eq_bands_right)
     fit_report['eq_clipping_assessment'] = {
         'will_clip': clipping.will_clip,
         'preamp_db': clipping.total_preamp_db,
         'headroom_loss_db': clipping.headroom_loss_db,
         'quality_concern': clipping.quality_concern,
     }
-    
+
     # Export EQ presets
     export_equalizer_apo_parametric_txt(
         out_dir / 'equalizer_apo.txt',
-        eq_bands,
-        eq_bands,
+        eq_bands_left,
+        eq_bands_right,
         preamp_db=clipping.total_preamp_db if clipping.will_clip else None,
     )
-    export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', eq_bands, eq_bands, samplerate=sample_rate)
-    export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', eq_bands, eq_bands)
-    
+    export_camilladsp_filters_yaml(out_dir / 'camilladsp_full.yaml', eq_bands_left, eq_bands_right, samplerate=sample_rate)
+    export_camilladsp_filter_snippet_yaml(out_dir / 'camilladsp_filters_only.yaml', eq_bands_left, eq_bands_right)
+
     # Export room FR CSV
     save_fr_csv(out_dir / 'room_fr.csv', result.freqs_hz, result.left_db, column_name='response_db')
-    
+
     # Export target curve
     save_fr_csv(out_dir / 'target_curve.csv', target.freqs_hz, target.values_db, column_name='target_db')
-    
+
     # Render graphs with cutoff marker
     render_fit_graphs(
-        out_dir, result, target, sample_rate, eq_bands, eq_bands, cutoff_hz=cutoff_hz
+        out_dir, result, target, sample_rate, eq_bands_left, eq_bands_right, cutoff_hz=cutoff_hz
     )
-    
+
     # Trustworthiness assessment
     trust_summary = summarize_trustworthiness(result, fit_report)
-    
+
     # Build run summary
     identity = get_app_identity()
     summary = FrontendRunSummary(
@@ -466,12 +796,12 @@ def run_room_fit(
         sample_rate=sample_rate,
         frequency_points=len(result.freqs_hz),
         target=target.name,
-        filters=RunFilterCounts(left=len(eq_bands), right=len(eq_bands)),
+        filters=RunFilterCounts(left=len(eq_bands_left), right=len(eq_bands_right)),
         predicted_error_db=RunErrorSummary(
-            left_rms=predicted_rms,
-            right_rms=predicted_rms,
-            left_max=predicted_max,
-            right_max=predicted_max,
+            left_rms=predicted_left_rms,
+            right_rms=predicted_right_rms,
+            left_max=predicted_left_max,
+            right_max=predicted_right_max,
         ),
         confidence=trust_summary,
         plots={
@@ -485,16 +815,16 @@ def run_room_fit(
         generated_by=identity.as_metadata(),
         cutoff_hz=cutoff_hz,
         mic_cal_applied=mic_cal is not None,
-        single_point=recording_two is None,
+        single_point=single_point,
     )
-    
+
     # Write JSON artifacts
     save_json(out_dir / 'run_summary.json', summary.to_dict())
     save_json(out_dir / 'fit_report.json', fit_report)
-    
+
     # Write README
     _write_room_results_guide(out_dir, trust_summary, fit_warnings)
-    
+
     return RoomFitResult(
         result=result,
         eq_bands=eq_bands,
@@ -503,6 +833,8 @@ def run_room_fit(
         run_summary=summary.to_dict(),
         out_dir=out_dir,
         warnings=fit_warnings,
+        eq_bands_left=eq_bands_left,
+        eq_bands_right=eq_bands_right,
     )
 
 

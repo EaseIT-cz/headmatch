@@ -229,13 +229,15 @@ def build_parser(config) -> argparse.ArgumentParser:
         ),
     )
     add_common_sweep_args(p, config)
-    p.add_argument("--recording", required=True, help="Path to room measurement recording WAV file.")
+    p.add_argument("--recording", required=True, action="append", help="Path to room measurement recording WAV file. Can be specified multiple times for multi-position averaging.")
     p.add_argument("--mic-cal", default=None, help="Path to microphone calibration CSV file. Optional: missing calibration triggers a warning and reduces confidence.")
     p.add_argument("--cutoff-hz", type=int, default=300, help="Crossover frequency in Hz (default: 300).")
     p.add_argument("--recording-two", default=None, help="Optional second position recording WAV file.")
+    p.add_argument("--mmm-sweep", default=None, help="Path to continuous MMM sweep recording WAV file. Optional: enables MMM-based room analysis.")
     p.add_argument("--target-csv", default=None, help="Optional room target curve CSV (bass-only, e.g. docs/examples/targets/room_flat.csv). If omitted, fit toward a flat-through-modal-band room target.")
     p.add_argument("--out-dir", required=True, help="Output folder for EQ files.")
     p.add_argument("--max-boost-db", type=float, default=2.0, help="Maximum EQ boost in dB (default: 2).")
+    p.add_argument("--enable-tilt", action="store_true", help="Opt-in: apply a gentle house-curve tilt above the cutoff (broad, low-Q, bounded). Off by default.")
 
     p = sub.add_parser("search-headphone", help="Search community headphone databases for a model name.")
     p.add_argument("query", help="Headphone model name to search for.")
@@ -743,10 +745,18 @@ def main(argv: list[str] | None = None) -> None:
             out_dir.mkdir(parents=True, exist_ok=True)
             from .room import run_room_fit
             from .mic_cal import load_mic_calibration
+            # --recording uses action="append", so args.recording is a list.
+            # The first is the primary position; any extras drive N-position (MMM)
+            # energy averaging, together with --recording-two and --mmm-sweep.
+            recording_list = args.recording if isinstance(args.recording, list) else [args.recording]
             recording_two = getattr(args, "recording_two", None)
+            mmm_sweep = getattr(args, "mmm_sweep", None)
+            additional: list[str | Path] | None = (
+                [Path(r) for r in recording_list[1:]] if len(recording_list) > 1 else None
+            )
             mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
             run_room_fit(
-                recording=Path(args.recording),
+                recording=Path(recording_list[0]),
                 recording_two=Path(recording_two) if recording_two else None,
                 mic_cal=mic_cal,
                 cutoff_hz=getattr(args, "cutoff_hz", 300),
@@ -754,8 +764,15 @@ def main(argv: list[str] | None = None) -> None:
                 target_csv=getattr(args, "target_csv", None),
                 out_dir=out_dir,
                 sweep_spec=spec_from_args(args),
+                additional_recordings=additional,
+                mmm_sweep=Path(mmm_sweep) if mmm_sweep else None,
+                enable_tilt=getattr(args, "enable_tilt", False),
             )
-            print(f"Room correction EQ written to {out_dir}.")
+            n_positions = len(recording_list) + (1 if recording_two else 0) + (1 if mmm_sweep else 0)
+            if n_positions > 1:
+                print(f"Room correction EQ written to {out_dir} (averaged {n_positions} positions).")
+            else:
+                print(f"Room correction EQ written to {out_dir}.")
         elif args.cmd == "fit":
             hearing_profile = None
             if getattr(args, "with_hearing_compensation", False):
