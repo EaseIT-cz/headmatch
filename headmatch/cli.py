@@ -726,28 +726,32 @@ def main(argv: list[str] | None = None) -> None:
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             from .room import prepare_room_measurement
+            from .mic_cal import load_mic_calibration
+            mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
             prepare_room_measurement(
-                out_dir=out_dir,
                 spec=spec_from_args(args),
-                mic_cal_csv=Path(args.mic_cal),
+                mic_cal=mic_cal,
                 cutoff_hz=getattr(args, "cutoff_hz", 300),
                 max_boost_db=getattr(args, "max_boost_db", 2.0),
                 listen_position_two=getattr(args, "listen_position_two", False),
+                out_dir=out_dir,
             )
             print(f"Room measurement package saved in {out_dir}.")
         elif args.cmd == "room-fit":
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             from .room import run_room_fit
+            from .mic_cal import load_mic_calibration
             recording_two = getattr(args, "recording_two", None)
+            mic_cal = load_mic_calibration(args.mic_cal) if args.mic_cal else None
             run_room_fit(
-                recording_path=Path(args.recording),
-                mic_cal_csv=Path(args.mic_cal),
-                out_dir=out_dir,
-                spec=spec_from_args(args),
+                recording=Path(args.recording),
+                recording_two=Path(recording_two) if recording_two else None,
+                mic_cal=mic_cal,
                 cutoff_hz=getattr(args, "cutoff_hz", 300),
-                recording_two_path=Path(recording_two) if recording_two else None,
+                max_boost_db=getattr(args, "max_boost_db", 2.0),
                 target_csv=getattr(args, "target_csv", None),
+                out_dir=out_dir,
             )
             print(f"Room correction EQ written to {out_dir}.")
         elif args.cmd == "fit":
