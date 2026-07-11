@@ -15,7 +15,7 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 
 ## Ready
 
-- [ ] TASK-113: Document the confidence-scoring derivation — add docstrings and inline rationale for the magic numbers in `pipeline_confidence.py`, plus a short note under `docs/`. No behaviour change; add a test that pins the current scores so the documentation cannot silently drift.
+- [x] TASK-113: Document the confidence-scoring derivation — add docstrings and inline rationale for the magic numbers in `pipeline_confidence.py`, plus a short note under `docs/`. No behaviour change; add a test that pins the current scores so the documentation cannot silently drift. (task: task_20260712004844_3bf3db60b5a334dd)
 - [ ] TASK-112: Add a coverage CI gate — fail CI when total coverage drops below the current 80% level, wired into the existing GitHub Actions matrix without breaking the Python 3.10–3.13 lanes.
 - [ ] TASK-114: Harden `fetch_curve_from_url` against SSRF — validate the URL scheme and host against a domain allowlist (the known measurement databases) before fetching, and reject private / loopback / link-local targets. Add tests for allowed and rejected URLs.
 - [ ] TASK-110: Standardize the error hierarchy — define a `HeadMatchError` base class with `MeasurementError`, `ConfigError`, and `NetworkError` subclasses and migrate the existing raise sites to them; keep messages intact and add tests asserting the new types are raised.
