@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
+from .exceptions import ConfigError
+
 # Constants
 MIC_CAL_MIN_HZ = 20.0
 MIC_CAL_MAX_HZ = 500.0
@@ -116,7 +118,7 @@ def load_mic_calibration(path: str | Path) -> MicCalibration:
             gains.append(gain)
     
     if len(freqs) < 2:
-        raise ValueError(f"Calibration file '{path}' must contain at least 2 data points")
+        raise ConfigError(f"Calibration file '{path}' must contain at least 2 data points")
     
     freqs_arr = np.array(freqs, dtype=float)
     gains_arr = np.array(gains, dtype=float)
@@ -128,7 +130,7 @@ def load_mic_calibration(path: str | Path) -> MicCalibration:
     
     # Check for implausible values (beyond ±30 dB)
     if np.any(np.abs(gains_arr) > MIC_CAL_PLAUSIBLE_ABS_DB):
-        raise ValueError(
+        raise ConfigError(
             f"Calibration file '{path}' contains implausible values "
             f"(beyond ±{MIC_CAL_PLAUSIBLE_ABS_DB} dB). "
             "This may indicate a wrong file type."

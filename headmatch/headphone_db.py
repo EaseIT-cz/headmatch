@@ -19,6 +19,8 @@ from urllib.parse import quote
 
 import numpy as np
 
+from .exceptions import MeasurementError, ConfigError, NetworkError
+
 
 AUTOEQ_RAW_BASE = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master"
 AUTOEQ_TREE_API = "https://api.github.com/repos/jaakkopasanen/AutoEq/git/trees/master?recursive=1"
@@ -96,11 +98,11 @@ def _fetch_and_cache_index() -> list[dict]:
         with urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read(50 * 1024 * 1024))  # GitHub tree can be large
     except (URLError, OSError) as e:
-        raise ConnectionError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
+        raise NetworkError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
 
     entries = _build_index_from_tree(data)
     if not entries:
-        raise ValueError("No headphone entries found in the AutoEQ tree (unexpected repo structure change?)")
+        raise MeasurementError("No headphone entries found in the AutoEQ tree (unexpected repo structure change?)")
 
     cache = {
         "fetched_at": time.time(),
@@ -152,7 +154,7 @@ def search_headphone(query: str, database: str = "autoeq") -> list[HeadphoneEntr
     # Try to get index, falling back to cache on network failure
     try:
         entries = _get_index()
-    except ConnectionError:
+    except NetworkError:
         cached = _load_cached_index()
         if cached is not None:
             entries = cached
@@ -207,7 +209,7 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
         except (ValueError, IndexError):
             continue
     if not freqs:
-        raise ValueError("No valid frequency/response data found in CSV")
+        raise MeasurementError("No valid frequency/response data found in CSV")
     return np.array(freqs), np.array(values)
 
 
@@ -217,33 +219,33 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
     Only HTTPS URLs are accepted. Response size is capped at 5 MB.
     """
     if not url.startswith("https://"):
-        raise ValueError(f"Only HTTPS URLs are accepted. Got: {url}")
+        raise NetworkError(f"Only HTTPS URLs are accepted. Got: {url}")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with urlopen(url, timeout=15) as resp:
             raw = resp.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
-                raise ValueError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
+                raise MeasurementError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
             try:
                 text = raw.decode("utf-8")
             except UnicodeDecodeError as e:
-                raise ValueError("Downloaded file is not valid UTF-8 CSV text.") from e
+                raise MeasurementError("Downloaded file is not valid UTF-8 CSV text.") from e
     except (URLError, OSError) as e:
-        raise ConnectionError(f"Failed to fetch {url}: {e}") from e
+        raise NetworkError(f"Failed to fetch {url}: {e}") from e
 
     # Validate it's parseable and spans a usable frequency range
     freqs, values = _parse_autoeq_csv(text)
     if len(freqs) < 10:
-        raise ValueError(f"Fetched CSV has only {len(freqs)} points — expected a frequency response")
+        raise MeasurementError(f"Fetched CSV has only {len(freqs)} points — expected a frequency response")
     freq_min, freq_max = float(freqs[0]), float(freqs[-1])
     if freq_max < 1000.0:
-        raise ValueError(
+        raise MeasurementError(
             f"Fetched CSV only covers up to {freq_max:.0f} Hz — "
             "expected a full-range frequency response reaching at least 1 kHz"
         )
     if freq_min > 1000.0:
-        raise ValueError(
+        raise MeasurementError(
             f"Fetched CSV starts at {freq_min:.0f} Hz — "
             "expected a frequency response that includes frequencies below 1 kHz"
         )

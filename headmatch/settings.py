@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import CONFIG_SCHEMA_VERSION, FrontendConfig
+from .exceptions import ConfigError
 
 CONFIG_FILENAME = "config.json"
 
@@ -49,9 +50,9 @@ def load_config(path: str | Path | None = None) -> FrontendConfig:
     try:
         payload = json.loads(config_path.read_text(encoding='utf-8'))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in config file {config_path}: {exc}") from exc
+        raise ConfigError(f"Invalid JSON in config file {config_path}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise ValueError(f"Config file must contain a JSON object: {config_path}")
+        raise ConfigError(f"Config file must contain a JSON object: {config_path}")
     return _coerce_payload(payload)
 
 

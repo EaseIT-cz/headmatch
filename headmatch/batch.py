@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .app_identity import get_app_identity
+from .exceptions import ConfigError
 from .io_utils import save_json
 from .peq import FilterBudget
 from .pipeline import process_single_measurement
@@ -67,35 +68,35 @@ def load_batch_manifest(path: str | Path) -> list[BatchEntry]:
     """
     manifest_path = Path(path).expanduser()
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Batch manifest not found: {manifest_path}")
+        raise ConfigError(f"Batch manifest not found: {manifest_path}")
 
     text = manifest_path.read_text(encoding="utf-8")
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in batch manifest {manifest_path}: {exc}") from exc
+        raise ConfigError(f"Invalid JSON in batch manifest {manifest_path}: {exc}") from exc
 
     if not isinstance(data, dict) or "entries" not in data:
-        raise ValueError(
+        raise ConfigError(
             f"Batch manifest must be a JSON object with an 'entries' array. "
             f"Got: {type(data).__name__}"
         )
 
     entries_raw = data["entries"]
     if not isinstance(entries_raw, list) or not entries_raw:
-        raise ValueError("Batch manifest 'entries' must be a non-empty array.")
+        raise ConfigError("Batch manifest 'entries' must be a non-empty array.")
 
     base = manifest_path.parent
     entries: list[BatchEntry] = []
     for i, raw in enumerate(entries_raw):
         if not isinstance(raw, dict):
-            raise ValueError(f"Entry {i} must be a JSON object, got {type(raw).__name__}")
+            raise ConfigError(f"Entry {i} must be a JSON object, got {type(raw).__name__}")
         recording = raw.get("recording")
         if not recording:
-            raise ValueError(f"Entry {i} is missing required 'recording' field")
+            raise ConfigError(f"Entry {i} is missing required 'recording' field")
         out_dir = raw.get("out_dir")
         if not out_dir:
-            raise ValueError(f"Entry {i} is missing required 'out_dir' field")
+            raise ConfigError(f"Entry {i} is missing required 'out_dir' field")
 
         # Resolve relative paths against the manifest's parent directory
         recording_path = str((base / recording).resolve()) if not Path(recording).is_absolute() else recording
