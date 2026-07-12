@@ -11,7 +11,6 @@ import io
 import json
 import os
 import socket
-import sys
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -92,7 +91,7 @@ def _validate_url_for_ssrf(url: str) -> str:
     for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
         ip_str = sockaddr[0]
         try:
-            ip_obj = ipaddress.ip_address(ip_str)
+            ipaddress.ip_address(ip_str)
         except ValueError:
             # Not an IP address, skip
             continue

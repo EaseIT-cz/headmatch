@@ -14,13 +14,9 @@ from headmatch.headphone_db import (
 class TestAllowedDomains:
     """Tests for the ALLOWED_DOMAINS constant."""
 
-    def test_contains_raw_githubusercontent(self):
-        """raw.githubusercontent.com should be in allowed domains."""
-        assert "raw.githubusercontent.com" in ALLOWED_DOMAINS
-
-    def test_contains_api_github(self):
-        """api.github.com should be in allowed domains."""
-        assert "api.github.com" in ALLOWED_DOMAINS
+    def test_contains_exact_github_hosts(self):
+        """The allowlist should contain only the expected GitHub hosts."""
+        assert ALLOWED_DOMAINS == ("raw.githubusercontent.com", "api.github.com")
 
 
 class TestIsPrivateIp:
