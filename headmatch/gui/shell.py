@@ -71,6 +71,9 @@ _HEARING_FLATTEN_PRESETS: dict[str, float] = {
 
 
 class HeadMatchGuiApp:
+    _force_new_hearing_test: bool
+    basic_search_matches: list[Any]
+
     def __getattr__(self, name: str) -> Any:
         raise AttributeError(name)
 
