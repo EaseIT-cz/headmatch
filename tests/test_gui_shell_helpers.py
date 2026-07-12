@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from headmatch.gui.shell import HeadMatchGuiApp, NavigationItem
+from headmatch.gui.controllers import WorkflowControllers
+from headmatch.gui.shell import HeadMatchGuiApp
 from headmatch.headphone_db import HeadphoneEntry
 from tests.test_gui import DummyVar
 
@@ -33,25 +34,26 @@ def test_parse_positive_int_validates_input():
 def test_refresh_basic_mode_target_step_only_rerenders_target_view():
     called = []
     app = SimpleNamespace(current_view=DummyVar(value="basic-mode"), basic_step_var=DummyVar(value="target"), show_view=lambda key: called.append(key))
-    HeadMatchGuiApp.refresh_basic_mode_target_step(app)
+    controllers = WorkflowControllers(app)
+    controllers.refresh_basic_mode_target_step()
     assert called == ["basic-mode"]
 
     called.clear()
     app.basic_step_var.set("measure")
-    HeadMatchGuiApp.refresh_basic_mode_target_step(app)
+    controllers.refresh_basic_mode_target_step()
     assert called == []
 
 
 def test_choose_basic_search_match_rejects_invalid_index():
     app = SimpleNamespace(basic_search_matches=[], basic_search_results_var=DummyVar(value=""))
-    HeadMatchGuiApp.choose_basic_search_match(app, 0)
+    WorkflowControllers(app).choose_basic_search_match(0)
     assert "Invalid" in app.basic_search_results_var.get()
 
 
 def test_choose_basic_search_match_downloads_selection(monkeypatch, tmp_path):
     calls = {}
     monkeypatch.setattr("headmatch.paths.documents_dir", lambda: tmp_path)
-    monkeypatch.setattr("headmatch.gui.shell.fetch_curve_from_url", lambda url, out_path: calls.update({"url": url, "out": Path(out_path)}) or Path(out_path))
+    monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", lambda url, out_path: calls.update({"url": url, "out": Path(out_path)}) or Path(out_path))
     refreshed = []
     app = SimpleNamespace(
         basic_search_matches=[HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv")],
@@ -63,7 +65,7 @@ def test_choose_basic_search_match_downloads_selection(monkeypatch, tmp_path):
         refresh_basic_mode_target_step=lambda: refreshed.append(True),
     )
 
-    HeadMatchGuiApp.choose_basic_search_match(app, 0)
+    WorkflowControllers(app).choose_basic_search_match(0)
 
     assert calls["url"].startswith("https://")
     assert app.basic_target_mode_var.get() == "database"
