@@ -20,6 +20,8 @@ from headmatch.headphone_db import (
     fetch_curve_from_url,
 )
 
+PUBLIC_ADDRINFO = [(0, 0, 0, "", ("185.199.108.133", 443))]
+
 
 # ── Index building tests ──
 
@@ -202,7 +204,7 @@ def test_parse_autoeq_csv_empty():
 # ── fetch_curve_from_url error handling ──
 
 def test_fetch_rejects_http():
-    with pytest.raises(ValueError, match="HTTPS"):
+    with pytest.raises(ValueError, match="https"):
         fetch_curve_from_url("http://example.com/test.csv", "/tmp/out.csv")
 
 
@@ -214,9 +216,11 @@ def test_fetch_utf8_error(tmp_path):
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
 
-    with patch("headmatch.headphone_db.urlopen", return_value=mock_resp):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=mock_resp
+    ):
         with pytest.raises(ValueError, match="UTF-8"):
-            fetch_curve_from_url("https://example.com/bad.csv", str(tmp_path / "out.csv"))
+            fetch_curve_from_url("https://raw.githubusercontent.com/bad.csv", str(tmp_path / "out.csv"))
 
 
 # ── HeadphoneEntry tests ──
