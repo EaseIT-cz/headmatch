@@ -89,7 +89,7 @@ def _validate_url_for_ssrf(url: str) -> str:
         raise ValueError(f"Could not resolve hostname '{hostname}': {e}")
 
     for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
-        ip_str = sockaddr[0]
+        ip_str = str(sockaddr[0])
         try:
             ipaddress.ip_address(ip_str)
         except ValueError:
