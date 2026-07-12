@@ -174,17 +174,19 @@ def test_backend_discover_devices(mock_run, mock_which):
 
 @patch("headmatch.backend_pipewire.shutil.which", return_value=None)
 def test_backend_discover_devices_no_pw_dump(mock_which):
+    from headmatch.exceptions import MeasurementError
     backend = PipeWireBackend()
-    with pytest.raises(RuntimeError, match="pw-dump"):
+    with pytest.raises(MeasurementError, match="pw-dump"):
         backend.discover_devices()
 
 
 @patch("headmatch.backend_pipewire.shutil.which", return_value="/usr/bin/pw-dump")
 @patch("headmatch.backend_pipewire._run_discovery")
 def test_backend_discover_devices_bad_json(mock_run, mock_which):
+    from headmatch.exceptions import MeasurementError
     mock_run.return_value = MagicMock(returncode=0, stdout="not json")
     backend = PipeWireBackend()
-    with pytest.raises(RuntimeError, match="invalid JSON"):
+    with pytest.raises(MeasurementError, match="invalid JSON"):
         backend.discover_devices()
 
 

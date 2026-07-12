@@ -23,8 +23,9 @@ from headmatch.signals import SweepSpec
 
 class TestRequireExecutable:
     def test_missing_raises(self, monkeypatch):
+        from headmatch.exceptions import MeasurementError
         monkeypatch.setattr("headmatch.measure.shutil.which", lambda name: None)
-        with pytest.raises(RuntimeError, match="Required executable not found"):
+        with pytest.raises(MeasurementError, match="Required executable not found"):
             require_executable("definitely-not-a-real-binary")
 
     def test_present_does_not_raise(self, monkeypatch):
