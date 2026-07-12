@@ -15,6 +15,7 @@ from typing import Optional
 import numpy as np
 
 from .audio_backend import AudioBackend, AudioDevice, DeviceConfig, DeviceSelection, MeasurementPaths
+from .exceptions import MeasurementError
 from .signals import SweepSpec
 
 
@@ -24,13 +25,13 @@ def _import_sd():
         import sounddevice as sd
         return sd
     except OSError as exc:
-        raise RuntimeError(
+        raise MeasurementError(
             "PortAudio library not found. "
             "On macOS: brew install portaudio && pip install sounddevice. "
             "On Windows: pip install sounddevice (ships bundled PortAudio)."
         ) from exc
     except ImportError as exc:
-        raise RuntimeError(
+        raise MeasurementError(
             "sounddevice is not installed. Install with: pip install headmatch[portaudio]"
         ) from exc
 
@@ -180,7 +181,7 @@ class PortAudioBackend:
         from .io_utils import read_wav
         sweep_data, sr = read_wav(paths.sweep_wav)
         if sr != spec.sample_rate:
-            raise RuntimeError(
+            raise MeasurementError(
                 f"Sweep sample rate mismatch: expected {spec.sample_rate}, got {sr}"
             )
 
@@ -225,13 +226,13 @@ class PortAudioBackend:
                 blocking=True,
             )
         except Exception as exc:
-            raise RuntimeError(
+            raise MeasurementError(
                 f"Audio playback/recording failed: {exc}. "
                 "Check your audio devices with 'headmatch list-targets'."
             ) from exc
 
         if recording is None or len(recording) == 0:
-            raise RuntimeError(
+            raise MeasurementError(
                 "Recording produced no data. "
                 "Check your audio device selection with 'headmatch list-targets'."
             )
@@ -244,7 +245,7 @@ class PortAudioBackend:
         write_wav(paths.recording_wav, recording, spec.sample_rate)
 
         if not paths.recording_wav.exists() or paths.recording_wav.stat().st_size == 0:
-            raise RuntimeError(
+            raise MeasurementError(
                 "Recording file was not written. "
                 "Check audio device permissions and try again."
             )
