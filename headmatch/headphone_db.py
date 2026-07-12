@@ -299,10 +299,15 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
 def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
     """Download a frequency response CSV from a URL and save it locally.
 
-    Only HTTPS URLs are accepted. Response size is capped at 5 MB.
+    Security considerations:
+    - Only HTTPS URLs are accepted (http, ftp, file, etc. are rejected)
+    - URLs must point to allowed domains (raw.githubusercontent.com, api.github.com)
+    - URLs are validated against SSRF attacks including private IP resolution
+
+    Response size is capped at 5 MB.
     """
-    if not url.startswith("https://"):
-        raise ValueError(f"Only HTTPS URLs are accepted. Got: {url}")
+    # Validate URL for SSRF protection before any other processing
+    _validate_url_for_ssrf(url)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
