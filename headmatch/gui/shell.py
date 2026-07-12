@@ -35,6 +35,7 @@ def _get_filedialog():
 
 from ..app_identity import get_app_identity
 from ..contracts import FrontendConfig
+from ..exceptions import ConfigError
 from ..measure import OfflineMeasurementPlan, SweepSpec, collect_doctor_checks, collect_pipewire_target_selection, format_doctor_report, prepare_offline_measurement
 from ..pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
 from ..history import build_history_selection
@@ -695,9 +696,9 @@ class HeadMatchGuiApp:
         try:
             value = int(raw)
         except ValueError as exc:
-            raise ValueError(f"{label} must be a whole number.") from exc
+            raise ConfigError(f"{label} must be a whole number.") from exc
         if value <= 0:
-            raise ValueError(f"{label} must be greater than 0.")
+            raise ConfigError(f"{label} must be greater than 0.")
         return value
 
 

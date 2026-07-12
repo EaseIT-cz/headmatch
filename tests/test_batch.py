@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from headmatch.exceptions import ConfigError
 from headmatch.batch import (
     BatchResult,
     generate_manifest_template,
@@ -37,7 +38,7 @@ def test_load_batch_manifest_missing_recording(tmp_path):
     manifest = _make_manifest(tmp_path, [
         {"out_dir": "fit_out"},
     ])
-    with pytest.raises(ValueError, match="missing required 'recording'"):
+    with pytest.raises(ConfigError, match="missing required 'recording'"):
         load_batch_manifest(manifest)
 
 
@@ -45,32 +46,32 @@ def test_load_batch_manifest_missing_out_dir(tmp_path):
     manifest = _make_manifest(tmp_path, [
         {"recording": "rec.wav"},
     ])
-    with pytest.raises(ValueError, match="missing required 'out_dir'"):
+    with pytest.raises(ConfigError, match="missing required 'out_dir'"):
         load_batch_manifest(manifest)
 
 
 def test_load_batch_manifest_empty_entries(tmp_path):
     manifest = _make_manifest(tmp_path, [])
-    with pytest.raises(ValueError, match="non-empty"):
+    with pytest.raises(ConfigError, match="non-empty"):
         load_batch_manifest(manifest)
 
 
 def test_load_batch_manifest_bad_json(tmp_path):
     manifest = tmp_path / "bad.json"
     manifest.write_text("not json", encoding="utf-8")
-    with pytest.raises(ValueError, match="Invalid JSON"):
+    with pytest.raises(ConfigError, match="Invalid JSON"):
         load_batch_manifest(manifest)
 
 
 def test_load_batch_manifest_not_found(tmp_path):
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ConfigError):
         load_batch_manifest(tmp_path / "missing.json")
 
 
 def test_load_batch_manifest_wrong_type(tmp_path):
     manifest = tmp_path / "bad.json"
     manifest.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(ConfigError, match="JSON object"):
         load_batch_manifest(manifest)
 
 

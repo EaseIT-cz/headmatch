@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from .audio_backend import AudioBackend, AudioDevice, DeviceConfig, DeviceSelection, MeasurementPaths
+from .exceptions import MeasurementError
 from .signals import SweepSpec
 
 
@@ -135,17 +136,17 @@ class PipeWireBackend:
 
     def discover_devices(self) -> list[AudioDevice]:
         if shutil.which('pw-dump') is None:
-            raise RuntimeError('PipeWire discovery requires pw-dump. Install PipeWire tools and try again.')
+            raise MeasurementError('PipeWire discovery requires pw-dump. Install PipeWire tools and try again.')
         result = _run_discovery(['pw-dump'])
         if result.returncode != 0:
             message = (result.stderr or result.stdout or 'pw-dump failed').strip()
-            raise RuntimeError(f'PipeWire discovery failed. {message}')
+            raise MeasurementError(f'PipeWire discovery failed. {message}')
         try:
             payload = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
-            raise RuntimeError('PipeWire discovery returned invalid JSON from pw-dump.') from exc
+            raise MeasurementError('PipeWire discovery returned invalid JSON from pw-dump.') from exc
         if not isinstance(payload, list):
-            raise RuntimeError('PipeWire discovery returned an unexpected payload from pw-dump.')
+            raise MeasurementError('PipeWire discovery returned an unexpected payload from pw-dump.')
         return _parse_pw_dump(payload)
 
     def get_default_devices(self) -> dict[str, str]:
@@ -216,7 +217,7 @@ class PipeWireBackend:
                 play_result = subprocess.run(play_cmd, capture_output=True, text=True, check=False)
                 if play_result.returncode != 0:
                     message = (play_result.stderr or play_result.stdout or 'pw-play failed').strip()
-                    raise RuntimeError(
+                    raise MeasurementError(
                         f"Playback failed. {message} Try 'headmatch list-targets' to confirm the right --output-target."
                     )
                 time.sleep(capture_guard_s)
@@ -236,7 +237,7 @@ class PipeWireBackend:
             stderr = ''
             if stderr_path.exists():
                 stderr = stderr_path.read_text(encoding='utf-8').strip()
-            raise RuntimeError(
+            raise MeasurementError(
                 'Capture did not produce a usable WAV file. '
                 "Confirm the playback/capture targets, run 'headmatch list-targets' if needed, and try again."
                 + (f' {stderr}' if stderr else '')

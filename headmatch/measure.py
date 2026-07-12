@@ -20,6 +20,7 @@ from .audio_backend import (
     get_audio_backend,
 )
 from .contracts import FrontendConfig
+from .exceptions import MeasurementError
 from .io_utils import save_json, write_wav
 from .signals import SweepSpec, generate_log_sweep
 
@@ -61,7 +62,7 @@ class OfflineMeasurementPlan:
 
 def require_executable(name: str) -> None:
     if shutil.which(name) is None:
-        raise RuntimeError(f"Required executable not found: {name}")
+        raise MeasurementError(f"Required executable not found: {name}")
 
 
 def render_sweep_file(spec: SweepSpec, path: str | Path) -> Path:
@@ -164,7 +165,7 @@ def collect_doctor_checks(config_path: Path, config: FrontendConfig) -> list[Doc
     # Check saved targets against discovered devices
     try:
         discovered = list_pipewire_targets()
-    except RuntimeError:
+    except (RuntimeError, MeasurementError):
         discovered = None
 
     if config.pipewire_output_target:

@@ -207,6 +207,7 @@ def test_play_and_record_with_name_targets(mock_sd_factory, tmp_path):
 
 @patch("headmatch.backend_portaudio._import_sd")
 def test_play_and_record_failure(mock_sd_factory, tmp_path):
+    from headmatch.exceptions import MeasurementError
     mock_sd = MagicMock()
     mock_sd.playrec.side_effect = Exception("Device not available")
     mock_sd.query_devices.side_effect = lambda dev, kind=None: {
@@ -222,7 +223,7 @@ def test_play_and_record_failure(mock_sd_factory, tmp_path):
     )
 
     backend = PortAudioBackend()
-    with pytest.raises(RuntimeError, match="playback/recording failed"):
+    with pytest.raises(MeasurementError, match="playback/recording failed"):
         backend.play_and_record(spec, paths, DeviceConfig(output_target="0", input_target="1"))
 
 
@@ -271,9 +272,10 @@ def test_doctor_checks_no_sounddevice(mock_sd_factory):
 # ── _import_sd error handling ──
 
 def test_import_sd_missing_library():
+    from headmatch.exceptions import MeasurementError
     with patch.dict("sys.modules", {"sounddevice": None}):
         # Force re-import to fail
-        with pytest.raises(RuntimeError):
+        with pytest.raises(MeasurementError):
             import importlib
             import headmatch.backend_portaudio as mod
             importlib.reload(mod)

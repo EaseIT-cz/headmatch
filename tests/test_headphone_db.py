@@ -19,6 +19,7 @@ from headmatch.headphone_db import (
     _index_cache_path,
     fetch_curve_from_url,
 )
+from headmatch.exceptions import MeasurementError, ConfigError, NetworkError
 
 PUBLIC_ADDRINFO = [(0, 0, 0, "", ("185.199.108.133", 443))]
 
@@ -174,14 +175,14 @@ def test_cache_corrupt(tmp_path):
 # ── Network fallback test ──
 
 @patch("headmatch.headphone_db._load_cached_index", return_value=MOCK_INDEX)
-@patch("headmatch.headphone_db._get_index", side_effect=ConnectionError("offline"))
+@patch("headmatch.headphone_db._get_index", side_effect=NetworkError("offline"))
 def test_search_falls_back_to_cache(mock_get, mock_cache):
     results = search_headphone("aria")
     assert len(results) == 1
 
 
 @patch("headmatch.headphone_db._load_cached_index", return_value=None)
-@patch("headmatch.headphone_db._get_index", side_effect=ConnectionError("offline"))
+@patch("headmatch.headphone_db._get_index", side_effect=NetworkError("offline"))
 def test_search_no_cache_no_network(mock_get, mock_cache):
     results = search_headphone("aria")
     assert results == []
@@ -197,19 +198,19 @@ def test_parse_autoeq_csv_valid():
 
 
 def test_parse_autoeq_csv_empty():
-    with pytest.raises(ValueError, match="No valid"):
+    with pytest.raises(MeasurementError, match="No valid"):
         _parse_autoeq_csv("header only\n")
 
 
 # ── fetch_curve_from_url error handling ──
 
 def test_fetch_rejects_http():
-    with pytest.raises(ValueError, match="https"):
+    with pytest.raises(NetworkError, match="scheme must be 'https'"):
         fetch_curve_from_url("http://example.com/test.csv", "/tmp/out.csv")
 
 
 def test_fetch_utf8_error(tmp_path):
-    """UTF-8 decode failure should raise ValueError, not UnicodeDecodeError."""
+    """UTF-8 decode failure should raise MeasurementError, not UnicodeDecodeError."""
     binary_content = b'\xff\xfe' + b'\x00' * 100
     mock_resp = MagicMock()
     mock_resp.read.return_value = binary_content
@@ -219,7 +220,7 @@ def test_fetch_utf8_error(tmp_path):
     with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
         "headmatch.headphone_db.urlopen", return_value=mock_resp
     ):
-        with pytest.raises(ValueError, match="UTF-8"):
+        with pytest.raises(MeasurementError, match="UTF-8"):
             fetch_curve_from_url("https://raw.githubusercontent.com/bad.csv", str(tmp_path / "out.csv"))
 
 

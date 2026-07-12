@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import headmatch.peq as peq
+from headmatch.exceptions import MeasurementError
 from headmatch.peq import (
     FilterBudget,
     FitObjective,
@@ -50,14 +51,14 @@ class TestDefaultGraphicEqProfileName:
 
 class TestGraphicEqProfileLookup:
     def test_unknown_profile_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unsupported GraphicEQ profile"):
+        with pytest.raises(MeasurementError, match="Unsupported GraphicEQ profile"):
             graphic_eq_profile("does_not_exist")
 
 
 class TestBiquadResponseUnsupportedKind:
     def test_unsupported_band_kind_raises(self):
         band = PEQBand("bogus", 1000.0, 1.0, 1.0)  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="Unsupported band type"):
+        with pytest.raises(MeasurementError, match="Unsupported band type"):
             biquad_response_db(np.array([1000.0]), 48000, band)
 
 
@@ -146,7 +147,7 @@ class TestFitPeqUnsupportedFamily:
         """fit_peq raises for a family that is neither graphic_eq nor peq (line 469)."""
         budget = dataclasses.replace(FilterBudget(family="peq", max_filters=4), family="weird")
         freqs = np.geomspace(20.0, 20000.0, 100)
-        with pytest.raises(ValueError, match="Unsupported filter family"):
+        with pytest.raises(MeasurementError, match="Unsupported filter family"):
             fit_peq(freqs, np.zeros_like(freqs), 48000, budget=budget)  # type: ignore[arg-type]
 
 

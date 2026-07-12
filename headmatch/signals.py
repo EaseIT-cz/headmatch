@@ -8,6 +8,8 @@ import numpy as np
 from scipy import signal
 from scipy.ndimage import gaussian_filter1d
 
+from .exceptions import MeasurementError
+
 
 @dataclass
 class SweepSpec:
@@ -65,7 +67,7 @@ def fractional_octave_smoothing(freqs_hz: np.ndarray, values_db: np.ndarray, fra
     by dividing smoothed values by smoothed ones (constant zero padding).
     """
     if len(freqs_hz) != len(values_db):
-        raise ValueError('freq and values must have the same length')
+        raise MeasurementError('freq and values must have the same length')
     if len(freqs_hz) < 2:
         return values_db.copy()  # type: ignore[no-any-return]
     logf = np.log2(np.maximum(freqs_hz, 1e-9))

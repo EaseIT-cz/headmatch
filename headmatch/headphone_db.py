@@ -21,6 +21,8 @@ from urllib.parse import quote, urlparse
 
 import numpy as np
 
+from .exceptions import MeasurementError, NetworkError
+
 
 # Allowed domains for URL validation (SSRF protection)
 # - raw.githubusercontent.com: AutoEQ raw CSV data
@@ -62,23 +64,23 @@ def _validate_url_for_ssrf(url: str) -> str:
         The validated URL unchanged.
 
     Raises:
-        ValueError: If the URL is invalid, not HTTPS, not in allowed domains,
-                   or resolves to a private/internal IP.
+        NetworkError: If the URL is invalid, not HTTPS, not in allowed domains,
+                      or resolves to a private/internal IP.
     """
     parsed = urlparse(url)
 
     # Validate scheme is HTTPS
     if parsed.scheme != "https":
-        raise ValueError(f"scheme must be 'https' but got '{parsed.scheme}'")
+        raise NetworkError(f"scheme must be 'https' but got '{parsed.scheme}'")
 
     # Validate hostname exists
     hostname = parsed.hostname
     if not hostname:
-        raise ValueError("URL must contain a valid hostname")
+        raise NetworkError("URL must contain a valid hostname")
 
     # Validate hostname is in allowed domains (case-insensitive)
     if hostname.lower() not in (d.lower() for d in ALLOWED_DOMAINS):
-        raise ValueError(f"Domain '{hostname}' is not in the allowed list")
+        raise NetworkError(f"Domain '{hostname}' is not in the allowed list")
 
     # Validate that the hostname doesn't resolve to a private IP
     try:
@@ -86,7 +88,7 @@ def _validate_url_for_ssrf(url: str) -> str:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror as e:
         # DNS resolution failed
-        raise ValueError(f"Could not resolve hostname '{hostname}': {e}")
+        raise NetworkError(f"Could not resolve hostname '{hostname}': {e}")
 
     for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
         ip_str = str(sockaddr[0])
@@ -96,7 +98,7 @@ def _validate_url_for_ssrf(url: str) -> str:
             # Not an IP address, skip
             continue
         if _is_private_ip(ip_str):
-            raise ValueError(
+            raise NetworkError(
                 f"Domain '{hostname}' resolves to private IP: {ip_str}"
             )
 
@@ -180,11 +182,11 @@ def _fetch_and_cache_index() -> list[dict]:
         with urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read(50 * 1024 * 1024))  # GitHub tree can be large
     except (URLError, OSError) as e:
-        raise ConnectionError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
+        raise NetworkError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
 
     entries = _build_index_from_tree(data)
     if not entries:
-        raise ValueError("No headphone entries found in the AutoEQ tree (unexpected repo structure change?)")
+        raise MeasurementError("No headphone entries found in the AutoEQ tree (unexpected repo structure change?)")
 
     cache = {
         "fetched_at": time.time(),
@@ -236,7 +238,7 @@ def search_headphone(query: str, database: str = "autoeq") -> list[HeadphoneEntr
     # Try to get index, falling back to cache on network failure
     try:
         entries = _get_index()
-    except ConnectionError:
+    except NetworkError:
         cached = _load_cached_index()
         if cached is not None:
             entries = cached
@@ -291,7 +293,7 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
         except (ValueError, IndexError):
             continue
     if not freqs:
-        raise ValueError("No valid frequency/response data found in CSV")
+        raise MeasurementError("No valid frequency/response data found in CSV")
     return np.array(freqs), np.array(values)
 
 
@@ -313,26 +315,26 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
         with urlopen(url, timeout=15) as resp:
             raw = resp.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
-                raise ValueError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
+                raise MeasurementError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
             try:
                 text = raw.decode("utf-8")
             except UnicodeDecodeError as e:
-                raise ValueError("Downloaded file is not valid UTF-8 CSV text.") from e
+                raise MeasurementError("Downloaded file is not valid UTF-8 CSV text.") from e
     except (URLError, OSError) as e:
-        raise ConnectionError(f"Failed to fetch {url}: {e}") from e
+        raise NetworkError(f"Failed to fetch {url}: {e}") from e
 
     # Validate it's parseable and spans a usable frequency range
     freqs, values = _parse_autoeq_csv(text)
     if len(freqs) < 10:
-        raise ValueError(f"Fetched CSV has only {len(freqs)} points — expected a frequency response")
+        raise MeasurementError(f"Fetched CSV has only {len(freqs)} points — expected a frequency response")
     freq_min, freq_max = float(freqs[0]), float(freqs[-1])
     if freq_max < 1000.0:
-        raise ValueError(
+        raise MeasurementError(
             f"Fetched CSV only covers up to {freq_max:.0f} Hz — "
             "expected a full-range frequency response reaching at least 1 kHz"
         )
     if freq_min > 1000.0:
-        raise ValueError(
+        raise MeasurementError(
             f"Fetched CSV starts at {freq_min:.0f} Hz — "
             "expected a frequency response that includes frequencies below 1 kHz"
         )
@@ -345,3 +347,12 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
             writer.writerow([float(freq), float(val)])
 
     return out_path
+
+
+def fetch_autoeq_index() -> list[dict]:
+    """Fetch and return the AutoEQ headphone index from GitHub API.
+
+    Forces a fresh fetch from GitHub, bypassing cache.
+    Raises NetworkError on connection failure.
+    """
+    return _fetch_and_cache_index()

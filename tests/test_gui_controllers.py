@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from headmatch.exceptions import ConfigError
 from headmatch.gui.controllers import WorkflowControllers
 
 
@@ -106,7 +107,7 @@ def test_start_basic_clone_target_requires_all_paths(tmp_path):
     app = make_app(tmp_path)
     controllers = WorkflowControllers(app)
 
-    with pytest.raises(ValueError, match="required"):
+    with pytest.raises(ConfigError, match="required"):
         controllers.start_basic_clone_target()
 
 
@@ -226,7 +227,7 @@ def test_start_online_measurement_requires_output_dir(tmp_path):
     app = make_app(tmp_path)
     app.output_dir_var.set("")
     controllers = WorkflowControllers(app)
-    with pytest.raises(ValueError, match="Output folder"):
+    with pytest.raises(ConfigError, match="Output folder"):
         controllers.start_online_measurement()
 
 
@@ -244,5 +245,5 @@ def test_start_offline_prepare_and_fit_validate_and_schedule(tmp_path, monkeypat
     assert fit_result == {"ok": True}
 
     app.offline_recording_var.set("")
-    with pytest.raises(ValueError, match="Recorded WAV"):
+    with pytest.raises(ConfigError, match="Recorded WAV"):
         controllers.start_offline_fit()

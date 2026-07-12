@@ -147,7 +147,8 @@ class WorkflowControllers:
         target = self.app.basic_clone_target_var.get().strip()
         out_path = self.app.basic_clone_output_var.get().strip()
         if not source or not target or not out_path:
-            raise ValueError("Source, target, and output CSV paths are required.")
+            from ..exceptions import ConfigError
+            raise ConfigError("Source, target, and output CSV paths are required.")
         self.app._run_background_task(
             task_name="basic-clone-target",
             progress_title="Creating clone target",
@@ -193,7 +194,8 @@ class WorkflowControllers:
     def start_online_measurement(self) -> None:
         output_dir = self.app.output_dir_var.get().strip()
         if not output_dir:
-            raise ValueError("Output folder is required.")
+            from ..exceptions import ConfigError
+            raise ConfigError("Output folder is required.")
         iterations = self.app._parse_positive_int(self.app.iterations_var.get().strip(), "Iterations")
         max_filters = self.app._parse_positive_int(self.app.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.app.target_csv_var.get().strip() or None
@@ -210,7 +212,8 @@ class WorkflowControllers:
     def start_offline_prepare(self) -> None:
         output_dir = self.app.output_dir_var.get().strip()
         if not output_dir:
-            raise ValueError("Package folder is required.")
+            from ..exceptions import ConfigError
+            raise ConfigError("Package folder is required.")
         out_dir = Path(output_dir)
         notes = self.app.offline_notes_var.get().strip()
         self.app._run_background_task(
@@ -224,10 +227,12 @@ class WorkflowControllers:
     def start_offline_fit(self) -> None:
         recording = self.app.offline_recording_var.get().strip()
         if not recording:
-            raise ValueError("Recorded WAV is required.")
+            from ..exceptions import ConfigError
+            raise ConfigError("Recorded WAV is required.")
         out_dir = self.app.offline_fit_output_var.get().strip()
         if not out_dir:
-            raise ValueError("Fit output folder is required.")
+            from ..exceptions import ConfigError
+            raise ConfigError("Fit output folder is required.")
         max_filters = self.app._parse_positive_int(self.app.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.app.target_csv_var.get().strip() or None
         self.app._run_background_task(

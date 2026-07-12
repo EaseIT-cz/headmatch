@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
 
+from .exceptions import MeasurementError
 from .signals import SweepSpec
 
 if TYPE_CHECKING:
@@ -110,7 +111,7 @@ def get_audio_backend() -> AudioBackend:
             from .backend_portaudio import PortAudioBackend
             return PortAudioBackend()
         except ImportError:
-            raise RuntimeError(
+            raise MeasurementError(
                 "macOS audio backend requires the 'sounddevice' package. "
                 "Install it with: pip install sounddevice"
             )
@@ -120,7 +121,7 @@ def get_audio_backend() -> AudioBackend:
         from .backend_portaudio import PortAudioBackend
         return PortAudioBackend()
     except ImportError:
-        raise RuntimeError(
+        raise MeasurementError(
             f"No audio backend available for {sys.platform}. "
             "Install 'sounddevice' for cross-platform support, "
             "or use PipeWire on Linux."

@@ -6,6 +6,7 @@ from typing import Callable, List, Literal
 import numpy as np
 from scipy import signal
 
+from .exceptions import MeasurementError
 from .signals import fractional_octave_smoothing
 
 FillPolicy = Literal["up_to_n", "exact_n"]
@@ -163,7 +164,7 @@ def graphic_eq_profile(name: str | None = None) -> GraphicEQProfile:
     try:
         return GRAPHIC_EQ_PROFILES[resolved]
     except KeyError as exc:
-        raise ValueError(f"Unsupported GraphicEQ profile: {resolved}") from exc
+        raise MeasurementError(f"Unsupported GraphicEQ profile: {resolved}") from exc
 
 
 def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarray:
@@ -200,7 +201,7 @@ def biquad_response_db(freqs_hz: np.ndarray, fs: int, band: PEQBand) -> np.ndarr
         a1 = 2 * ((A - 1) - (A + 1) * cosw)
         a2 = (A + 1) - (A - 1) * cosw - 2 * sqrtA * alpha
     else:
-        raise ValueError(f"Unsupported band type: {band.kind}")
+        raise MeasurementError(f"Unsupported band type: {band.kind}")
 
     # Direct biquad evaluation on the unit circle — avoids signal.freqz overhead.
     # H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2)
@@ -498,7 +499,7 @@ def fit_peq(
             max_gain_db=max_gain_db,
         )
     if budget.family != "peq":
-        raise ValueError(f"Unsupported filter family: {budget.family}")
+        raise MeasurementError(f"Unsupported filter family: {budget.family}")
 
     low_cap = 2.0 if low_freq_q_cap is None else low_freq_q_cap
     objective = FitObjective.from_target(freqs_hz, target_eq_db, sample_rate)

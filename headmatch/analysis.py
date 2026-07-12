@@ -7,6 +7,7 @@ from typing import Dict
 import numpy as np
 from scipy import signal
 
+from .exceptions import MeasurementError
 from .io_utils import read_wav, save_fr_csv
 from .signals import SweepSpec, fractional_octave_smoothing, geometric_log_grid
 
@@ -28,12 +29,12 @@ def _coerce_room_measurement_audio(data: np.ndarray, mic_channel: int = 0) -> np
     to provide a symmetric result: left_db == right_db, and no channel mismatch.
     """
     if data.ndim != 2:
-        raise ValueError('Room recording must be a 2D audio array')
+        raise MeasurementError('Room recording must be a 2D audio array')
     if len(data) == 0:
-        raise ValueError('Room recording is empty')
+        raise MeasurementError('Room recording is empty')
     num_channels = data.shape[1]
     if mic_channel >= num_channels:
-        raise ValueError(f'mic_channel {mic_channel} exceeds available channels {num_channels}')
+        raise MeasurementError(f'mic_channel {mic_channel} exceeds available channels {num_channels}')
     selected = data[:, mic_channel:mic_channel + 1]
     return np.repeat(selected, 2, axis=1)
 
@@ -41,16 +42,16 @@ def _coerce_room_measurement_audio(data: np.ndarray, mic_channel: int = 0) -> np
 
 def _coerce_measurement_audio(data: np.ndarray, path: str | Path) -> np.ndarray:
     if data.ndim != 2:
-        raise ValueError(f'{path} must be a 2D audio array')
+        raise MeasurementError(f'{path} must be a 2D audio array')
     if len(data) == 0:
-        raise ValueError(f'{path} is empty')
+        raise MeasurementError(f'{path} is empty')
     if data.shape[1] == 1:
-        raise ValueError(f'{path} is mono capture. Use a stereo recording with two distinct channels.')
+        raise MeasurementError(f'{path} is mono capture. Use a stereo recording with two distinct channels.')
     if data.shape[1] < 2:
-        raise ValueError(f'{path} must contain at least two channels')
+        raise MeasurementError(f'{path} must contain at least two channels')
     stereo = data[:, :2]
     if np.allclose(stereo[:, 0], stereo[:, 1], rtol=1e-6, atol=1e-10):
-        raise ValueError(f'{path} appears to be a duplicated-channel capture. Left and right channels are identical. Use a proper stereo recording.')
+        raise MeasurementError(f'{path} appears to be a duplicated-channel capture. Left and right channels are identical. Use a proper stereo recording.')
     return stereo
 
 
@@ -184,10 +185,10 @@ def _analyze_stereo(recording: np.ndarray, sr: int, sweep_spec: SweepSpec) -> Me
     (headphone stereo vs. mono room capture) before invoking this.
     """
     if sr != sweep_spec.sample_rate:
-        raise ValueError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
+        raise MeasurementError(f'Sample rate mismatch: recording {sr}, expected {sweep_spec.sample_rate}')
     min_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s * 0.5) * sweep_spec.sample_rate))
     if len(recording) < min_len:
-        raise ValueError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
+        raise MeasurementError(f'Recording too short: {len(recording)} samples; expected at least {min_len}')
     from .signals import generate_log_sweep
     _, reference = generate_log_sweep(sweep_spec)
     padded_len = int(round((sweep_spec.pre_silence_s + sweep_spec.duration_s + sweep_spec.post_silence_s) * sweep_spec.sample_rate))

@@ -410,7 +410,8 @@ class TestEnergyAverageResponsesN:
         """Empty list raises appropriate error."""
         try:
             from headmatch.room import energy_average_responses_n
-            with pytest.raises((ValueError, IndexError), match="empty"):
+            from headmatch.exceptions import MeasurementError
+            with pytest.raises(MeasurementError, match="empty"):
                 energy_average_responses_n([])
         except ImportError:
             pytest.xfail("energy_average_responses_n not yet implemented")
@@ -436,7 +437,8 @@ class TestEnergyAverageResponsesN:
         
         try:
             from headmatch.room import energy_average_responses_n
-            with pytest.raises((ValueError, AssertionError), match="freq|frequency|grid|mismatch"):
+            from headmatch.exceptions import MeasurementError
+            with pytest.raises(MeasurementError, match="freq|frequency|grid|mismatch"):
                 energy_average_responses_n([result1, result2])
         except ImportError:
             pytest.xfail("energy_average_responses_n not yet implemented")
@@ -960,28 +962,31 @@ class TestRoomDimensions:
     def test_reject_non_positive_dimensions(self):
         """Reject non-positive dimensions (zero or negative)."""
         from headmatch.room import estimate_cutoff_from_dimensions
+        from headmatch.exceptions import MeasurementError
         
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(MeasurementError):
             estimate_cutoff_from_dimensions(length_m=0.0, width_m=4.0, height_m=2.5)
         
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(MeasurementError):
             estimate_cutoff_from_dimensions(length_m=5.0, width_m=-1.0, height_m=2.5)
-        
-        with pytest.raises((ValueError, AssertionError)):
+
+        with pytest.raises(MeasurementError):
             estimate_cutoff_from_dimensions(length_m=5.0, width_m=4.0, height_m=-2.5)
     
     def test_reject_unreasonably_small_dimensions(self):
         """Reject unreasonably small dimensions (e.g., < 0.1m)."""
         from headmatch.room import estimate_cutoff_from_dimensions
+        from headmatch.exceptions import MeasurementError
         
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(MeasurementError):
             estimate_cutoff_from_dimensions(length_m=0.05, width_m=4.0, height_m=2.5)
     
     def test_reject_unreasonably_large_dimensions(self):
         """Reject unreasonably large dimensions (e.g., > 100m)."""
         from headmatch.room import estimate_cutoff_from_dimensions
+        from headmatch.exceptions import MeasurementError
         
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(MeasurementError):
             estimate_cutoff_from_dimensions(length_m=150.0, width_m=4.0, height_m=2.5)
     
     def test_output_format_returns_float(self):
