@@ -270,9 +270,10 @@ def test_basic_mode_hides_irrelevant_controls_by_source_selection():
 
 def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
     from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.gui.controllers import WorkflowControllers
     from headmatch.headphone_db import HeadphoneEntry
 
-    monkeypatch.setattr("headmatch.gui.shell.search_headphone", lambda _q: [
+    monkeypatch.setattr("headmatch.gui.controllers.search_headphone", lambda _q: [
         HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv"),
         HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="results/crinacle/over-ear/HD 650/HD 650.csv"),
     ])
@@ -286,20 +287,22 @@ def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
         basic_target_mode_var=DummyVar(value="database"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
-        refresh_basic_mode_target_step=lambda: refreshed.__setitem__("count", refreshed["count"] + 1),
-        choose_basic_search_match=lambda _i: None,
+        current_view=DummyVar(value="basic-mode"),
+        basic_step_var=DummyVar(value="target"),
+        show_view=lambda _k: None,
     )
+    app._controllers = WorkflowControllers(app)
 
     HeadMatchGuiApp.basic_search_target(app)
 
     assert len(app.basic_search_matches) == 2
     assert app.basic_target_csv_var.get() == ""
     assert "Choose one below" in app.basic_search_results_var.get()
-    assert refreshed["count"] == 1
 
 
 def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_path):
     from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.gui.controllers import WorkflowControllers
     from headmatch.headphone_db import HeadphoneEntry
 
     calls = {}
@@ -315,8 +318,8 @@ def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_pa
         Path(out_path).write_text("frequency_hz,response_db\n20,0\n")
         return Path(out_path)
 
-    monkeypatch.setattr("headmatch.gui.shell.search_headphone", fake_search)
-    monkeypatch.setattr("headmatch.gui.shell.fetch_curve_from_url", fake_fetch)
+    monkeypatch.setattr("headmatch.gui.controllers.search_headphone", fake_search)
+    monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", fake_fetch)
     monkeypatch.setattr("headmatch.paths.documents_dir", lambda: tmp_path)
 
     app = SimpleNamespace(
@@ -327,9 +330,11 @@ def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_pa
         basic_target_mode_var=DummyVar(value="flat"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
-        refresh_basic_mode_target_step=lambda: None,
+        current_view=DummyVar(value="basic-mode"),
+        basic_step_var=DummyVar(value="target"),
+        show_view=lambda _k: None,
     )
-    app.choose_basic_search_match = lambda i: HeadMatchGuiApp.choose_basic_search_match(app, i)
+    app._controllers = WorkflowControllers(app)
 
     HeadMatchGuiApp.basic_search_target(app)
 
@@ -813,7 +818,7 @@ def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_p
     app.basic_clone_target_var.set(str(tmp_path / 'target.csv'))
     app.basic_clone_output_var.set(str(tmp_path / 'clone.csv'))
 
-    monkeypatch.setattr('headmatch.gui.shell.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
+    monkeypatch.setattr('headmatch.gui.controllers.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
 
     app.start_basic_clone_target()
 

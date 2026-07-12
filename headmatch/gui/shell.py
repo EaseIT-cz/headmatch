@@ -737,53 +737,13 @@ class HeadMatchGuiApp:
         )
 
     def start_basic_clone_target(self) -> None:
-        source = self.basic_clone_source_var.get().strip()
-        target = self.basic_clone_target_var.get().strip()
-        out_path = self.basic_clone_output_var.get().strip()
-        if not source or not target or not out_path:
-            raise ValueError("Source, target, and output CSV paths are required.")
-        self._run_background_task(
-            task_name="basic-clone-target",
-            progress_title="Creating clone target",
-            progress_body="HeadMatch is building a relative clone target from the chosen measurement artifacts.",
-            worker=lambda: build_clone_curve(source, target, out_path),
-            on_success=lambda result: self._set_completion(
-                title="Clone target ready",
-                summary=f"Saved clone target to {out_path}.",
-                result=None,
-                steps=(
-                    "Use the clone target CSV in the target selector for a follow-up fit.",
-                    "Re-run the basic or advanced measurement flow against the generated target.",
-                    "Keep the source and target measurement artifacts around for traceability.",
-                ),
-            ),
-        )
+        self._controllers.start_basic_clone_target()
 
     def refresh_basic_mode_target_step(self) -> None:
-        if self.current_view.get() == "basic-mode" and self.basic_step_var.get() == "target":
-            self.show_view("basic-mode")
+        self._controllers.refresh_basic_mode_target_step()
 
     def choose_basic_search_match(self, index: int) -> None:
-        matches = getattr(self, "basic_search_matches", []) or []
-        if index < 0 or index >= len(matches):
-            self.basic_search_results_var.set("Invalid search result selection.")
-            return
-        entry = matches[index]
-        from ..paths import documents_dir
-        safe_name = entry.name.replace("/", "_").replace("\\", "_")
-        safe_source = entry.source.replace("/", "_").replace("\\", "_")
-        out_path = Path(documents_dir()) / f"{safe_name} - {safe_source}.csv"
-        try:
-            saved = fetch_curve_from_url(entry.raw_csv_url, out_path)
-        except Exception as exc:
-            self.basic_search_results_var.set(f"Found {entry.name}, but download failed: {exc}")
-            return
-        self.basic_target_mode_var.set("database")
-        self.basic_target_csv_var.set(str(saved))
-        self.basic_target_path_var.set(str(saved))
-        self.basic_search_choice_var.set(f"{entry.name} — {entry.source}")
-        self.basic_search_results_var.set(f"Selected {entry.name} from {entry.source}.")
-        self.refresh_basic_mode_target_step()
+        self._controllers.choose_basic_search_match(index)
 
     def choose_output_dir(self) -> None:
         self._choose_directory(self.output_dir_var, title="Choose output folder", fallback=self.state.default_output_dir)
@@ -833,148 +793,22 @@ class HeadMatchGuiApp:
         self.show_view("basic-mode")
 
     def basic_search_target(self) -> None:
-        query = self.basic_search_query_var.get().strip()
-        if not query:
-            self.basic_search_matches = []
-            self.basic_search_results_var.set("Enter a headphone model name to search the database.")
-            self.refresh_basic_mode_target_step()
-            return
-        try:
-            results = search_headphone(query)
-        except Exception as exc:
-            self.basic_search_matches = []
-            self.basic_search_results_var.set(f"Search failed: {exc}")
-            self.refresh_basic_mode_target_step()
-            return
-        if not results:
-            self.basic_search_matches = []
-            self.basic_search_results_var.set(f"No matches for '{query}'.")
-            self.refresh_basic_mode_target_step()
-            return
-        self.basic_search_matches = results[:8]
-        if len(self.basic_search_matches) == 1:
-            self.choose_basic_search_match(0)
-            return
-        self.basic_search_choice_var.set("")
-        self.basic_search_results_var.set(f"Found {len(self.basic_search_matches)} matches. Choose one below.")
-        self.refresh_basic_mode_target_step()
+        self._controllers.basic_search_target()
 
     def basic_export_results(self) -> None:
         self._show_status(f"Exported to {self.basic_export_path_var.get().strip() or self.output_dir_var.get().strip()}.")  # type: ignore[attr-defined]
 
     def start_basic_measurement(self) -> None:
-        out_dir = self.output_dir_var.get().strip()
-        self._run_background_task(
-            task_name="basic-mode",
-            progress_title="Running basic measurement",
-            progress_body="Basic mode is using defaults: 48 kHz, 3 iterations, default devices, and up to 10 PEQ filters.",
-            worker=lambda: self._online_runner(
-                output_dir=out_dir,
-                sweep_spec=self._build_sweep(),
-                target_path=(self.basic_target_csv_var.get().strip() if self.basic_target_mode_var.get() in {"csv", "database"} else None),
-                output_target=None,
-                input_target=None,
-                iterations=3,
-                max_filters=10,
-                iteration_mode="average",
-            ),
-            on_success=lambda result: self._set_completion(
-                title="Basic mode complete",
-                summary=f"Saved to {out_dir}.",
-                result=result,
-                steps=("Review the result", "Export to the default location", "Switch to Advanced for fine tuning"),
-            ),
-        )
+        self._controllers.start_basic_measurement()
 
     def start_online_measurement(self) -> None:
-        output_dir = self.output_dir_var.get().strip()
-        if not output_dir:
-            raise ValueError("Output folder is required.")
-        iterations = self._parse_positive_int(self.iterations_var.get().strip(), "Iterations")
-        max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
-        target_csv = self.target_csv_var.get().strip() or None
-        output_target = self._strip_device_label(self.output_target_var.get()) or None
-        input_target = self._strip_device_label(self.input_target_var.get()) or None
-
-        hearing_profile = getattr(self, "hearing_profile", None)
-        self._run_background_task(
-            task_name="measure-online",
-            progress_title="Running online measurement",
-            progress_body=f"Working in {output_dir}. The GUI is running the shared online pipeline now: playback, record, analyze, fit, and export.",
-            worker=lambda: self._online_runner(
-                output_dir=output_dir,
-                sweep_spec=self._build_sweep(),
-                target_path=target_csv,
-                output_target=output_target,
-                input_target=input_target,
-                iterations=iterations,
-                max_filters=max_filters,
-                iteration_mode=self.iteration_mode_var.get().strip() or 'independent',
-                hearing_profile=hearing_profile,
-            ),
-            on_success=lambda result: self._set_completion(
-                title="Online measurement complete",
-                summary=f"The guided online run finished in {output_dir}.",
-                result=result,
-                steps=(
-                    f"Review outputs in {output_dir}.",
-                    "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.",
-                    "If the wrong devices were used, rerun with clearer playback/capture target matches.",
-                ),
-            ),
-        )
+        self._controllers.start_online_measurement()
 
     def start_offline_prepare(self) -> None:
-        output_dir = self.output_dir_var.get().strip()
-        if not output_dir:
-            raise ValueError("Package folder is required.")
-        out_dir = Path(output_dir)
-        notes = self.offline_notes_var.get().strip()
-        self._run_background_task(
-            task_name="prepare-offline",
-            progress_title="Writing offline sweep package",
-            progress_body=f"Preparing sweep.wav and measurement_plan.json in {out_dir}.",
-            worker=lambda: self._offline_prepare_runner(
-                self._build_sweep(),
-                OfflineMeasurementPlan(sweep_wav=out_dir / "sweep.wav", metadata_json=out_dir / "measurement_plan.json", notes=notes),
-            ),
-            on_success=lambda result: self._set_completion(
-                title="Offline package ready",
-                summary=f"The recorder-first package was written to {out_dir}.",
-                result=result,
-                steps=(
-                    f"Play and record {out_dir / 'sweep.wav'} with your handheld recorder.",
-                    "Keep the full capture, including extra tail, and do not trim the WAV before fitting.",
-                    f"Then return here and run the offline fit into {self.offline_fit_output_var.get().strip() or (out_dir / 'fit')}",
-                ),
-            ),
-        )
+        self._controllers.start_offline_prepare()
 
     def start_offline_fit(self) -> None:
-        recording = self.offline_recording_var.get().strip()
-        if not recording:
-            raise ValueError("Recorded WAV is required.")
-        out_dir = self.offline_fit_output_var.get().strip()
-        if not out_dir:
-            raise ValueError("Fit output folder is required.")
-        max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
-        target_csv = self.target_csv_var.get().strip() or None
-        self._run_background_task(
-            task_name="fit",
-            progress_title="Fitting imported offline recording",
-            progress_body=f"Analyzing {recording} and exporting EQ outputs into {out_dir}.",
-            worker=lambda: self._offline_fit_runner(recording, out_dir, self._build_sweep(), target_path=target_csv, max_filters=max_filters),
-            on_success=lambda result: self._set_completion(
-                title="Offline fit complete",
-                summary=f"The imported recording was analyzed and fitted into {out_dir}.",
-                result=result,
-                steps=(
-                    f"Review outputs in {out_dir}.",
-                    "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.",
-                    "If the fit looks wrong, re-record without trimming and try again.",
-                ),
-            ),
-        )
+        self._controllers.start_offline_fit()
 
     def _run_background_task(self, *, task_name: str, progress_title: str, progress_body: str, worker: Callable[[], object], on_success: Callable[[object], None]) -> None:
         if self._active_task_name is not None:

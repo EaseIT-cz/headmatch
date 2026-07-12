@@ -21,7 +21,7 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 - [x] TASK-109: Decompose `gui/shell.py` — extract `GuiState` into its own module and break out the Tkinter variable initialization, leaving `gui/shell.py` a thin composition. No UI behaviour change; keep the existing GUI tests green. (task: task_20260712064844_7720364a5e21b289)
 - [ ] TASK-110: Standardize the error hierarchy — define a `HeadMatchError` base class with `MeasurementError`, `ConfigError`, and `NetworkError` subclasses and migrate the existing raise sites to them; keep messages intact and add tests asserting the new types are raised.
 - [ ] TASK-106: Split `gui_views.py` into real per-view modules (one module per view) with a package `__init__` re-export so imports stay stable. No behaviour change; tests stay green.
-- [ ] TASK-107: Extract the GUI workflow controllers out of `HeadMatchGuiApp` into dedicated controller classes, leaving `HeadMatchGuiApp` as wiring. No behaviour change; tests stay green.
+- [x] TASK-107: Extract the GUI workflow controllers out of `HeadMatchGuiApp` into dedicated controller classes, leaving `HeadMatchGuiApp` as wiring. No behaviour change; tests stay green. (task: task_20260712094844_55b5735c44ba96df)
 - [ ] TASK-108: Centralize GUI file-picking and background-task helpers into a shared module and route the existing call sites through it. No behaviour change; tests stay green.
 
 ## Proposed — promote to `- [ ]` when ready (some may already be shipped; vet first)
@@ -36,3 +36,4 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 - [?] Additional export formats beyond CamillaDSP and Equalizer APO.
 - [?] CamillaDSP live-update via its WebSocket API.
 - [?] Closed-loop EQ refinement (measure → apply → re-measure).
+- [?] **[refactor]** Update test_gui.py to use WorkflowControllers for basic_search_target and choose_basic_search_match — The tests test_basic_search_with_multiple_matches_requires_choice and test_basic_search_single_match_downloads_and_selects_csv directly call HeadMatchGuiApp methods with a SimpleNamespace mock. After moving these methods to WorkflowControllers and adding delegation in shell.py, these tests now need to use WorkflowControllers instead of calling classmethods on HeadMatchGuiApp. (evidence: tests/test_gui.py:293-306 for multiple matches, tests/test_gui.py:323-344 for single match. These tests use SimpleNamespace without _controllers attribute.; via task_20260712095457_5b6438f138dd1e3c, 2026-07-12)
