@@ -56,13 +56,15 @@ def test_choose_basic_search_match_downloads_selection(monkeypatch, tmp_path):
     monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", lambda url, out_path: calls.update({"url": url, "out": Path(out_path)}) or Path(out_path))
     refreshed = []
     app = SimpleNamespace(
+        current_view=DummyVar(value="basic-mode"),
+        basic_step_var=DummyVar(value="target"),
         basic_search_matches=[HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv")],
         basic_search_results_var=DummyVar(value=""),
         basic_target_mode_var=DummyVar(value="flat"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
         basic_search_choice_var=DummyVar(value=""),
-        refresh_basic_mode_target_step=lambda: refreshed.append(True),
+        show_view=lambda key: refreshed.append(key),
     )
 
     WorkflowControllers(app).choose_basic_search_match(0)
@@ -71,7 +73,7 @@ def test_choose_basic_search_match_downloads_selection(monkeypatch, tmp_path):
     assert app.basic_target_mode_var.get() == "database"
     assert app.basic_target_csv_var.get().endswith("HD 650 - oratory1990.csv")
     assert app.basic_search_choice_var.get() == "HD 650 — oratory1990"
-    assert refreshed == [True]
+    assert refreshed == ["basic-mode"]
 
 
 def test_choose_target_csv_sets_basic_mode_state():
