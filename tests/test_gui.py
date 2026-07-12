@@ -390,6 +390,39 @@ def test_per_view_modules_import_cleanly():
 
 
 
+def test_gui_views_compatibility_layer_imports_from_gui_views():
+    """Verify headmatch/gui_views.py compatibility layer re-exports all public symbols."""
+    from headmatch import gui_views as gv
+
+    # Check some key exports
+    assert hasattr(gv, "add_readonly_row")
+    assert hasattr(gv, "render_online_wizard")
+    assert hasattr(gv, "render_offline_wizard")
+    assert hasattr(gv, "render_basic_mode")
+    assert hasattr(gv, "render_history_page")
+    assert hasattr(gv, "render_target_editor")
+    assert hasattr(gv, "render_completion")
+    assert hasattr(gv, "ONLINE_STEPS")
+    assert hasattr(gv, "OFFLINE_STEPS")
+
+
+def test_gui_views_compatibility_layer_imports_from_gui_dot_views():
+    """Verify gui.views compatibility layer via _legacy.py re-exports all public symbols."""
+    from headmatch.gui.views import _legacy
+
+    # These are re-exported into the old namespace via _legacy.py
+    assert hasattr(_legacy, "add_readonly_row")
+    assert hasattr(_legacy, "render_online_wizard")
+    assert hasattr(_legacy, "render_offline_wizard")
+    assert hasattr(_legacy, "render_basic_mode")
+    assert hasattr(_legacy, "render_history_page")
+    assert hasattr(_legacy, "render_target_editor")
+    assert hasattr(_legacy, "render_completion")
+    assert hasattr(_legacy, "ONLINE_STEPS")
+    assert hasattr(_legacy, "OFFLINE_STEPS")
+
+
+
 def test_gui_main_reports_tcl_startup_errors(monkeypatch):
     monkeypatch.setattr("headmatch.gui.create_app", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 
