@@ -232,7 +232,7 @@ def test_start_online_measurement_requires_output_dir(tmp_path):
 
 def test_start_offline_prepare_and_fit_validate_and_schedule(tmp_path, monkeypatch):
     app = make_app(tmp_path)
-    monkeypatch.setattr("headmatch.gui.controllers.prepare_offline_measurement", lambda *a, **k: {"prepared": True})
+    monkeypatch.setattr(app, "_offline_prepare_runner", lambda sweep, plan: {"prepared": True})
     controllers = WorkflowControllers(app)
 
     controllers.start_offline_prepare()

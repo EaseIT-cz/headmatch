@@ -7,7 +7,7 @@ from ..apo_import import load_apo_preset
 from ..apo_refine import refine_apo_preset
 from ..contracts import FrontendConfig
 from ..history import build_history_selection
-from ..measure import OfflineMeasurementPlan, prepare_offline_measurement
+from ..measure import OfflineMeasurementPlan
 from ..pipeline import build_clone_curve, iterative_measure_and_fit
 from ..headphone_db import fetch_curve_from_url, search_headphone
 from ..signals import SweepSpec
@@ -167,12 +167,27 @@ class WorkflowControllers:
 
     def start_basic_measurement(self) -> None:
         out_dir = self.app.output_dir_var.get().strip()
+        target_path = self.app.basic_target_csv_var.get().strip() if self.app.basic_target_mode_var.get() in {"csv", "database"} else None
         self.app._run_background_task(
             task_name="basic-mode",
             progress_title="Running basic measurement",
             progress_body="Basic mode is using defaults: 48 kHz, 3 iterations, default devices, and up to 10 PEQ filters.",
-            worker=lambda: iterative_measure_and_fit(output_dir=out_dir, sweep_spec=self.app._build_sweep(), target_path=(self.app.basic_target_csv_var.get().strip() if self.app.basic_target_mode_var.get() in {"csv", "database"} else None), output_target=None, input_target=None, iterations=3, max_filters=10, iteration_mode="average"),
-            on_success=lambda result: self.app._set_completion(title="Basic mode complete", summary=f"Saved to {out_dir}.", result=result, steps=("Review the result", "Export to the default location", "Switch to Advanced for fine tuning")),
+            worker=lambda: self.app._online_runner(
+                output_dir=out_dir,
+                sweep_spec=self.app._build_sweep(),
+                target_path=target_path,
+                output_target=None,
+                input_target=None,
+                iterations=3,
+                max_filters=10,
+                iteration_mode="average",
+            ),
+            on_success=lambda result: self.app._set_completion(
+                title="Basic mode complete",
+                summary=f"Saved to {out_dir}.",
+                result=result,
+                steps=("Review the result", "Export to the default location", "Switch to Advanced for fine tuning"),
+            ),
         )
 
     def start_online_measurement(self) -> None:
@@ -202,7 +217,7 @@ class WorkflowControllers:
             task_name="prepare-offline",
             progress_title="Writing offline sweep package",
             progress_body=f"Preparing sweep.wav and measurement_plan.json in {out_dir}.",
-            worker=lambda: prepare_offline_measurement(self.app._build_sweep(), OfflineMeasurementPlan(sweep_wav=out_dir / "sweep.wav", metadata_json=out_dir / "measurement_plan.json", notes=notes)),
+            worker=lambda: self.app._offline_prepare_runner(self.app._build_sweep(), OfflineMeasurementPlan(sweep_wav=out_dir / "sweep.wav", metadata_json=out_dir / "measurement_plan.json", notes=notes)),
             on_success=lambda result: self.app._set_completion(title="Offline package ready", summary=f"The recorder-first package was written to {out_dir}.", result=result, steps=(f"Play and record {out_dir / 'sweep.wav'} with your handheld recorder.", "Keep the full capture, including extra tail, and do not trim the WAV before fitting.", f"Then return here and run the offline fit into {self.app.offline_fit_output_var.get().strip() or (out_dir / 'fit')}")),
         )
 
@@ -241,3 +256,57 @@ class WorkflowControllers:
             mode=self.app.mode_var.get().strip() or self.app.state.mode,  # type: ignore[arg-type]
         )
         save_config(config, self.app.state.config_path)
+
+    def refresh_basic_mode_target_step(self) -> None:
+        if self.app.current_view.get() == "basic-mode" and self.app.basic_step_var.get() == "target":
+            self.app.show_view("basic-mode")
+
+    def choose_basic_search_match(self, index: int) -> None:
+        matches = getattr(self.app, "basic_search_matches", []) or []
+        if index < 0 or index >= len(matches):
+            self.app.basic_search_results_var.set("Invalid search result selection.")
+            return
+        entry = matches[index]
+        from ..paths import documents_dir
+
+        safe_name = entry.name.replace("/", "_").replace("\\", "_")
+        safe_source = entry.source.replace("/", "_").replace("\\", "_")
+        out_path = Path(documents_dir()) / f"{safe_name} - {safe_source}.csv"
+        try:
+            saved = fetch_curve_from_url(entry.raw_csv_url, out_path)
+        except Exception as exc:
+            self.app.basic_search_results_var.set(f"Found {entry.name}, but download failed: {exc}")
+            return
+        self.app.basic_target_mode_var.set("database")
+        self.app.basic_target_csv_var.set(str(saved))
+        self.app.basic_target_path_var.set(str(saved))
+        self.app.basic_search_choice_var.set(f"{entry.name} — {entry.source}")
+        self.app.basic_search_results_var.set(f"Selected {entry.name} from {entry.source}.")
+        self.refresh_basic_mode_target_step()
+
+    def basic_search_target(self) -> None:
+        query = self.app.basic_search_query_var.get().strip()
+        if not query:
+            self.app.basic_search_matches = []
+            self.app.basic_search_results_var.set("Enter a headphone model name to search the database.")
+            self.refresh_basic_mode_target_step()
+            return
+        try:
+            results = search_headphone(query)
+        except Exception as exc:
+            self.app.basic_search_matches = []
+            self.app.basic_search_results_var.set(f"Search failed: {exc}")
+            self.refresh_basic_mode_target_step()
+            return
+        if not results:
+            self.app.basic_search_matches = []
+            self.app.basic_search_results_var.set(f"No matches for '{query}'.")
+            self.refresh_basic_mode_target_step()
+            return
+        self.app.basic_search_matches = results[:8]
+        if len(self.app.basic_search_matches) == 1:
+            self.choose_basic_search_match(0)
+            return
+        self.app.basic_search_choice_var.set("")
+        self.app.basic_search_results_var.set(f"Found {len(self.app.basic_search_matches)} matches. Choose one below.")
+        self.refresh_basic_mode_target_step()
