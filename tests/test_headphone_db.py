@@ -202,7 +202,7 @@ def test_parse_autoeq_csv_empty():
 # ── fetch_curve_from_url error handling ──
 
 def test_fetch_rejects_http():
-    with pytest.raises(ValueError, match="HTTPS"):
+    with pytest.raises(ValueError, match="https"):
         fetch_curve_from_url("http://example.com/test.csv", "/tmp/out.csv")
 
 
