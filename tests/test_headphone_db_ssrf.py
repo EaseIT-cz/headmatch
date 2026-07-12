@@ -148,3 +148,53 @@ class TestValidateUrlForSsrf:
         url = "https://RAW.GITHUBUSERCONTENT.COM/user/repo/file.csv"
         result = _validate_url_for_ssrf(url)
         assert result == url
+
+    @patch("headmatch.headphone_db.socket.getaddrinfo")
+    def test_accepts_urls_with_paths_and_query_params(self, mock_getaddrinfo):
+        """URLs with paths and query parameters on allowed domains should be accepted."""
+        mock_getaddrinfo.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("185.199.108.133", 443))]
+        # URL with deep path and query parameters
+        url = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/harman_over-ear_2018/HD600/HD600.csv?token=abc123&ref=main"
+        result = _validate_url_for_ssrf(url)
+        assert result == url
+
+    @patch("headmatch.headphone_db.socket.getaddrinfo")
+    def test_accepts_api_github_with_query_params(self, mock_getaddrinfo):
+        """api.github.com URLs with query parameters should be accepted."""
+        mock_getaddrinfo.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("140.82.112.5", 443))]
+        url = "https://api.github.com/repos/owner/repo/contents/file.csv?ref=main&recursive=1"
+        result = _validate_url_for_ssrf(url)
+        assert result == url
+
+    def test_rejects_private_ip_host_direct(self):
+        """URLs with direct private IP hosts should be rejected (192.168.x.x)."""
+        with pytest.raises(ValueError, match="not in the allowed list"):
+            _validate_url_for_ssrf("https://192.168.1.1/data.csv")
+
+    def test_rejects_private_ip_host_10_x(self):
+        """URLs with direct private IP hosts should be rejected (10.x.x.x)."""
+        with pytest.raises(ValueError, match="not in the allowed list"):
+            _validate_url_for_ssrf("https://10.0.0.1/data.csv")
+
+    def test_rejects_loopback_ip_direct(self):
+        """URLs with direct loopback IP should be rejected (127.0.0.1)."""
+        with pytest.raises(ValueError, match="not in the allowed list"):
+            _validate_url_for_ssrf("https://127.0.0.1/data.csv")
+
+    def test_rejects_loopback_localhost(self):
+        """URLs with localhost should be rejected."""
+        with pytest.raises(ValueError, match="not in the allowed list"):
+            _validate_url_for_ssrf("https://localhost/data.csv")
+
+    def test_rejects_link_local_ip_direct(self):
+        """URLs with direct link-local IP should be rejected (169.254.x.x)."""
+        with pytest.raises(ValueError, match="not in the allowed list"):
+            _validate_url_for_ssrf("https://169.254.1.1/data.csv")
+
+    @patch("headmatch.headphone_db.socket.getaddrinfo")
+    def test_accepts_port_specification_with_allowed_domain(self, mock_getaddrinfo):
+        """URLs with port specification on allowed domains should be accepted."""
+        mock_getaddrinfo.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("185.199.108.133", 443))]
+        url = "https://raw.githubusercontent.com:443/user/repo/file.csv"
+        result = _validate_url_for_ssrf(url)
+        assert result == url
