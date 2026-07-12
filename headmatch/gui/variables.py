@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from .state import GuiState
 
 
-def initialize_tkinter_variables(root, state: GuiState) -> dict:
+def initialize_tkinter_variables(root, state: GuiState) -> dict[str, Any]:
     """Initialize all Tkinter StringVar and state variables for the GUI app.
     
     Returns a dictionary mapping variable names to their tk.StringVar instances
@@ -15,7 +16,7 @@ def initialize_tkinter_variables(root, state: GuiState) -> dict:
     """
     import tkinter as tk
 
-    variables = {}
+    variables: dict[str, Any] = {}
 
     variables["current_view"] = tk.StringVar(master=root, value=state.current_view)
     variables["mode_var"] = tk.StringVar(master=root, value=state.mode)

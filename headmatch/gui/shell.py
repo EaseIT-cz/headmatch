@@ -20,10 +20,7 @@ from .state import (
     build_doctor_report,
 )
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover
-    from typing import Callable
+from typing import Any, Callable
 
 try:
     from tkinter import filedialog
@@ -74,6 +71,9 @@ _HEARING_FLATTEN_PRESETS: dict[str, float] = {
 
 
 class HeadMatchGuiApp:
+    def __getattr__(self, name: str) -> Any:
+        raise AttributeError(name)
+
     def __init__(
         self,
         root,

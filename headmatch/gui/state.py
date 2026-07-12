@@ -6,7 +6,7 @@ from typing import Callable
 
 from ..app_identity import get_app_identity
 from ..contracts import FrontendConfig
-from ..measure import collect_doctor_checks, format_doctor_report
+from ..measure import OfflineMeasurementPlan, SweepSpec, collect_doctor_checks, format_doctor_report
 from ..settings import load_or_create_config
 
 
@@ -55,7 +55,7 @@ class GuiState:
 
 ConfigLoader = Callable[[str | Path | None], tuple[FrontendConfig, Path, bool]]
 OnlineRunner = Callable[..., list[dict]]
-OfflinePrepareRunner = Callable[[object, object], dict]  # SweepSpec, OfflineMeasurementPlan
+OfflinePrepareRunner = Callable[[SweepSpec, OfflineMeasurementPlan], dict]
 OfflineFitRunner = Callable[..., dict]
 DoctorReportRunner = Callable[[Path, FrontendConfig], str]
 
