@@ -7,6 +7,7 @@ import sys
 from ...troubleshooting import confidence_troubleshooting_steps
 
 from .common import (
+    build_history_selection,
     add_readonly_row,
     add_combobox_row,
     add_entry_row,
@@ -24,73 +25,21 @@ from .completion import render_progress, render_completion
 from .online import render_online_wizard
 from .setup import render_setup_check
 from .offline import render_offline_wizard
+from .basic import render_basic_mode, render_clone_target_workflow
 
 
 # Note: render_online_wizard is now implemented in .online and re-exported here for backward compatibility
 # Note: render_setup_check is now implemented in .setup and re-exported here for backward compatibility
 # Note: render_offline_wizard is now implemented in .offline and re-exported here for backward compatibility
 # Note: render_progress and render_completion are now implemented in .completion and re-exported here for backward compatibility
+# Note: render_basic_mode and render_clone_target_workflow are now implemented in .basic and re-exported here for backward compatibility
 
 
-
-def render_basic_mode(ttk, frame, *, variables, on_next, on_back, on_measure, on_export, on_search) -> None:
-    ttk.Label(frame, text="Basic Mode", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(frame, text="A simple 3-step wizard with safe defaults. Advanced controls stay hidden.", wraplength=BODY_WRAP, justify="left").grid(row=1, column=0, sticky="w", pady=(8, 12))
-    steps = ("Target selection", "Measurement", "Review & Export")
-    step_frame = ttk.LabelFrame(frame, text="Wizard steps", padding=SECTION_PAD)
-    step_frame.grid(row=2, column=0, sticky="ew")
-    for idx, step in enumerate(steps):
-        ttk.Label(step_frame, text=f"{idx + 1}. {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
-
-    current = variables.basic_step_var.get()
-    card = ttk.LabelFrame(frame, text=f"Step { {'target': '1', 'measure': '2', 'review': '3'}.get(current, '1')} — { {'target': 'Target selection', 'measure': 'Measurement', 'review': 'Review & Export'}.get(current, 'Target selection')}", padding=SECTION_PAD)
-    card.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    card.columnconfigure(1, weight=1)
-
-    if current == 'target':
-        add_combobox_row(ttk, card, 0, "Target source", variables.basic_target_mode_var, ("flat", "csv", "database"), empty_label="")
-        add_picker_row(ttk, card, 1, "Target CSV", variables.basic_target_csv_var, button_text="Browse…", command=variables.choose_target_csv)
-        add_entry_row(ttk, card, 2, "Search database", variables.basic_search_query_var)
-        ttk.Button(card, text="Search", command=on_search).grid(row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(card, textvariable=variables.basic_search_results_var, wraplength=DETAIL_WRAP, justify="left").grid(row=3, column=1, sticky="w", pady=(6, 0))
-        ttk.Button(card, text="Next: Measurement", command=on_next).grid(row=4, column=0, sticky="w", pady=(10, 0))
-    elif current == 'measure':
-        ttk.Label(card, text="Safe defaults: sample rate 48000 Hz, 3 iterations averaged, default playback/capture devices, max 10 PEQ filters.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(card, textvariable=variables.basic_progress_var, wraplength=DETAIL_WRAP, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        ttk.Button(card, text="Start Measurement", command=on_measure).grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.Button(card, text="Back", command=on_back).grid(row=2, column=1, sticky="w", pady=(8, 0))
-    else:
-        ttk.Label(card, text="Review the result and export to the default location.", wraplength=DETAIL_WRAP, justify="left").grid(row=0, column=0, sticky="w")
-        ttk.Label(card, text="Max PEQ filters: 10", style="Heading.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(card, textvariable=variables.basic_export_path_var, wraplength=DETAIL_WRAP, justify="left").grid(row=2, column=0, sticky="w")
-        ttk.Button(card, text="Export", command=on_export).grid(row=3, column=0, sticky="w", pady=(8, 0))
-        ttk.Button(card, text="Back", command=on_back).grid(row=3, column=1, sticky="w", pady=(8, 0))
-
-
-def render_clone_target_workflow(ttk, frame, *, variables, on_create, on_back) -> None:
-    ttk.Label(frame, text="Clone Target", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        frame,
-        text="Create a relative target curve from two sweep recording measurement artifacts. This is the basic-mode path for headphone cloning and mic coloration nulling.",
-        wraplength=BODY_WRAP,
-        justify="left",
-    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-    steps = ttk.LabelFrame(frame, text="What happens", padding=SECTION_PAD)
-    steps.grid(row=2, column=0, sticky="ew")
-    for idx, step in enumerate(CLONE_TARGET_STEPS):
-        ttk.Label(steps, text=f"{idx + 1}. {step}", wraplength=DETAIL_WRAP, justify="left").grid(row=idx, column=0, sticky="w", pady=2)
-
-    form = ttk.LabelFrame(frame, text="Inputs", padding=SECTION_PAD)
-    form.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    form.columnconfigure(1, weight=1)
-    add_picker_row(ttk, form, 0, "Source measurement CSV", variables.basic_clone_source_var, button_text="Browse…", command=variables.choose_basic_clone_source)
-    add_picker_row(ttk, form, 1, "Target measurement CSV", variables.basic_clone_target_var, button_text="Browse…", command=variables.choose_basic_clone_target)
-    add_picker_row(ttk, form, 2, "Output clone target CSV", variables.basic_clone_output_var, button_text="Browse…", command=variables.choose_basic_clone_output)
-
-    actions = ttk.Frame(frame, padding=(0, 12, 0, 0))
-    actions.grid(row=4, column=0, sticky="w")
-    ttk.Button(actions, text="Create clone target", command=on_create).grid(row=0, column=0, sticky="w")
-    ttk.Button(actions, text="Back to Basic Mode", command=on_back).grid(row=0, column=1, sticky="w", padx=(12, 0))
+# Re-export basic mode views
+__all__ = [
+    'render_basic_mode',
+    'render_clone_target_workflow',
+]
 
 
 def render_history(ttk, frame, *, history_root_var, config_path: Path):
@@ -216,6 +165,48 @@ def render_history_results(ttk, frame, *, selection) -> None:
 
 
 
+
+# TOKEN_WARNING_CLASS = "Warning.TLabel" # Removed in TASK-089a
+
+def render_import_apo(ttk, frame, *, variables, on_import, on_refine,
+                      on_choose_preset, on_choose_output, on_choose_refine_recording,
+                      on_choose_refine_target, on_choose_refine_output):
+    """Render the Import APO preset view with import + refine sections."""
+    ttk.Label(frame, text="Import APO preset", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        frame,
+        text="Load an Equalizer APO parametric preset and re-export it as CamillaDSP and HeadMatch formats.",
+        wraplength=BODY_WRAP,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+    form = ttk.LabelFrame(frame, text="Import settings", padding=SECTION_PAD)
+    form.grid(row=2, column=0, sticky="ew")
+    form.columnconfigure(1, weight=1)
+    add_picker_row(ttk, form, 0, "APO preset file", variables.apo_preset_var,
+                   button_text="Browse\u2026", command=on_choose_preset)
+    add_picker_row(ttk, form, 1, "Output folder", variables.apo_output_dir_var,
+                   button_text="Browse\u2026", command=on_choose_output)
+    ttk.Button(form, text="Import and convert", command=on_import).grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    refine_frame = ttk.LabelFrame(frame, text="Refine against a measurement", padding=SECTION_PAD)
+    refine_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    refine_frame.columnconfigure(1, weight=1)
+    ttk.Label(
+        refine_frame,
+        text="Load the same APO preset above, plus a recording WAV, to re-optimise the bands against your actual measurement.",
+        wraplength=DETAIL_WRAP,
+        justify="left",
+    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+    add_picker_row(ttk, refine_frame, 1, "Recording WAV", variables.apo_refine_recording_var,
+                   button_text="Browse\u2026", command=on_choose_refine_recording)
+    add_picker_row(ttk, refine_frame, 2, "Target CSV (optional)", variables.apo_refine_target_var,
+                   button_text="Browse\u2026", command=on_choose_refine_target)
+    add_picker_row(ttk, refine_frame, 3, "Output folder", variables.apo_refine_output_var,
+                   button_text="Browse\u2026", command=on_choose_refine_output)
+    ttk.Button(refine_frame, text="Refine preset", command=on_refine).grid(
+        row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
 
 class _PlotGeometry:
@@ -576,49 +567,6 @@ def render_target_editor(ttk, frame, *, editor, on_save, on_reset, on_load=None,
     ).grid(row=1, column=0, columnspan=col + 1, sticky="w", pady=(8, 0))
 
 
-# ── Import APO view (extracted from gui.py) ──
-
-def render_import_apo(ttk, frame, *, variables, on_import, on_refine,
-                      on_choose_preset, on_choose_output, on_choose_refine_recording,
-                      on_choose_refine_target, on_choose_refine_output):
-    """Render the Import APO preset view with import + refine sections."""
-    ttk.Label(frame, text="Import APO preset", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        frame,
-        text="Load an Equalizer APO parametric preset and re-export it as CamillaDSP and HeadMatch formats.",
-        wraplength=BODY_WRAP,
-        justify="left",
-    ).grid(row=1, column=0, sticky="w", pady=(8, 12))
-
-    form = ttk.LabelFrame(frame, text="Import settings", padding=SECTION_PAD)
-    form.grid(row=2, column=0, sticky="ew")
-    form.columnconfigure(1, weight=1)
-    add_picker_row(ttk, form, 0, "APO preset file", variables.apo_preset_var,
-                   button_text="Browse\u2026", command=on_choose_preset)
-    add_picker_row(ttk, form, 1, "Output folder", variables.apo_output_dir_var,
-                   button_text="Browse\u2026", command=on_choose_output)
-    ttk.Button(form, text="Import and convert", command=on_import).grid(
-        row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-
-    refine_frame = ttk.LabelFrame(frame, text="Refine against a measurement", padding=SECTION_PAD)
-    refine_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    refine_frame.columnconfigure(1, weight=1)
-    ttk.Label(
-        refine_frame,
-        text="Load the same APO preset above, plus a recording WAV, to re-optimise the bands against your actual measurement.",
-        wraplength=DETAIL_WRAP,
-        justify="left",
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-    add_picker_row(ttk, refine_frame, 1, "Recording WAV", variables.apo_refine_recording_var,
-                   button_text="Browse\u2026", command=on_choose_refine_recording)
-    add_picker_row(ttk, refine_frame, 2, "Target CSV (optional)", variables.apo_refine_target_var,
-                   button_text="Browse\u2026", command=on_choose_refine_target)
-    add_picker_row(ttk, refine_frame, 3, "Output folder", variables.apo_refine_output_var,
-                   button_text="Browse\u2026", command=on_choose_refine_output)
-    ttk.Button(refine_frame, text="Refine preset", command=on_refine).grid(
-        row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
-
-
 # ── Fetch Curve view (extracted from gui.py) ──
 
 def render_fetch_curve(ttk, frame, *, variables, on_search, on_choose_output, on_fetch):
@@ -707,4 +655,3 @@ def render_history_page(ttk, frame, *, history_root_var, config_path,
     selection = render_history(ttk, results, history_root_var=history_root_var, config_path=config_path)
     render_history_results(ttk, results, selection=selection)
     _sync_scroll_region()
-

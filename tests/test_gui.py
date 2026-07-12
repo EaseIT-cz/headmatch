@@ -965,11 +965,13 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
 def test_gui_views_include_browse_buttons_for_major_path_fields():
     from headmatch.gui.views import _legacy
     from headmatch.gui.views import offline
+    from headmatch.gui.views import basic
 
     legacy_source = Path(_legacy.__file__).read_text()
     offline_source = Path(offline.__file__).read_text()
+    basic_source = Path(basic.__file__).read_text()
     # Continue checking browse buttons across split modules; expect at least 5 across the extracted modules
-    assert (legacy_source.count('button_text="Browse…"') + offline_source.count('button_text="Browse…"')) >= 5
+    assert (legacy_source.count('button_text="Browse…"') + offline_source.count('button_text="Browse…"') + basic_source.count('button_text="Browse…"')) >= 5
 
 
 def test_choose_output_dir_updates_entry_but_keeps_manual_editing_available(tmp_path, fake_tk, monkeypatch):
