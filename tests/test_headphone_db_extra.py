@@ -8,6 +8,7 @@ from urllib.error import URLError
 import numpy as np
 import pytest
 
+from headmatch.exceptions import MeasurementError, NetworkError
 from headmatch.headphone_db import HeadphoneEntry, _build_index_from_tree, _fetch_and_cache_index, _load_cached_index, _normalize_for_search, _parse_autoeq_csv, fetch_curve_from_url
 
 
@@ -70,7 +71,7 @@ def test_parse_autoeq_csv_skips_invalid_rows_and_parses_valid_values():
 
 
 def test_fetch_curve_from_url_rejects_http(tmp_path):
-    with pytest.raises(ValueError, match="Only HTTPS"):
+    with pytest.raises(NetworkError, match="Only HTTPS"):
         fetch_curve_from_url("http://example.com/a.csv", tmp_path / "a.csv")
 
 
@@ -78,14 +79,14 @@ def test_fetch_curve_from_url_wraps_network_errors(tmp_path, monkeypatch):
     def boom(*_a, **_k):
         raise URLError("offline")
     monkeypatch.setattr("headmatch.headphone_db.urlopen", boom)
-    with pytest.raises(ConnectionError, match="Failed to fetch"):
+    with pytest.raises(NetworkError, match="Failed to fetch"):
         fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
 
 
 def test_fetch_curve_from_url_rejects_small_csv(tmp_path, monkeypatch):
     text = "\n".join(["freq,val", "20,1", "30,2"]).encode("utf-8")
     monkeypatch.setattr("headmatch.headphone_db.urlopen", lambda *a, **k: DummyResponse(text))
-    with pytest.raises(ValueError, match="expected a frequency response"):
+    with pytest.raises(MeasurementError, match="expected a frequency response"):
         fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
 
 

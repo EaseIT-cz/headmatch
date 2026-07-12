@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from headmatch.exceptions import ConfigError
 from headmatch.mic_cal import (
     MIC_CAL_MAX_HZ,
     MIC_CAL_MIN_HZ,
@@ -98,10 +99,10 @@ class TestRejectsImplausible:
 1000, -35.0
 """
         cal_path.write_text(cal_content)
-        
-        with pytest.raises(ValueError) as exc_info:
+
+        with pytest.raises(ConfigError) as exc_info:
             load_mic_calibration(cal_path)
-        
+
         assert "implausible" in str(exc_info.value).lower()
         assert "beyond ±30" in str(exc_info.value)
 
