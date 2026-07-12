@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from headmatch.gui.shell import HeadMatchGuiApp, NavigationItem
+from headmatch.gui.shell import HeadMatchGuiApp
 from headmatch.headphone_db import HeadphoneEntry
 from tests.test_gui import DummyVar
 
