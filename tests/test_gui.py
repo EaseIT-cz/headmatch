@@ -1061,7 +1061,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_flat_editor(self):
         """Flat default target should render without errors."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1094,7 +1094,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_with_boost(self):
         """Editor with a 1kHz boost should produce a different curve than flat."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1141,7 +1141,7 @@ class TestPlotGeometry:
     """Verify freq/dB ↔ pixel coordinate conversions are invertible."""
 
     def test_freq_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for freq in [20.0, 100.0, 1000.0, 10000.0, 20000.0]:
             x = geom.freq_to_x(freq)
@@ -1149,7 +1149,7 @@ class TestPlotGeometry:
             assert abs(recovered - freq) / freq < 0.01, f"freq round-trip failed for {freq}: got {recovered}"
 
     def test_db_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for db in [-20.0, -10.0, 0.0, 10.0, 20.0]:
             y = geom.db_to_y(db)
@@ -1157,7 +1157,7 @@ class TestPlotGeometry:
             assert abs(recovered - db) < 0.1, f"dB round-trip failed for {db}: got {recovered}"
 
     def test_x_to_freq_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         # Way outside the plot area should clamp, not crash
         f_left = geom.x_to_freq(-100)
@@ -1166,7 +1166,7 @@ class TestPlotGeometry:
         assert 20.0 <= f_right <= 20000.0
 
     def test_y_to_db_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         db_top = geom.y_to_db(-100)
         db_bot = geom.y_to_db(500)
@@ -1200,7 +1200,7 @@ class TestCurvePreviewWithAddedPoints:
         return FakeCanvas()
 
     def test_render_with_added_point(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         editor.add_point(500.0, 5.0)
@@ -1211,7 +1211,7 @@ class TestCurvePreviewWithAddedPoints:
         assert len(ovals) == 7, f"Expected 7 control points, got {len(ovals)}"
 
     def test_render_with_many_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         # Add many points
@@ -1225,7 +1225,7 @@ class TestCurvePreviewWithAddedPoints:
             f"Expected {len(editor.points)} control points, got {len(ovals)}"
 
     def test_render_with_minimum_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor, ControlPoint
         editor = TargetEditor(points=[
             ControlPoint(20.0, 0.0),
