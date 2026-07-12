@@ -5,6 +5,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from .exceptions import ConfigError
+
 
 DESKTOP_ENTRY_TEMPLATE = """\
 [Desktop Entry]
@@ -49,7 +51,7 @@ def create_shortcut(gui_path: str | None = None) -> Path:
     if gui_path is None:
         gui_path = find_gui_binary()
     if gui_path is None:
-        raise FileNotFoundError(
+        raise ConfigError(
             "Could not find headmatch-gui binary. "
             "Make sure HeadMatch is installed and headmatch-gui is on your PATH."
         )

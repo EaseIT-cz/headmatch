@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .exceptions import ConfigError
+
 # name -> (display label, [(freq_hz, target_db), ...])  -- absolute semantics, 1 kHz = 0
 BUILTIN_TARGET_DEFS: dict[str, tuple[str, list[tuple[float, float]]]] = {
     "flat": ("Flat (default)", [
@@ -48,7 +50,7 @@ def label_to_name(label: str) -> str | None:
 def materialize_builtin_target(name: str, dest_dir: str | Path) -> Path:
     """Write a built-in target curve to ``dest_dir/<name>_target.csv`` and return it."""
     if name not in BUILTIN_TARGET_DEFS:
-        raise KeyError(f"unknown built-in target: {name}")
+        raise ConfigError(f"unknown built-in target: {name}")
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     path = dest_dir / f"{name}_target.csv"
