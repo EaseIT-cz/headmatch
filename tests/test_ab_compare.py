@@ -16,6 +16,7 @@ from headmatch.contracts import (
     RunErrorSummary,
     RunFilterCounts,
 )
+from headmatch.exceptions import ConfigError
 
 
 def _write_run_summary(run_dir: Path, *, target="flat", confidence_label="high", score=85, left_rms=1.0, right_rms=1.2):
@@ -54,7 +55,7 @@ def test_load_run_summary(tmp_path):
 
 
 def test_load_run_summary_not_found(tmp_path):
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ConfigError):
         load_run_summary(tmp_path / "missing")
 
 
