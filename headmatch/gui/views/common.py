@@ -65,17 +65,10 @@ def add_picker_row(ttk, parent, row: int, label: str, variable, *, button_text: 
     ttk.Button(entry_frame, text=button_text, command=command).grid(row=0, column=1, sticky="w", padx=(8, 0))
 
 
-def render_history(ttk, frame, *, history_root_var, config_path: Path):
-    return build_history_selection(history_root_var.get(), config_path.parent)
-
-
-_CONFIDENCE_BADGES = {'high': '[OK]', 'medium': '[!]', 'low': '[X]'}
-
-
-def _confidence_display(label: str) -> str:
-    return label.replace('_', ' ').title()
-
-
-def _confidence_badge(label: str) -> str:
-    badge = _CONFIDENCE_BADGES.get(label, '')
-    return f"{badge} {_confidence_display(label)}" if badge else _confidence_display(label)
+# Re-export history-related symbols from history.py for backward compatibility
+from .history import (
+    _CONFIDENCE_BADGES,
+    _confidence_display,
+    _confidence_badge,
+    render_history,
+)

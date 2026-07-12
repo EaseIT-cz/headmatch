@@ -61,19 +61,19 @@ def mock_tk(monkeypatch):
 def test_initialize_tkinter_variables_returns_dict(mock_tk):
     """Test that initialize_tkinter_variables returns a dictionary."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state()
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     assert isinstance(result, dict)
 
 
 def test_initialize_tkinter_variables_creates_all_expected_vars(mock_tk):
     """Test that all expected variables are created with proper initial values."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state(
         current_view="measure-online",
@@ -85,9 +85,9 @@ def test_initialize_tkinter_variables_creates_all_expected_vars(mock_tk):
         start_iterations=3,
         max_filters=6,
     )
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     # Check StringVar instances
     assert result["current_view"].get() == "measure-online"
     assert result["mode_var"].get() == "advanced"
@@ -103,16 +103,16 @@ def test_initialize_tkinter_variables_creates_all_expected_vars(mock_tk):
 def test_initialize_tkinter_variables_creates_default_paths(mock_tk):
     """Test that default paths are derived correctly from state."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state(default_output_dir="~/HeadMatch/session_01")
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     # Check paths are expanded and derived correctly
     expanded_dir = str(Path("~/HeadMatch/session_01").expanduser())
     parent_dir = str(Path(expanded_dir).parent)
-    
+
     assert result["history_root_var"].get() == parent_dir
     assert result["offline_fit_output_var"].get() == str(Path(expanded_dir) / "fit")
     assert result["apo_output_dir_var"].get() == str(Path(expanded_dir) / "imported")
@@ -122,12 +122,12 @@ def test_initialize_tkinter_variables_creates_default_paths(mock_tk):
 def test_initialize_tkinter_variables_creates_empty_default_vars(mock_tk):
     """Test that optional variables default to empty strings."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state()
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     # Check empty defaults
     assert result["offline_recording_var"].get() == ""
     assert result["offline_notes_var"].get() == ""
@@ -150,16 +150,16 @@ def test_initialize_tkinter_variables_creates_empty_default_vars(mock_tk):
 def test_initialize_tkinter_variables_creates_basic_mode_vars(mock_tk):
     """Test that basic mode variables are created with correct defaults."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state(
         current_view="basic-mode",
         mode="basic",
         preferred_target_csv="/custom/target.csv",
     )
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     assert result["basic_step_var"].get() == "target"
     assert result["basic_target_mode_var"].get() == "flat"
     assert result["basic_target_csv_var"].get() == "/custom/target.csv"
@@ -168,12 +168,12 @@ def test_initialize_tkinter_variables_creates_basic_mode_vars(mock_tk):
 def test_initialize_tkinter_variables_creates_progress_vars(mock_tk):
     """Test that progress and completion variables are created."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state()
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     assert result["basic_progress_var"].get() == ""
     assert result["progress_title_var"].get() == ""
     assert result["progress_body_var"].get() == ""
@@ -185,12 +185,12 @@ def test_initialize_tkinter_variables_creates_progress_vars(mock_tk):
 def test_initialize_tkinter_variables_creates_hearing_vars(mock_tk):
     """Test that hearing test variables are created with correct defaults."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state()
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     assert result["hearing_profile"] is None
     assert result["_force_new_hearing_test"] is False
     assert result["hearing_target_var"].get() == "Flat (default)"
@@ -200,12 +200,12 @@ def test_initialize_tkinter_variables_creates_hearing_vars(mock_tk):
 def test_initialize_tkinter_variables_creates_target_options(mock_tk):
     """Test that target options are created as tuples."""
     from headmatch.gui.variables import initialize_tkinter_variables
-    
+
     root = SimpleNamespace()
     state = make_test_state()
-    
+
     result = initialize_tkinter_variables(root, state)
-    
+
     assert result["output_target_options"] == ()
     assert result["input_target_options"] == ()
     assert isinstance(result["basic_search_matches"], list)

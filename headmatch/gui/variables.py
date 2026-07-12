@@ -10,7 +10,7 @@ from .state import GuiState
 
 def initialize_tkinter_variables(root, state: GuiState) -> dict[str, Any]:
     """Initialize all Tkinter StringVar and state variables for the GUI app.
-    
+
     Returns a dictionary mapping variable names to their tk.StringVar instances
     and other state attributes.
     """

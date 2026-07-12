@@ -368,9 +368,9 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
 
 
 def test_gui_copy_mentions_setup_helpers():
-    from headmatch.gui.views import _legacy
+    from headmatch.gui.views import online
 
-    source = Path(_legacy.__file__).read_text()
+    source = Path(online.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
 
@@ -387,6 +387,43 @@ def test_per_view_modules_import_cleanly():
     assert hasattr(online, "render_online_wizard")
     assert hasattr(setup, "render_setup_check")
     assert hasattr(target_editor, "render_target_editor")
+
+
+
+def test_gui_views_compatibility_layer_imports_from_gui_views():
+    """Verify headmatch/gui_views.py compatibility layer re-exports all public symbols."""
+    from headmatch import gui_views as gv
+
+    # Check some key exports
+    assert hasattr(gv, "add_readonly_row")
+    assert hasattr(gv, "render_online_wizard")
+    assert hasattr(gv, "render_offline_wizard")
+    assert hasattr(gv, "render_basic_mode")
+    assert hasattr(gv, "render_history_page")
+    assert hasattr(gv, "render_target_editor")
+    assert hasattr(gv, "render_completion")
+    assert hasattr(gv, "ONLINE_STEPS")
+    assert hasattr(gv, "OFFLINE_STEPS")
+
+
+def test_gui_views_compatibility_layer_imports_from_gui_dot_views():
+    """Verify gui.views compatibility layer via _legacy.py re-exports all public symbols."""
+    from headmatch.gui.views import _legacy
+
+    # These are re-exported into the old namespace via _legacy.py
+    assert hasattr(_legacy, "add_readonly_row")
+    assert hasattr(_legacy, "render_online_wizard")
+    assert hasattr(_legacy, "render_offline_wizard")
+    assert hasattr(_legacy, "render_basic_mode")
+    assert hasattr(_legacy, "render_history_page")
+    assert hasattr(_legacy, "render_target_editor")
+    assert hasattr(_legacy, "render_completion")
+    exported = {name: getattr(_legacy, name) for name in _legacy.__all__}
+    assert "render_fetch_curve" in exported
+    assert "add_readonly_row" in exported
+    assert "ONLINE_STEPS" in exported
+    assert hasattr(_legacy, "ONLINE_STEPS")
+    assert hasattr(_legacy, "OFFLINE_STEPS")
 
 
 
@@ -964,9 +1001,14 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
 
 def test_gui_views_include_browse_buttons_for_major_path_fields():
     from headmatch.gui.views import _legacy
+    from headmatch.gui.views import offline
+    from headmatch.gui.views import basic
 
-    source = Path(_legacy.__file__).read_text()
-    assert source.count('button_text="Browse…"') >= 5
+    legacy_source = Path(_legacy.__file__).read_text()
+    offline_source = Path(offline.__file__).read_text()
+    basic_source = Path(basic.__file__).read_text()
+    # Continue checking browse buttons across split modules; expect at least 5 across the extracted modules
+    assert (legacy_source.count('button_text="Browse…"') + offline_source.count('button_text="Browse…"') + basic_source.count('button_text="Browse…"')) >= 5
 
 
 def test_choose_output_dir_updates_entry_but_keeps_manual_editing_available(tmp_path, fake_tk, monkeypatch):
@@ -1056,7 +1098,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_flat_editor(self):
         """Flat default target should render without errors."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1089,7 +1131,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_with_boost(self):
         """Editor with a 1kHz boost should produce a different curve than flat."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1136,7 +1178,7 @@ class TestPlotGeometry:
     """Verify freq/dB ↔ pixel coordinate conversions are invertible."""
 
     def test_freq_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for freq in [20.0, 100.0, 1000.0, 10000.0, 20000.0]:
             x = geom.freq_to_x(freq)
@@ -1144,7 +1186,7 @@ class TestPlotGeometry:
             assert abs(recovered - freq) / freq < 0.01, f"freq round-trip failed for {freq}: got {recovered}"
 
     def test_db_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for db in [-20.0, -10.0, 0.0, 10.0, 20.0]:
             y = geom.db_to_y(db)
@@ -1152,7 +1194,7 @@ class TestPlotGeometry:
             assert abs(recovered - db) < 0.1, f"dB round-trip failed for {db}: got {recovered}"
 
     def test_x_to_freq_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         # Way outside the plot area should clamp, not crash
         f_left = geom.x_to_freq(-100)
@@ -1161,7 +1203,7 @@ class TestPlotGeometry:
         assert 20.0 <= f_right <= 20000.0
 
     def test_y_to_db_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         db_top = geom.y_to_db(-100)
         db_bot = geom.y_to_db(500)
@@ -1195,7 +1237,7 @@ class TestCurvePreviewWithAddedPoints:
         return FakeCanvas()
 
     def test_render_with_added_point(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         editor.add_point(500.0, 5.0)
@@ -1206,7 +1248,7 @@ class TestCurvePreviewWithAddedPoints:
         assert len(ovals) == 7, f"Expected 7 control points, got {len(ovals)}"
 
     def test_render_with_many_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         # Add many points
@@ -1220,7 +1262,7 @@ class TestCurvePreviewWithAddedPoints:
             f"Expected {len(editor.points)} control points, got {len(ovals)}"
 
     def test_render_with_minimum_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor, ControlPoint
         editor = TargetEditor(points=[
             ControlPoint(20.0, 0.0),
