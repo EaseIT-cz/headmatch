@@ -21,6 +21,9 @@ from headmatch.headphone_db import (
     fetch_curve_from_url,
 )
 
+ALLOWED_CURVE_URL = "https://raw.githubusercontent.com/user/repo/main/curve.csv"
+PUBLIC_ADDRINFO = [(0, 0, 0, "", ("185.199.108.133", 443))]
+
 
 def _mock_resp(raw: bytes) -> MagicMock:
     resp = MagicMock()
@@ -123,26 +126,32 @@ def test_fetch_rejects_oversized_response(tmp_path):
     # Return more than MAX_RESPONSE_BYTES so the size check trips (line 227).
     big = b"x" * (hdb.MAX_RESPONSE_BYTES + 1)
     resp = _mock_resp(big)
-    with patch("headmatch.headphone_db.urlopen", return_value=resp):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=resp
+    ):
         with pytest.raises(ValueError, match="exceeds"):
-            fetch_curve_from_url("https://example.com/big.csv", tmp_path / "out.csv")
+            fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "out.csv")
 
 
 def test_fetch_connection_error(tmp_path):
     from urllib.error import URLError
 
-    with patch("headmatch.headphone_db.urlopen", side_effect=URLError("nope")):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", side_effect=URLError("nope")
+    ):
         with pytest.raises(ConnectionError, match="Failed to fetch"):
-            fetch_curve_from_url("https://example.com/x.csv", tmp_path / "out.csv")
+            fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "out.csv")
 
 
 def test_fetch_too_few_points(tmp_path):
     # 5 valid points < 10 (line 238).
     rows = "\n".join(f"{f},0.0" for f in [20, 100, 1000, 5000, 20000])
     resp = _mock_resp(("frequency,raw\n" + rows + "\n").encode("utf-8"))
-    with patch("headmatch.headphone_db.urlopen", return_value=resp):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=resp
+    ):
         with pytest.raises(ValueError, match="only .* points"):
-            fetch_curve_from_url("https://example.com/few.csv", tmp_path / "out.csv")
+            fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "out.csv")
 
 
 def _curve_text(freqs):
@@ -153,18 +162,22 @@ def test_fetch_max_below_1khz(tmp_path):
     # 12 points but max < 1000 Hz (lines 240-244).
     freqs = list(range(20, 20 + 12 * 10, 10))  # 20..130
     resp = _mock_resp(_curve_text(freqs).encode("utf-8"))
-    with patch("headmatch.headphone_db.urlopen", return_value=resp):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=resp
+    ):
         with pytest.raises(ValueError, match="at least 1 kHz"):
-            fetch_curve_from_url("https://example.com/low.csv", tmp_path / "out.csv")
+            fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "out.csv")
 
 
 def test_fetch_min_above_1khz(tmp_path):
     # 12 points all above 1000 Hz (lines 245-249).
     freqs = list(range(2000, 2000 + 12 * 100, 100))
     resp = _mock_resp(_curve_text(freqs).encode("utf-8"))
-    with patch("headmatch.headphone_db.urlopen", return_value=resp):
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=resp
+    ):
         with pytest.raises(ValueError, match="includes frequencies below 1 kHz"):
-            fetch_curve_from_url("https://example.com/high.csv", tmp_path / "out.csv")
+            fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "out.csv")
 
 
 def test_fetch_writes_standard_format(tmp_path):
@@ -172,8 +185,10 @@ def test_fetch_writes_standard_format(tmp_path):
     freqs = [20, 50, 100, 200, 500, 800, 1000, 2000, 5000, 10000, 15000, 20000]
     resp = _mock_resp(_curve_text(freqs).encode("utf-8"))
     out = tmp_path / "nested" / "out.csv"
-    with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        result = fetch_curve_from_url("https://example.com/ok.csv", out)
+    with patch("headmatch.headphone_db.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO), patch(
+        "headmatch.headphone_db.urlopen", return_value=resp
+    ):
+        result = fetch_curve_from_url(ALLOWED_CURVE_URL, out)
     assert result == out
     assert out.exists()
     content = out.read_text()
