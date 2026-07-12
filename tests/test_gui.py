@@ -418,6 +418,10 @@ def test_gui_views_compatibility_layer_imports_from_gui_dot_views():
     assert hasattr(_legacy, "render_history_page")
     assert hasattr(_legacy, "render_target_editor")
     assert hasattr(_legacy, "render_completion")
+    exported = {name: getattr(_legacy, name) for name in _legacy.__all__}
+    assert "render_fetch_curve" in exported
+    assert "add_readonly_row" in exported
+    assert "ONLINE_STEPS" in exported
     assert hasattr(_legacy, "ONLINE_STEPS")
     assert hasattr(_legacy, "OFFLINE_STEPS")
 
