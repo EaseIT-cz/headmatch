@@ -258,3 +258,12 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
             writer.writerow([float(freq), float(val)])
 
     return out_path
+
+
+def fetch_autoeq_index() -> list[dict]:
+    """Fetch and return the AutoEQ headphone index from GitHub API.
+
+    Forces a fresh fetch from GitHub, bypassing cache.
+    Raises NetworkError on connection failure.
+    """
+    return _fetch_and_cache_index()
