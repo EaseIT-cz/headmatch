@@ -167,6 +167,101 @@ def _threshold(freq, *, determined=True, floored=False) -> FrequencyThreshold:
     )
 
 
+class TestConfidenceScoringPinnedValues:
+    """Pin the current confidence-scoring constants and computed scores.
+
+    These tests detect drift between documentation and implementation.
+    If any pinned value changes, the test fails to signal a docs update is needed.
+    """
+
+    def test_weights_sum_to_100(self):
+        from headmatch.pipeline_confidence import (
+            ALIGNMENT_WEIGHT,
+            ALIGNMENT_PEAK_WEIGHT,
+            CHANNEL_MISMATCH_WEIGHT,
+            ROUGHNESS_WEIGHT,
+            RESIDUAL_RMS_WEIGHT,
+            RESIDUAL_PEAK_WEIGHT,
+        )
+        total = (
+            ALIGNMENT_WEIGHT
+            + ALIGNMENT_PEAK_WEIGHT
+            + CHANNEL_MISMATCH_WEIGHT
+            + ROUGHNESS_WEIGHT
+            + RESIDUAL_RMS_WEIGHT
+            + RESIDUAL_PEAK_WEIGHT
+        )
+        assert total == 100
+
+    def test_threshold_values_pinned(self):
+        from headmatch.pipeline_confidence import (
+            ALIGNMENT_SCORE_WARN,
+            ALIGNMENT_SCORE_SEVERE,
+            CHANNEL_MISMATCH_WARN_DB,
+            CHANNEL_MISMATCH_SEVERE_DB,
+            SCORE_HIGH_THRESHOLD,
+            SCORE_MEDIUM_THRESHOLD,
+        )
+        assert ALIGNMENT_SCORE_WARN == 0.20
+        assert ALIGNMENT_SCORE_SEVERE == 0.40
+        assert CHANNEL_MISMATCH_WARN_DB == 0.8
+        assert CHANNEL_MISMATCH_SEVERE_DB == 2.5
+        assert SCORE_HIGH_THRESHOLD == 85
+        assert SCORE_MEDIUM_THRESHOLD == 65
+
+    def test_clean_measurement_score_is_100_label_high(self):
+        result = _result(_clean_diagnostics())
+        summary = summarize_trustworthiness(result, _clean_report())
+        assert summary.score == 100
+        assert summary.label == 'high'
+
+    def test_worst_case_measurement_score_is_0_label_low(self):
+        diag = _clean_diagnostics(
+            alignment_reference_score=0.50,  # Below ALIGNMENT_SCORE_SEVERE
+            alignment_peak_ratio=0.50,  # Below ALIGNMENT_PEAK_SEVERE (1-0.35=0.65)
+            channel_mismatch_rms_db=3.0,  # Above CHANNEL_MISMATCH_SEVERE_DB
+            left_roughness_db=2.0,  # Above ROUGHNESS_SEVERE_DB
+            right_roughness_db=2.0,
+        )
+        result = _result(diag)
+        report = _clean_report()
+        report['predicted_left_rms_error_db'] = 5.0  # Above RESIDUAL_RMS_SEVERE_DB
+        report['predicted_right_rms_error_db'] = 5.0
+        report['predicted_left_max_error_db'] = 10.0  # Above RESIDUAL_PEAK_SEVERE_DB
+        report['predicted_right_max_error_db'] = 10.0
+        summary = summarize_trustworthiness(result, report)
+        assert summary.score == 0
+        assert summary.label == 'low'
+
+    def test_medium_boundary_label_at_threshold(self):
+        from headmatch.pipeline_confidence import (
+            CHANNEL_MISMATCH_WEIGHT,
+            CHANNEL_MISMATCH_WARN_DB,
+            CHANNEL_MISMATCH_SEVERE_DB,
+            SCORE_MEDIUM_THRESHOLD,
+            _confidence_penalty,
+        )
+        # Target: score == SCORE_MEDIUM_THRESHOLD (65)
+        # Score = 100 - total_penalty, so need penalty = 35.
+        # Use channel_mismatch penalty only, set others to zero.
+        # penalty = _confidence_penalty(value, warn, severe) * CHANNEL_MISMATCH_WEIGHT
+        # For penalty = 35 / 36 ≈ 0.9722, we need:
+        #   (value - warn) / (severe - warn) ≈ 0.9722
+        # value = warn + 0.9722 * (severe - warn)
+        target_penalty = 100 - SCORE_MEDIUM_THRESHOLD
+        normalized = target_penalty / CHANNEL_MISMATCH_WEIGHT
+        value = CHANNEL_MISMATCH_WARN_DB + normalized * (
+            CHANNEL_MISMATCH_SEVERE_DB - CHANNEL_MISMATCH_WARN_DB
+        )
+        # Keep all other metrics perfect (clean diagnostics)
+        diag = _clean_diagnostics(
+            channel_mismatch_rms_db=value,
+        )
+        result = _result(diag)
+        summary = summarize_trustworthiness(result, _clean_report())
+        assert summary.label == 'medium'
+
+
 class TestHearingRunSummaryConfidenceBranches:
     """Exercise the floored / medium / few-converged branches (lines 417, 420-423)."""
 
