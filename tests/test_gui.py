@@ -368,9 +368,9 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
 
 
 def test_gui_copy_mentions_setup_helpers():
-    from headmatch.gui.views import _legacy
+    from headmatch.gui.views import online
 
-    source = Path(_legacy.__file__).read_text()
+    source = Path(online.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
 
