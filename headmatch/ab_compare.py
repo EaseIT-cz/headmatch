@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .contracts import FrontendRunSummary
+from .exceptions import ConfigError
 from .io_utils import save_json
 
 
@@ -43,7 +44,7 @@ def load_run_summary(run_dir: str | Path) -> FrontendRunSummary:
     """Load a FrontendRunSummary from a run directory."""
     summary_path = Path(run_dir) / "run_summary.json"
     if not summary_path.exists():
-        raise FileNotFoundError(f"No run_summary.json found in {run_dir}")
+        raise ConfigError(f"No run_summary.json found in {run_dir}")
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
     return FrontendRunSummary.from_dict(payload)
 

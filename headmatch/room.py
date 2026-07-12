@@ -30,6 +30,7 @@ from .exporters import (
 )
 from .io_utils import save_fr_csv, save_json
 from .mic_cal import MicCalibration, calibration_offset
+from .exceptions import MeasurementError
 from .peq import PEQBand, fit_peq, peq_chain_response_db, FilterBudget
 from .pipeline_confidence import summarize_trustworthiness
 from .plots import render_fit_graphs
@@ -161,7 +162,7 @@ def fit_room_bands(
     """
     if isinstance(cutoff_hz, str):
         if cutoff_hz != 'auto':
-            raise ValueError(f"cutoff_hz must be a number or 'auto', got {cutoff_hz!r}")
+            raise MeasurementError(f"cutoff_hz must be a number or 'auto', got {cutoff_hz!r}")
         cutoff_hz = estimate_schroeder_cutoff(
             impulse_response,
             sample_rate,
@@ -279,14 +280,14 @@ def estimate_cutoff_from_dimensions(
     """
     for name, value in (("length_m", length_m), ("width_m", width_m), ("height_m", height_m)):
         if value <= 0:
-            raise ValueError(f"{name} must be positive, got {value}")
+            raise MeasurementError(f"{name} must be positive, got {value}")
         if value < 0.1:
-            raise ValueError(f"{name}={value} m is implausibly small (min 0.1 m)")
+            raise MeasurementError(f"{name}={value} m is implausibly small (min 0.1 m)")
         if value > 100.0:
-            raise ValueError(f"{name}={value} m is implausibly large (max 100 m)")
+            raise MeasurementError(f"{name}={value} m is implausibly large (max 100 m)")
 
     if furnishing not in ROOM_FURNISHING_RT60_S:
-        raise ValueError(
+        raise MeasurementError(
             f"furnishing must be one of {sorted(ROOM_FURNISHING_RT60_S)}, got {furnishing!r}"
         )
 
@@ -404,14 +405,14 @@ def energy_average_responses_n(results: list[MeasurementResult]) -> MeasurementR
         ValueError: if the list is empty or the frequency grids differ.
     """
     if not results:
-        raise ValueError("energy_average_responses_n requires a non-empty list of results")
+        raise MeasurementError("energy_average_responses_n requires a non-empty list of results")
 
     reference_freqs = results[0].freqs_hz
     for other in results[1:]:
         if other.freqs_hz.shape != reference_freqs.shape or not np.allclose(
             other.freqs_hz, reference_freqs
         ):
-            raise ValueError(
+            raise MeasurementError(
                 "Cannot average measurements with mismatched frequency grids"
             )
 
@@ -569,9 +570,9 @@ def run_room_fit(
         RoomFitResult with all outputs and metadata
     """
     if out_dir is None:
-        raise ValueError("run_room_fit requires out_dir")
+        raise MeasurementError("run_room_fit requires out_dir")
     if sweep_spec is None:
-        raise ValueError("run_room_fit requires sweep_spec")
+        raise MeasurementError("run_room_fit requires sweep_spec")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -609,7 +610,7 @@ def run_room_fit(
     per_channel = recording_left is not None and recording_right is not None
     if per_channel:
         if recording is not None:
-            raise ValueError(
+            raise MeasurementError(
                 "Provide either 'recording' (mono) or recording_left+recording_right "
                 "(per-speaker), not both."
             )
@@ -632,7 +633,7 @@ def run_room_fit(
         single_point = True
     else:
         if recording is None:
-            raise ValueError(
+            raise MeasurementError(
                 "run_room_fit requires 'recording' (or recording_left+recording_right)"
             )
         recordings: list[str | Path] = [recording]

@@ -20,6 +20,7 @@ def _get_filedialog():
 
 from ..app_identity import get_app_identity
 from ..contracts import FrontendConfig
+from ..exceptions import ConfigError
 from ..measure import OfflineMeasurementPlan, SweepSpec, collect_doctor_checks, collect_pipewire_target_selection, format_doctor_report, prepare_offline_measurement
 from ..pipeline import build_clone_curve, iterative_measure_and_fit, process_single_measurement
 from ..history import build_history_selection
@@ -819,9 +820,9 @@ class HeadMatchGuiApp:
         try:
             value = int(raw)
         except ValueError as exc:
-            raise ValueError(f"{label} must be a whole number.") from exc
+            raise ConfigError(f"{label} must be a whole number.") from exc
         if value <= 0:
-            raise ValueError(f"{label} must be greater than 0.")
+            raise ConfigError(f"{label} must be greater than 0.")
         return value
 
 
@@ -865,7 +866,7 @@ class HeadMatchGuiApp:
         target = self.basic_clone_target_var.get().strip()
         out_path = self.basic_clone_output_var.get().strip()
         if not source or not target or not out_path:
-            raise ValueError("Source, target, and output CSV paths are required.")
+            raise ConfigError("Source, target, and output CSV paths are required.")
         self._run_background_task(
             task_name="basic-clone-target",
             progress_title="Creating clone target",
@@ -1013,7 +1014,7 @@ class HeadMatchGuiApp:
     def start_online_measurement(self) -> None:
         output_dir = self.output_dir_var.get().strip()
         if not output_dir:
-            raise ValueError("Output folder is required.")
+            raise ConfigError("Output folder is required.")
         iterations = self._parse_positive_int(self.iterations_var.get().strip(), "Iterations")
         max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.target_csv_var.get().strip() or None
@@ -1051,7 +1052,7 @@ class HeadMatchGuiApp:
     def start_offline_prepare(self) -> None:
         output_dir = self.output_dir_var.get().strip()
         if not output_dir:
-            raise ValueError("Package folder is required.")
+            raise ConfigError("Package folder is required.")
         out_dir = Path(output_dir)
         notes = self.offline_notes_var.get().strip()
         self._run_background_task(
@@ -1077,10 +1078,10 @@ class HeadMatchGuiApp:
     def start_offline_fit(self) -> None:
         recording = self.offline_recording_var.get().strip()
         if not recording:
-            raise ValueError("Recorded WAV is required.")
+            raise ConfigError("Recorded WAV is required.")
         out_dir = self.offline_fit_output_var.get().strip()
         if not out_dir:
-            raise ValueError("Fit output folder is required.")
+            raise ConfigError("Fit output folder is required.")
         max_filters = self._parse_positive_int(self.max_filters_var.get().strip(), "Max PEQ filters")
         target_csv = self.target_csv_var.get().strip() or None
         self._run_background_task(
