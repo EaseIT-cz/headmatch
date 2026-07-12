@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from headmatch.contracts import FrontendConfig
+from headmatch.exceptions import ConfigError
 from headmatch.settings import (
     load_config,
     load_or_create_config,
@@ -29,7 +30,7 @@ def test_load_config_missing_returns_default(tmp_path):
 def test_load_config_invalid_json(tmp_path):
     path = tmp_path / "config.json"
     path.write_text("{not valid json", encoding="utf-8")
-    with pytest.raises(ValueError, match="Invalid JSON in config file"):
+    with pytest.raises(ConfigError, match="Invalid JSON in config file"):
         load_config(path)
 
 
@@ -38,7 +39,7 @@ def test_load_config_invalid_json(tmp_path):
 def test_load_config_non_object_json(tmp_path):
     path = tmp_path / "config.json"
     path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
-    with pytest.raises(ValueError, match="must contain a JSON object"):
+    with pytest.raises(ConfigError, match="must contain a JSON object"):
         load_config(path)
 
 

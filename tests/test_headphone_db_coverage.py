@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import headmatch.headphone_db as hdb
+from headmatch.exceptions import MeasurementError, NetworkError
 from headmatch.headphone_db import (
     _cache_dir,
     _fetch_and_cache_index,
@@ -52,16 +53,16 @@ def test_fetch_index_connection_error():
     from urllib.error import URLError
 
     with patch("headmatch.headphone_db.urlopen", side_effect=URLError("down")):
-        with pytest.raises(ConnectionError, match="Failed to fetch AutoEQ index"):
+        with pytest.raises(NetworkError, match="Failed to fetch AutoEQ index"):
             _fetch_and_cache_index()
 
 
-# ── line 103: _fetch_and_cache_index empty tree raises ValueError ──
+# ── line 103: _fetch_and_cache_index empty tree raises MeasurementError ──
 
 def test_fetch_index_empty_tree_raises():
     resp = _mock_resp(json.dumps({"tree": []}).encode("utf-8"))
     with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        with pytest.raises(ValueError, match="No headphone entries"):
+        with pytest.raises(MeasurementError, match="No headphone entries"):
             _fetch_and_cache_index()
 
 
@@ -124,7 +125,7 @@ def test_fetch_rejects_oversized_response(tmp_path):
     big = b"x" * (hdb.MAX_RESPONSE_BYTES + 1)
     resp = _mock_resp(big)
     with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        with pytest.raises(ValueError, match="exceeds"):
+        with pytest.raises(MeasurementError, match="exceeds"):
             fetch_curve_from_url("https://example.com/big.csv", tmp_path / "out.csv")
 
 
@@ -132,7 +133,7 @@ def test_fetch_connection_error(tmp_path):
     from urllib.error import URLError
 
     with patch("headmatch.headphone_db.urlopen", side_effect=URLError("nope")):
-        with pytest.raises(ConnectionError, match="Failed to fetch"):
+        with pytest.raises(NetworkError, match="Failed to fetch"):
             fetch_curve_from_url("https://example.com/x.csv", tmp_path / "out.csv")
 
 
@@ -141,7 +142,7 @@ def test_fetch_too_few_points(tmp_path):
     rows = "\n".join(f"{f},0.0" for f in [20, 100, 1000, 5000, 20000])
     resp = _mock_resp(("frequency,raw\n" + rows + "\n").encode("utf-8"))
     with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        with pytest.raises(ValueError, match="only .* points"):
+        with pytest.raises(MeasurementError, match="only .* points"):
             fetch_curve_from_url("https://example.com/few.csv", tmp_path / "out.csv")
 
 
@@ -154,7 +155,7 @@ def test_fetch_max_below_1khz(tmp_path):
     freqs = list(range(20, 20 + 12 * 10, 10))  # 20..130
     resp = _mock_resp(_curve_text(freqs).encode("utf-8"))
     with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        with pytest.raises(ValueError, match="at least 1 kHz"):
+        with pytest.raises(MeasurementError, match="at least 1 kHz"):
             fetch_curve_from_url("https://example.com/low.csv", tmp_path / "out.csv")
 
 
@@ -163,7 +164,7 @@ def test_fetch_min_above_1khz(tmp_path):
     freqs = list(range(2000, 2000 + 12 * 100, 100))
     resp = _mock_resp(_curve_text(freqs).encode("utf-8"))
     with patch("headmatch.headphone_db.urlopen", return_value=resp):
-        with pytest.raises(ValueError, match="includes frequencies below 1 kHz"):
+        with pytest.raises(MeasurementError, match="includes frequencies below 1 kHz"):
             fetch_curve_from_url("https://example.com/high.csv", tmp_path / "out.csv")
 
 

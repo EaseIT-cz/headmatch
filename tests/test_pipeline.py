@@ -8,6 +8,7 @@ import soundfile as sf
 from scipy import signal
 
 from headmatch.analysis import MeasurementResult, analyze_measurement
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import write_wav
 from headmatch.peq import FilterBudget, peq_chain_response_db
 from headmatch.pipeline import fit_from_measurement, iterative_measure_and_fit, process_single_measurement
@@ -302,7 +303,7 @@ def test_analyze_rejects_mono_recording(tmp_path: Path):
     original, _sr = sf.read(str(recording), always_2d=True)
     mono_path = tmp_path / 'mono.wav'
     write_wav(mono_path, original[:, :1], spec.sample_rate)
-    with pytest.raises(ValueError, match="mono capture"):
+    with pytest.raises(MeasurementError, match="mono capture"):
         analyze_measurement(mono_path, spec, out_dir=tmp_path)
 
 
@@ -322,7 +323,7 @@ def test_analyze_rejects_duplicated_channel_capture(tmp_path: Path):
     stereo, _sr = sf.read(str(recording), always_2d=True)
     dup_path = tmp_path / 'duplicated.wav'
     write_wav(dup_path, np.column_stack([stereo[:, 0], stereo[:, 0]]), spec.sample_rate)
-    with pytest.raises(ValueError, match="duplicated-channel"):
+    with pytest.raises(MeasurementError, match="duplicated-channel"):
         analyze_measurement(dup_path, spec, out_dir=tmp_path)
 
 
@@ -332,7 +333,7 @@ def test_analyze_rejects_duplicated_channel_in_multichannel_capture(tmp_path: Pa
     quad_path = tmp_path / 'quad_dup.wav'
     ch0 = stereo[:, 0]
     write_wav(quad_path, np.column_stack([ch0, ch0, stereo[:, 1], stereo[:, 1]]), spec.sample_rate)
-    with pytest.raises(ValueError, match="duplicated-channel"):
+    with pytest.raises(MeasurementError, match="duplicated-channel"):
         analyze_measurement(quad_path, spec, out_dir=tmp_path)
 
 
