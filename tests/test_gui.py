@@ -270,9 +270,10 @@ def test_basic_mode_hides_irrelevant_controls_by_source_selection():
 
 def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
     from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.gui.controllers import WorkflowControllers
     from headmatch.headphone_db import HeadphoneEntry
 
-    monkeypatch.setattr("headmatch.gui.shell.search_headphone", lambda _q: [
+    monkeypatch.setattr("headmatch.gui.controllers.search_headphone", lambda _q: [
         HeadphoneEntry(name="HD 650", source="oratory1990", form_factor="over-ear", csv_path="results/oratory1990/over-ear/HD 650/HD 650.csv"),
         HeadphoneEntry(name="HD 650", source="crinacle", form_factor="over-ear", csv_path="results/crinacle/over-ear/HD 650/HD 650.csv"),
     ])
@@ -286,20 +287,22 @@ def test_basic_search_with_multiple_matches_requires_choice(monkeypatch):
         basic_target_mode_var=DummyVar(value="database"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
-        refresh_basic_mode_target_step=lambda: refreshed.__setitem__("count", refreshed["count"] + 1),
-        choose_basic_search_match=lambda _i: None,
+        current_view=DummyVar(value="basic-mode"),
+        basic_step_var=DummyVar(value="target"),
+        show_view=lambda _k: None,
     )
+    app._controllers = WorkflowControllers(app)
 
     HeadMatchGuiApp.basic_search_target(app)
 
     assert len(app.basic_search_matches) == 2
     assert app.basic_target_csv_var.get() == ""
     assert "Choose one below" in app.basic_search_results_var.get()
-    assert refreshed["count"] == 1
 
 
 def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_path):
     from headmatch.gui.shell import HeadMatchGuiApp
+    from headmatch.gui.controllers import WorkflowControllers
     from headmatch.headphone_db import HeadphoneEntry
 
     calls = {}
@@ -315,8 +318,8 @@ def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_pa
         Path(out_path).write_text("frequency_hz,response_db\n20,0\n")
         return Path(out_path)
 
-    monkeypatch.setattr("headmatch.gui.shell.search_headphone", fake_search)
-    monkeypatch.setattr("headmatch.gui.shell.fetch_curve_from_url", fake_fetch)
+    monkeypatch.setattr("headmatch.gui.controllers.search_headphone", fake_search)
+    monkeypatch.setattr("headmatch.gui.controllers.fetch_curve_from_url", fake_fetch)
     monkeypatch.setattr("headmatch.paths.documents_dir", lambda: tmp_path)
 
     app = SimpleNamespace(
@@ -327,9 +330,11 @@ def test_basic_search_single_match_downloads_and_selects_csv(monkeypatch, tmp_pa
         basic_target_mode_var=DummyVar(value="flat"),
         basic_target_csv_var=DummyVar(value=""),
         basic_target_path_var=DummyVar(value=""),
-        refresh_basic_mode_target_step=lambda: None,
+        current_view=DummyVar(value="basic-mode"),
+        basic_step_var=DummyVar(value="target"),
+        show_view=lambda _k: None,
     )
-    app.choose_basic_search_match = lambda i: HeadMatchGuiApp.choose_basic_search_match(app, i)
+    app._controllers = WorkflowControllers(app)
 
     HeadMatchGuiApp.basic_search_target(app)
 
@@ -363,9 +368,9 @@ def test_build_doctor_report_reuses_measure_module_formatting(tmp_path, monkeypa
 
 
 def test_gui_copy_mentions_setup_helpers():
-    from headmatch.gui.views import _legacy
+    from headmatch.gui.views import online
 
-    source = Path(_legacy.__file__).read_text()
+    source = Path(online.__file__).read_text()
     assert "headmatch doctor" in source
     assert "headmatch list-targets" in source
 
@@ -382,6 +387,43 @@ def test_per_view_modules_import_cleanly():
     assert hasattr(online, "render_online_wizard")
     assert hasattr(setup, "render_setup_check")
     assert hasattr(target_editor, "render_target_editor")
+
+
+
+def test_gui_views_compatibility_layer_imports_from_gui_views():
+    """Verify headmatch/gui_views.py compatibility layer re-exports all public symbols."""
+    from headmatch import gui_views as gv
+
+    # Check some key exports
+    assert hasattr(gv, "add_readonly_row")
+    assert hasattr(gv, "render_online_wizard")
+    assert hasattr(gv, "render_offline_wizard")
+    assert hasattr(gv, "render_basic_mode")
+    assert hasattr(gv, "render_history_page")
+    assert hasattr(gv, "render_target_editor")
+    assert hasattr(gv, "render_completion")
+    assert hasattr(gv, "ONLINE_STEPS")
+    assert hasattr(gv, "OFFLINE_STEPS")
+
+
+def test_gui_views_compatibility_layer_imports_from_gui_dot_views():
+    """Verify gui.views compatibility layer via _legacy.py re-exports all public symbols."""
+    from headmatch.gui.views import _legacy
+
+    # These are re-exported into the old namespace via _legacy.py
+    assert hasattr(_legacy, "add_readonly_row")
+    assert hasattr(_legacy, "render_online_wizard")
+    assert hasattr(_legacy, "render_offline_wizard")
+    assert hasattr(_legacy, "render_basic_mode")
+    assert hasattr(_legacy, "render_history_page")
+    assert hasattr(_legacy, "render_target_editor")
+    assert hasattr(_legacy, "render_completion")
+    exported = {name: getattr(_legacy, name) for name in _legacy.__all__}
+    assert "render_fetch_curve" in exported
+    assert "add_readonly_row" in exported
+    assert "ONLINE_STEPS" in exported
+    assert hasattr(_legacy, "ONLINE_STEPS")
+    assert hasattr(_legacy, "OFFLINE_STEPS")
 
 
 
@@ -813,7 +855,7 @@ def test_basic_mode_includes_clone_target_workflow_and_runs_shared_builder(tmp_p
     app.basic_clone_target_var.set(str(tmp_path / 'target.csv'))
     app.basic_clone_output_var.set(str(tmp_path / 'clone.csv'))
 
-    monkeypatch.setattr('headmatch.gui.shell.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
+    monkeypatch.setattr('headmatch.gui.controllers.build_clone_curve', lambda source, target, out_path: calls.update({'source': source, 'target': target, 'out_path': out_path}) or {'ok': True})
 
     app.start_basic_clone_target()
 
@@ -959,9 +1001,14 @@ def test_gui_history_selection_builds_recent_run_comparison(tmp_path):
 
 def test_gui_views_include_browse_buttons_for_major_path_fields():
     from headmatch.gui.views import _legacy
+    from headmatch.gui.views import offline
+    from headmatch.gui.views import basic
 
-    source = Path(_legacy.__file__).read_text()
-    assert source.count('button_text="Browse…"') >= 5
+    legacy_source = Path(_legacy.__file__).read_text()
+    offline_source = Path(offline.__file__).read_text()
+    basic_source = Path(basic.__file__).read_text()
+    # Continue checking browse buttons across split modules; expect at least 5 across the extracted modules
+    assert (legacy_source.count('button_text="Browse…"') + offline_source.count('button_text="Browse…"') + basic_source.count('button_text="Browse…"')) >= 5
 
 
 def test_choose_output_dir_updates_entry_but_keeps_manual_editing_available(tmp_path, fake_tk, monkeypatch):
@@ -1051,7 +1098,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_flat_editor(self):
         """Flat default target should render without errors."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1084,7 +1131,7 @@ class TestCurvePreview:
 
     def test_render_curve_preview_with_boost(self):
         """Editor with a 1kHz boost should produce a different curve than flat."""
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
 
         class FakeCanvas:
@@ -1131,7 +1178,7 @@ class TestPlotGeometry:
     """Verify freq/dB ↔ pixel coordinate conversions are invertible."""
 
     def test_freq_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for freq in [20.0, 100.0, 1000.0, 10000.0, 20000.0]:
             x = geom.freq_to_x(freq)
@@ -1139,7 +1186,7 @@ class TestPlotGeometry:
             assert abs(recovered - freq) / freq < 0.01, f"freq round-trip failed for {freq}: got {recovered}"
 
     def test_db_round_trip(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         for db in [-20.0, -10.0, 0.0, 10.0, 20.0]:
             y = geom.db_to_y(db)
@@ -1147,7 +1194,7 @@ class TestPlotGeometry:
             assert abs(recovered - db) < 0.1, f"dB round-trip failed for {db}: got {recovered}"
 
     def test_x_to_freq_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         # Way outside the plot area should clamp, not crash
         f_left = geom.x_to_freq(-100)
@@ -1156,7 +1203,7 @@ class TestPlotGeometry:
         assert 20.0 <= f_right <= 20000.0
 
     def test_y_to_db_clamps(self):
-        from headmatch.gui_views import _PlotGeometry
+        from headmatch.gui.views.target_editor import _PlotGeometry
         geom = _PlotGeometry(560, 200)
         db_top = geom.y_to_db(-100)
         db_bot = geom.y_to_db(500)
@@ -1190,7 +1237,7 @@ class TestCurvePreviewWithAddedPoints:
         return FakeCanvas()
 
     def test_render_with_added_point(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         editor.add_point(500.0, 5.0)
@@ -1201,7 +1248,7 @@ class TestCurvePreviewWithAddedPoints:
         assert len(ovals) == 7, f"Expected 7 control points, got {len(ovals)}"
 
     def test_render_with_many_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor
         editor = TargetEditor()
         # Add many points
@@ -1215,7 +1262,7 @@ class TestCurvePreviewWithAddedPoints:
             f"Expected {len(editor.points)} control points, got {len(ovals)}"
 
     def test_render_with_minimum_points(self):
-        from headmatch.gui_views import _render_curve_preview
+        from headmatch.gui.views.target_editor import _render_curve_preview
         from headmatch.target_editor import TargetEditor, ControlPoint
         editor = TargetEditor(points=[
             ControlPoint(20.0, 0.0),

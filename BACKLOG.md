@@ -16,12 +16,12 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 ## Ready
 
 - [x] TASK-113: Document the confidence-scoring derivation — add docstrings and inline rationale for the magic numbers in `pipeline_confidence.py`, plus a short note under `docs/`. No behaviour change; add a test that pins the current scores so the documentation cannot silently drift. (task: task_20260712004844_3bf3db60b5a334dd)
-- [ ] TASK-112: Add a coverage CI gate — fail CI when total coverage drops below the current 80% level, wired into the existing GitHub Actions matrix without breaking the Python 3.10–3.13 lanes.
-- [ ] TASK-114: Harden `fetch_curve_from_url` against SSRF — validate the URL scheme and host against a domain allowlist (the known measurement databases) before fetching, and reject private / loopback / link-local targets. Add tests for allowed and rejected URLs.
+- [x] TASK-112: Add a coverage CI gate — fail CI when total coverage drops below the current 80% level, wired into the existing GitHub Actions matrix without breaking the Python 3.10–3.13 lanes. (task: task_20260712021844_d6e14940dba6130b)
+- [x] TASK-114: Harden `fetch_curve_from_url` against SSRF — validate the URL scheme and host against a domain allowlist (the known measurement databases) before fetching, and reject private / loopback / link-local targets. Add tests for allowed and rejected URLs. (task: task_20260712034844_5c385e9f59a31f3c)
+- [x] TASK-109: Decompose `gui/shell.py` — extract `GuiState` into its own module and break out the Tkinter variable initialization, leaving `gui/shell.py` a thin composition. No UI behaviour change; keep the existing GUI tests green. (task: task_20260712064844_7720364a5e21b289)
 - [ ] TASK-110: Standardize the error hierarchy — define a `HeadMatchError` base class with `MeasurementError`, `ConfigError`, and `NetworkError` subclasses and migrate the existing raise sites to them; keep messages intact and add tests asserting the new types are raised.
-- [ ] TASK-109: Decompose `gui/shell.py` — extract `GuiState` into its own module and break out the Tkinter variable initialization, leaving `gui/shell.py` a thin composition. No UI behaviour change; keep the existing GUI tests green.
-- [ ] TASK-106: Split `gui_views.py` into real per-view modules (one module per view) with a package `__init__` re-export so imports stay stable. No behaviour change; tests stay green.
-- [ ] TASK-107: Extract the GUI workflow controllers out of `HeadMatchGuiApp` into dedicated controller classes, leaving `HeadMatchGuiApp` as wiring. No behaviour change; tests stay green.
+- [x] TASK-106: Split `gui_views.py` into real per-view modules (one module per view) with a package `__init__` re-export so imports stay stable. No behaviour change; tests stay green. (task: task_20260712112832_f730dad6a32fdbf2)
+- [x] TASK-107: Extract the GUI workflow controllers out of `HeadMatchGuiApp` into dedicated controller classes, leaving `HeadMatchGuiApp` as wiring. No behaviour change; tests stay green. (task: task_20260712094844_55b5735c44ba96df)
 - [ ] TASK-108: Centralize GUI file-picking and background-task helpers into a shared module and route the existing call sites through it. No behaviour change; tests stay green.
 
 ## Proposed — promote to `- [ ]` when ready (some may already be shipped; vet first)
@@ -36,3 +36,4 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 - [?] Additional export formats beyond CamillaDSP and Equalizer APO.
 - [?] CamillaDSP live-update via its WebSocket API.
 - [?] Closed-loop EQ refinement (measure → apply → re-measure).
+- [?] **[refactor]** Update test_gui.py to use WorkflowControllers for basic_search_target and choose_basic_search_match — The tests test_basic_search_with_multiple_matches_requires_choice and test_basic_search_single_match_downloads_and_selects_csv directly call HeadMatchGuiApp methods with a SimpleNamespace mock. After moving these methods to WorkflowControllers and adding delegation in shell.py, these tests now need to use WorkflowControllers instead of calling classmethods on HeadMatchGuiApp. (evidence: tests/test_gui.py:293-306 for multiple matches, tests/test_gui.py:323-344 for single match. These tests use SimpleNamespace without _controllers attribute.; via task_20260712095457_5b6438f138dd1e3c, 2026-07-12)

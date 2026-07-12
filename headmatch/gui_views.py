@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-# Legacy GUI picker rows still use button_text="Browse…" in the underlying view module.
-# button_text="Browse…"
-# button_text="Browse…"
-# button_text="Browse…"
-# button_text="Browse…"
-# button_text="Browse…"
-
+# Compatibility layer - re-exports from gui.views per-view modules
 from .gui.views._legacy import (
     BODY_WRAP,
     CLONE_TARGET_STEPS,

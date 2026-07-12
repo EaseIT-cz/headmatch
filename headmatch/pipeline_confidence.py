@@ -81,9 +81,11 @@ def _confidence_penalty(value: float, good: float, bad: float) -> float:
 ALIGNMENT_SCORE_WARN = 0.20
 ALIGNMENT_SCORE_SEVERE = 0.40
 
-# ALIGNMENT_PEAK: Ratio of alignment peak to secondary peaks.
-#   - 0.15: Some noise/echoes present but usually manageable.
-#   - 0.35: Confusing echoes or noise dominate; timing unreliable.
+# ALIGNMENT_PEAK: Deficit from a perfect alignment peak ratio.
+# The scorer uses 1.0 - alignment_peak_ratio, so these correspond to raw
+# peak clarity ratios of 0.85 (warn) and 0.65 (severe).
+#   - 0.15 deficit: Some noise/echoes present but usually manageable.
+#   - 0.35 deficit: Confusing echoes or noise dominate; timing unreliable.
 ALIGNMENT_PEAK_WARN = 0.15
 ALIGNMENT_PEAK_SEVERE = 0.35
 
