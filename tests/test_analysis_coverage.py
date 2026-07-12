@@ -13,33 +13,34 @@ from headmatch.analysis import (
     _roughness_db,
     analyze_measurement,
 )
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import write_wav
 from headmatch.signals import SweepSpec, generate_log_sweep
 
 
 class TestCoerceMeasurementAudio:
     def test_non_2d_raises(self):
-        with pytest.raises(ValueError, match="must be a 2D audio array"):
+        with pytest.raises(MeasurementError, match="must be a 2D audio array"):
             _coerce_measurement_audio(np.zeros(10), "x.wav")
 
     def test_empty_raises(self):
-        with pytest.raises(ValueError, match="is empty"):
+        with pytest.raises(MeasurementError, match="is empty"):
             _coerce_measurement_audio(np.zeros((0, 2)), "x.wav")
 
     def test_mono_capture_raises(self):
-        with pytest.raises(ValueError, match="mono capture"):
+        with pytest.raises(MeasurementError, match="mono capture"):
             _coerce_measurement_audio(np.ones((10, 1)), "x.wav")
 
     def test_zero_channels_raises(self):
         # Rows present but zero columns: passes the empty/len check but trips
         # the "at least two channels" guard (shape[1] < 2, not == 1).
-        with pytest.raises(ValueError, match="at least two channels"):
+        with pytest.raises(MeasurementError, match="at least two channels"):
             _coerce_measurement_audio(np.zeros((10, 0)), "x.wav")
 
     def test_duplicated_channel_raises(self):
         mono = np.linspace(-1, 1, 32)
         stereo = np.column_stack([mono, mono])
-        with pytest.raises(ValueError, match="duplicated-channel"):
+        with pytest.raises(MeasurementError, match="duplicated-channel"):
             _coerce_measurement_audio(stereo, "x.wav")
 
     def test_valid_stereo_returns_two_channels(self):
@@ -137,7 +138,7 @@ class TestAnalyzeMeasurement:
         # Analyze with a spec that claims a different sample rate.
         bad_spec = SweepSpec(sample_rate=44100, duration_s=0.3,
                              pre_silence_s=0.1, post_silence_s=0.1)
-        with pytest.raises(ValueError, match="Sample rate mismatch"):
+        with pytest.raises(MeasurementError, match="Sample rate mismatch"):
             analyze_measurement(wav, bad_spec)
 
     def test_recording_too_short_raises(self, tmp_path):
@@ -150,7 +151,7 @@ class TestAnalyzeMeasurement:
         ])
         wav = tmp_path / "short.wav"
         write_wav(wav, short, spec.sample_rate)
-        with pytest.raises(ValueError, match="Recording too short"):
+        with pytest.raises(MeasurementError, match="Recording too short"):
             analyze_measurement(wav, spec)
 
     def test_full_analysis_writes_csvs(self, tmp_path):

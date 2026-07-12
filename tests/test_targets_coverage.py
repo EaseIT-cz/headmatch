@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from headmatch.exceptions import MeasurementError
 from headmatch.targets import (
     clone_target_from_source_target,
     load_curve,
@@ -13,17 +14,17 @@ from headmatch.targets import (
 
 class TestNormalizeAt1kHzGuards:
     def test_shape_mismatch_raises(self):
-        # line 29
+        # line 33
         freqs = np.array([20.0, 1000.0, 20000.0])
         values = np.array([0.0, 0.0])
-        with pytest.raises(ValueError, match='same shape'):
+        with pytest.raises(MeasurementError, match='same shape'):
             normalize_at_1khz(freqs, values)
 
     def test_too_few_points_raises(self):
-        # line 31
+        # line 35
         freqs = np.array([1000.0])
         values = np.array([0.0])
-        with pytest.raises(ValueError, match='at least two'):
+        with pytest.raises(MeasurementError, match='at least two'):
             normalize_at_1khz(freqs, values)
 
 
@@ -47,8 +48,8 @@ class TestReadTargetMetadataBlankLines:
 
 class TestCloneTargetGuards:
     def test_identical_source_and_target_raises(self, tmp_path):
-        # line 91
+        # 1-origin line 99
         csv = tmp_path / 'same.csv'
         csv.write_text('frequency_hz,target_db\n20,0\n1000,0\n20000,0\n', encoding='utf-8')
-        with pytest.raises(ValueError, match='must be different files'):
+        with pytest.raises(MeasurementError, match='must be different files'):
             clone_target_from_source_target(csv, csv, tmp_path / 'out.csv')

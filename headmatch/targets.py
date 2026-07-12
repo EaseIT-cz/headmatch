@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 import numpy as np
 
+from .exceptions import MeasurementError
 from .io_utils import load_fr_csv, save_fr_csv
 from .signals import geometric_log_grid
 
@@ -26,11 +27,11 @@ def normalize_at_1khz(freqs_hz: np.ndarray, values_db: np.ndarray) -> np.ndarray
     freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
     values_db = np.asarray(values_db, dtype=np.float64)
     if freqs_hz.shape != values_db.shape:
-        raise ValueError('Target curve frequencies and values must have the same shape')
+        raise MeasurementError('Target curve frequencies and values must have the same shape')
     if len(freqs_hz) < 2:
-        raise ValueError('Target curve must contain at least two frequency points')
+        raise MeasurementError('Target curve must contain at least two frequency points')
     if freqs_hz[0] > 1000.0 or freqs_hz[-1] < 1000.0:
-        raise ValueError(
+        raise MeasurementError(
             'Target curve must span 1 kHz for normalization. '
             f'Got {freqs_hz[0]:.1f} Hz to {freqs_hz[-1]:.1f} Hz.'
         )
@@ -96,9 +97,9 @@ def clone_target_from_source_target(source_curve_path: str | Path, target_curve_
     target_path = Path(target_curve_path)
     out_file = Path(out_path) if out_path else None
     if source_path.resolve() == target_path.resolve():
-        raise ValueError('Source and target CSV must be different files when building a clone target')
+        raise MeasurementError('Source and target CSV must be different files when building a clone target')
     if out_file and any(out_file.resolve() == candidate.resolve() for candidate in (source_path, target_path)):
-        raise ValueError('Output CSV must not overwrite the source or target measurement file')
+        raise MeasurementError('Output CSV must not overwrite the source or target measurement file')
 
     grid = geometric_log_grid()
     source = resample_curve(load_curve(source_path, 'source'), grid)

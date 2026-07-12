@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import _normalize_column_name, load_fr_csv, save_json, save_fr_csv
 
 
@@ -38,7 +39,7 @@ def test_load_fr_csv_rejects_duplicate_frequencies(tmp_path):
     path = tmp_path / "curve.csv"
     path.write_text("frequency_hz,response_db\n100,1.0\n100,2.0\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="duplicate frequency"):
+    with pytest.raises(MeasurementError, match="duplicate frequency"):
         load_fr_csv(path)
 
 
@@ -46,7 +47,7 @@ def test_load_fr_csv_rejects_non_positive_frequency(tmp_path):
     path = tmp_path / "curve.csv"
     path.write_text("frequency_hz,response_db\n0,1.0\n100,2.0\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="non-positive frequencies"):
+    with pytest.raises(MeasurementError, match="non-positive frequencies"):
         load_fr_csv(path)
 
 
