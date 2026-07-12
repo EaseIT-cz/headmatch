@@ -65,13 +65,13 @@ class TestConfigErrorRaised:
     def test_batch_manifest_not_found(self, monkeypatch):
         """load_batch_manifest raises ConfigError for missing file."""
         import sys
-        
+
         # Mock yaml before importing batch (which depends on it)
         import types
         yaml_mock = types.ModuleType("yaml")
         yaml_mock.safe_load = lambda x: {}
         sys.modules["yaml"] = yaml_mock
-        
+
         from headmatch.batch import load_batch_manifest
         with pytest.raises(ConfigError, match="Batch manifest not found"):
             load_batch_manifest("/nonexistent/path.json")
@@ -100,22 +100,22 @@ class TestNetworkErrorRaised:
         """fetch_autoeq_index raises NetworkError on connection failure."""
         import urllib.request
         import urllib.error
-        
+
         def fake_urlopen(*args, **kwargs):
             raise urllib.error.URLError("Connection refused")
-        
+
         # Patch urlopen in the module that uses it
         monkeypatch.setattr("headmatch.headphone_db.urlopen", fake_urlopen)
-        
+
         # Also clear cache
         from headmatch import headphone_db
         monkeypatch.setattr(headphone_db, "_load_cached_index", lambda: None)
-        
+
         with pytest.raises(NetworkError, match="Failed to fetch"):
             headphone_db.fetch_autoeq_index()
 
     def test_fetch_curve_from_url_non_https(self):
         """fetch_curve_from_url raises NetworkError for non-HTTPS URLs."""
         from headmatch.headphone_db import fetch_curve_from_url
-        with pytest.raises(NetworkError, match="Only HTTPS URLs are accepted"):
+        with pytest.raises(NetworkError, match="scheme must be 'https'"):
             fetch_curve_from_url("http://example.com/data.csv", "/tmp/out.csv")

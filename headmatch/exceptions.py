@@ -12,7 +12,7 @@ class HeadMatchError(Exception):
 
 class MeasurementError(HeadMatchError):
     """Invalid measurement data or audio processing failure.
-    
+
     Raised when:
     - Audio data is invalid (wrong shape, empty, mono when stereo expected)
     - Frequency response data fails validation (non-finite, non-positive freqs)
@@ -24,7 +24,7 @@ class MeasurementError(HeadMatchError):
 
 class ConfigError(HeadMatchError):
     """Invalid configuration or file format.
-    
+
     Raised when:
     - Config JSON is malformed or missing required fields
     - Batch manifest is invalid
@@ -37,7 +37,7 @@ class ConfigError(HeadMatchError):
 
 class NetworkError(HeadMatchError):
     """Network or remote resource failure.
-    
+
     Raised when:
     - GitHub API requests fail
     - Remote CSV/URL fetch fails

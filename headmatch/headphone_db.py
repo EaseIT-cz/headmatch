@@ -6,24 +6,108 @@ Used by the clone-target workflow to allow cloning without owning the target hea
 from __future__ import annotations
 
 import csv
+import ipaddress
 import io
 import json
 import os
+import socket
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Tuple
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import numpy as np
 
-from .exceptions import MeasurementError, ConfigError, NetworkError
+from .exceptions import MeasurementError, NetworkError
+
+
+# Allowed domains for URL validation (SSRF protection)
+# - raw.githubusercontent.com: AutoEQ raw CSV data
+# - api.github.com: GitHub API for repository index
+ALLOWED_DOMAINS: tuple[str, ...] = (
+    "raw.githubusercontent.com",
+    "api.github.com",
+)
+
+
+def _is_private_ip(ip: str) -> bool:
+    """Check if an IP address is private, loopback, or link-local.
+
+    Returns True if the IP is:
+    - Private (10.x.x.x, 172.16.x.x-172.31.x.x, 192.168.x.x)
+    - Loopback (127.x.x.x)
+    - Link-local (169.254.x.x)
+    """
+    try:
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        # Invalid IP format
+        return False
+
+
+def _validate_url_for_ssrf(url: str) -> str:
+    """Validate a URL to prevent SSRF (Server-Side Request Forgery) attacks.
+
+    This function ensures that the URL:
+    1. Uses the HTTPS scheme (rejects http, file, ftp, etc.)
+    2. Points to an allowed domain
+    3. Does not resolve to a private/internal IP address
+
+    Args:
+        url: The URL to validate.
+
+    Returns:
+        The validated URL unchanged.
+
+    Raises:
+        NetworkError: If the URL is invalid, not HTTPS, not in allowed domains,
+                      or resolves to a private/internal IP.
+    """
+    parsed = urlparse(url)
+
+    # Validate scheme is HTTPS
+    if parsed.scheme != "https":
+        raise NetworkError(f"scheme must be 'https' but got '{parsed.scheme}'")
+
+    # Validate hostname exists
+    hostname = parsed.hostname
+    if not hostname:
+        raise NetworkError("URL must contain a valid hostname")
+
+    # Validate hostname is in allowed domains (case-insensitive)
+    if hostname.lower() not in (d.lower() for d in ALLOWED_DOMAINS):
+        raise NetworkError(f"Domain '{hostname}' is not in the allowed list")
+
+    # Validate that the hostname doesn't resolve to a private IP
+    try:
+        # Resolve hostname to IP address(es)
+        addr_info = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        # DNS resolution failed
+        raise NetworkError(f"Could not resolve hostname '{hostname}': {e}")
+
+    for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
+        ip_str = str(sockaddr[0])
+        try:
+            ipaddress.ip_address(ip_str)
+        except ValueError:
+            # Not an IP address, skip
+            continue
+        if _is_private_ip(ip_str):
+            raise NetworkError(
+                f"Domain '{hostname}' resolves to private IP: {ip_str}"
+            )
+
+    return url
 
 
 AUTOEQ_RAW_BASE = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master"
 AUTOEQ_TREE_API = "https://api.github.com/repos/jaakkopasanen/AutoEq/git/trees/master?recursive=1"
+
 INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap
 _USER_AGENT = "headmatch/0.4.6"
@@ -216,10 +300,15 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
 def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
     """Download a frequency response CSV from a URL and save it locally.
 
-    Only HTTPS URLs are accepted. Response size is capped at 5 MB.
+    Security considerations:
+    - Only HTTPS URLs are accepted (http, ftp, file, etc. are rejected)
+    - URLs must point to allowed domains (raw.githubusercontent.com, api.github.com)
+    - URLs are validated against SSRF attacks including private IP resolution
+
+    Response size is capped at 5 MB.
     """
-    if not url.startswith("https://"):
-        raise NetworkError(f"Only HTTPS URLs are accepted. Got: {url}")
+    # Validate URL for SSRF protection before any other processing
+    _validate_url_for_ssrf(url)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:

@@ -11,6 +11,9 @@ import pytest
 from headmatch.exceptions import MeasurementError, NetworkError
 from headmatch.headphone_db import HeadphoneEntry, _build_index_from_tree, _fetch_and_cache_index, _load_cached_index, _normalize_for_search, _parse_autoeq_csv, fetch_curve_from_url
 
+ALLOWED_CURVE_URL = "https://raw.githubusercontent.com/user/repo/main/a.csv"
+PUBLIC_ADDRINFO = [(0, 0, 0, "", ("185.199.108.133", 443))]
+
 
 class DummyResponse:
     def __init__(self, data: bytes):
@@ -71,23 +74,25 @@ def test_parse_autoeq_csv_skips_invalid_rows_and_parses_valid_values():
 
 
 def test_fetch_curve_from_url_rejects_http(tmp_path):
-    with pytest.raises(NetworkError, match="Only HTTPS"):
-        fetch_curve_from_url("http://example.com/a.csv", tmp_path / "a.csv")
+    with pytest.raises(NetworkError, match="scheme must be 'https'"):
+        fetch_curve_from_url("http://raw.githubusercontent.com/user/repo/main/a.csv", tmp_path / "a.csv")
 
 
 def test_fetch_curve_from_url_wraps_network_errors(tmp_path, monkeypatch):
     def boom(*_a, **_k):
         raise URLError("offline")
+    monkeypatch.setattr("headmatch.headphone_db.socket.getaddrinfo", lambda *_a, **_k: PUBLIC_ADDRINFO)
     monkeypatch.setattr("headmatch.headphone_db.urlopen", boom)
     with pytest.raises(NetworkError, match="Failed to fetch"):
-        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
+        fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "a.csv")
 
 
 def test_fetch_curve_from_url_rejects_small_csv(tmp_path, monkeypatch):
     text = "\n".join(["freq,val", "20,1", "30,2"]).encode("utf-8")
+    monkeypatch.setattr("headmatch.headphone_db.socket.getaddrinfo", lambda *_a, **_k: PUBLIC_ADDRINFO)
     monkeypatch.setattr("headmatch.headphone_db.urlopen", lambda *a, **k: DummyResponse(text))
     with pytest.raises(MeasurementError, match="expected a frequency response"):
-        fetch_curve_from_url("https://example.com/a.csv", tmp_path / "a.csv")
+        fetch_curve_from_url(ALLOWED_CURVE_URL, tmp_path / "a.csv")
 
 
 def test_normalize_for_search_compacts_punctuation_and_case():
