@@ -3,9 +3,24 @@ from __future__ import annotations
 import argparse
 import queue
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable
+
+from .state import (
+    GuiState,
+    NavigationItem,
+    BASIC_NAV_ITEMS,
+    NAV_ITEMS,
+    ConfigLoader,
+    OnlineRunner,
+    OfflinePrepareRunner,
+    OfflineFitRunner,
+    DoctorReportRunner,
+    load_gui_state,
+    build_doctor_report,
+)
+
+from typing import Any, Callable
 
 try:
     from tkinter import filedialog
@@ -44,72 +59,6 @@ from ..settings import load_or_create_config
 from .controllers import WorkflowControllers
 from .services import BackgroundTaskService, FilePickerService
 
-
-@dataclass(frozen=True)
-class NavigationItem:
-    key: str
-    label: str
-
-
-@dataclass(frozen=True)
-class GuiState:
-    version_display: str
-    config_path: Path
-    config_created: bool
-    current_view: str
-    mode: str
-    default_output_dir: str
-    preferred_target_csv: str
-    pipewire_output_target: str
-    pipewire_input_target: str
-    start_iterations: int
-    max_filters: int
-    sample_rate: int
-    duration_s: float
-    f_start_hz: float
-    f_end_hz: float
-    pre_silence_s: float
-    post_silence_s: float
-    amplitude: float
-
-
-ConfigLoader = Callable[[str | Path | None], tuple[FrontendConfig, Path, bool]]
-OnlineRunner = Callable[..., list[dict]]
-OfflinePrepareRunner = Callable[[SweepSpec, OfflineMeasurementPlan], dict]
-OfflineFitRunner = Callable[..., dict]
-DoctorReportRunner = Callable[[Path, FrontendConfig], str]
-
-
-BASIC_NAV_ITEMS: tuple[NavigationItem, ...] = (
-    NavigationItem("basic-mode", "Basic Workflow"),
-    NavigationItem("hearing-test", "Hearing Test"),
-    NavigationItem("basic-clone-target", "Clone Target"),
-    NavigationItem("history", "Results"),
-)
-
-NAV_ITEMS: tuple[NavigationItem, ...] = (
-    NavigationItem("measure-online", "Measure"),
-    NavigationItem("hearing-test", "Hearing Test"),
-    NavigationItem("setup-check", "Setup Check"),
-    NavigationItem("prepare-offline", "Prepare Offline"),
-    NavigationItem("target-editor", "Target Editor"),
-    NavigationItem("import-apo", "Import APO"),
-    NavigationItem("fetch-curve", "Fetch Curve"),
-    NavigationItem("history", "Results"),
-)
-
-
-def build_doctor_report(config_path: Path, config: FrontendConfig) -> str:
-    import sys
-    gui_mod = sys.modules.get('headmatch.gui')
-    collect = getattr(gui_mod, 'collect_doctor_checks', collect_doctor_checks)
-    format_report = getattr(gui_mod, 'format_doctor_report', format_doctor_report)
-    return format_report(collect(config_path, config), config_path=config_path)
-
-
-
-_LEGACY_OUTPUT_DIRS = {"out/session_01", "out\\session_01"}
-
 # Advanced-mode "air-band shaping" presets -> flatten knob (0..1). 0 compensates
 # only where the listener is worse than a normal ear; higher values correct more
 # of the natural HF rolloff (1.0 = flatten the perceived response toward 1 kHz).
@@ -121,43 +70,13 @@ _HEARING_FLATTEN_PRESETS: dict[str, float] = {
 }
 
 
-def _resolve_default_output_dir(saved: str | None) -> str:
-    """Return a sensible default output dir, ignoring legacy defaults."""
-    if saved and saved.strip() not in _LEGACY_OUTPUT_DIRS:
-        return saved
-    return str(Path.home() / "Documents" / "HeadMatch" / "session_01")
-
-
-def load_gui_state(
-    config_path: str | Path | None = None,
-    *,
-    config_loader: ConfigLoader = load_or_create_config,
-) -> GuiState:
-    identity = get_app_identity()
-    config, resolved_path, created = config_loader(config_path)
-    return GuiState(
-        version_display=identity.version_display,
-        config_path=Path(resolved_path),
-        config_created=created,
-        current_view="basic-mode" if config.mode == "basic" else "measure-online",
-        mode=config.mode,
-        default_output_dir=_resolve_default_output_dir(config.default_output_dir),
-        preferred_target_csv=config.preferred_target_csv or "",
-        pipewire_output_target=config.pipewire_output_target or "",
-        pipewire_input_target=config.pipewire_input_target or "",
-        start_iterations=config.start_iterations,
-        max_filters=config.max_filters,
-        sample_rate=config.sample_rate,
-        duration_s=config.duration_s,
-        f_start_hz=config.f_start_hz,
-        f_end_hz=config.f_end_hz,
-        pre_silence_s=config.pre_silence_s,
-        post_silence_s=config.post_silence_s,
-        amplitude=config.amplitude,
-    )
-
-
 class HeadMatchGuiApp:
+    _force_new_hearing_test: bool
+    basic_search_matches: list[Any]
+
+    def __getattr__(self, name: str) -> Any:
+        raise AttributeError(name)
+
     def __init__(
         self,
         root,
@@ -186,53 +105,10 @@ class HeadMatchGuiApp:
         self._last_completion_steps: tuple[str, ...] = ()
         self._completion_clipping_assessment: dict | None = None
 
-        self.current_view = tk.StringVar(master=root, value=state.current_view)
-        self.mode_var = tk.StringVar(master=root, value=state.mode)
-        self.output_dir_var = tk.StringVar(master=root, value=state.default_output_dir)
-        self.target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
-        self.output_target_var = tk.StringVar(master=root, value=state.pipewire_output_target)
-        self.input_target_var = tk.StringVar(master=root, value=state.pipewire_input_target)
-        self.output_target_options: tuple[str, ...] = ()
-        self.input_target_options: tuple[str, ...] = ()
-        self.iterations_var = tk.StringVar(master=root, value=str(state.start_iterations))
-        self.iteration_mode_var = tk.StringVar(master=root, value="independent")
-        self.max_filters_var = tk.StringVar(master=root, value=str(state.max_filters))
-        self.history_root_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser().parent))
-        self.offline_recording_var = tk.StringVar(master=root, value="")
-        self.offline_fit_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "fit"))
-        self.offline_notes_var = tk.StringVar(master=root, value="")
-        self.apo_preset_var = tk.StringVar(master=root, value="")
-        self.apo_output_dir_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
-        self.apo_refine_recording_var = tk.StringVar(master=root, value="")
-        self.apo_refine_target_var = tk.StringVar(master=root, value="")
-        self.apo_refine_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "refined"))
-        self.fetch_url_var = tk.StringVar(master=root, value="")
-        self.fetch_output_var = tk.StringVar(master=root, value="")
-        self.fetch_search_var = tk.StringVar(master=root, value="")
+        from .variables import initialize_tkinter_variables
+        vars_dict = initialize_tkinter_variables(root, state)
+        self.__dict__.update(vars_dict)
         self.target_editor = TargetEditor()
-        self.target_editor_save_path_var = tk.StringVar(master=root, value="")
-        self.basic_step_var = tk.StringVar(master=root, value="target")
-        self.basic_target_mode_var = tk.StringVar(master=root, value="flat")
-        self.basic_search_query_var = tk.StringVar(master=root, value="")
-        self.basic_search_results_var = tk.StringVar(master=root, value="")
-        self.basic_search_choice_var = tk.StringVar(master=root, value="")
-        self.basic_search_matches: list = []
-        self.basic_target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
-        self.basic_target_path_var = tk.StringVar(master=root, value="")
-        self.basic_clone_source_var = tk.StringVar(master=root, value="")
-        self.basic_clone_target_var = tk.StringVar(master=root, value="")
-        self.basic_clone_output_var = tk.StringVar(master=root, value="")
-        self.hearing_profile = None  # HearingProfile | None; set after a successful test
-        self._force_new_hearing_test = False  # skip the saved-profile landing once
-        self.hearing_target_var = tk.StringVar(master=root, value="Flat (default)")  # advanced-mode tonal target
-        self.hearing_flatten_var = tk.StringVar(master=root, value="Off — compensate to normal")  # advanced-mode flatten knob
-        self.basic_progress_var = tk.StringVar(master=root, value="")
-        self.progress_title_var = tk.StringVar(master=root, value="")
-        self.progress_body_var = tk.StringVar(master=root, value="")
-        self.completion_title_var = tk.StringVar(master=root, value="")
-        self.completion_body_var = tk.StringVar(master=root, value="")
-        self.doctor_report_var = tk.StringVar(master=root, value="")
-        self.content = None
 
         self.root.title(f"HeadMatch {state.version_display}")
         self.root.minsize(880, 560)
