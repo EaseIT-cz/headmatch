@@ -105,53 +105,10 @@ class HeadMatchGuiApp:
         self._last_completion_steps: tuple[str, ...] = ()
         self._completion_clipping_assessment: dict | None = None
 
-        self.current_view = tk.StringVar(master=root, value=state.current_view)
-        self.mode_var = tk.StringVar(master=root, value=state.mode)
-        self.output_dir_var = tk.StringVar(master=root, value=state.default_output_dir)
-        self.target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
-        self.output_target_var = tk.StringVar(master=root, value=state.pipewire_output_target)
-        self.input_target_var = tk.StringVar(master=root, value=state.pipewire_input_target)
-        self.output_target_options: tuple[str, ...] = ()
-        self.input_target_options: tuple[str, ...] = ()
-        self.iterations_var = tk.StringVar(master=root, value=str(state.start_iterations))
-        self.iteration_mode_var = tk.StringVar(master=root, value="independent")
-        self.max_filters_var = tk.StringVar(master=root, value=str(state.max_filters))
-        self.history_root_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser().parent))
-        self.offline_recording_var = tk.StringVar(master=root, value="")
-        self.offline_fit_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "fit"))
-        self.offline_notes_var = tk.StringVar(master=root, value="")
-        self.apo_preset_var = tk.StringVar(master=root, value="")
-        self.apo_output_dir_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
-        self.apo_refine_recording_var = tk.StringVar(master=root, value="")
-        self.apo_refine_target_var = tk.StringVar(master=root, value="")
-        self.apo_refine_output_var = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "refined"))
-        self.fetch_url_var = tk.StringVar(master=root, value="")
-        self.fetch_output_var = tk.StringVar(master=root, value="")
-        self.fetch_search_var = tk.StringVar(master=root, value="")
+        from .variables import initialize_tkinter_variables
+        vars_dict = initialize_tkinter_variables(root, state)
+        self.__dict__.update(vars_dict)
         self.target_editor = TargetEditor()
-        self.target_editor_save_path_var = tk.StringVar(master=root, value="")
-        self.basic_step_var = tk.StringVar(master=root, value="target")
-        self.basic_target_mode_var = tk.StringVar(master=root, value="flat")
-        self.basic_search_query_var = tk.StringVar(master=root, value="")
-        self.basic_search_results_var = tk.StringVar(master=root, value="")
-        self.basic_search_choice_var = tk.StringVar(master=root, value="")
-        self.basic_search_matches: list = []
-        self.basic_target_csv_var = tk.StringVar(master=root, value=state.preferred_target_csv)
-        self.basic_target_path_var = tk.StringVar(master=root, value="")
-        self.basic_clone_source_var = tk.StringVar(master=root, value="")
-        self.basic_clone_target_var = tk.StringVar(master=root, value="")
-        self.basic_clone_output_var = tk.StringVar(master=root, value="")
-        self.hearing_profile = None  # HearingProfile | None; set after a successful test
-        self._force_new_hearing_test = False  # skip the saved-profile landing once
-        self.hearing_target_var = tk.StringVar(master=root, value="Flat (default)")  # advanced-mode tonal target
-        self.hearing_flatten_var = tk.StringVar(master=root, value="Off — compensate to normal")  # advanced-mode flatten knob
-        self.basic_progress_var = tk.StringVar(master=root, value="")
-        self.progress_title_var = tk.StringVar(master=root, value="")
-        self.progress_body_var = tk.StringVar(master=root, value="")
-        self.completion_title_var = tk.StringVar(master=root, value="")
-        self.completion_body_var = tk.StringVar(master=root, value="")
-        self.doctor_report_var = tk.StringVar(master=root, value="")
-        self.content = None
 
         self.root.title(f"HeadMatch {state.version_display}")
         self.root.minsize(880, 560)
