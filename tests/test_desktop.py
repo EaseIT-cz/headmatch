@@ -12,6 +12,7 @@ from headmatch.desktop import (
     remove_shortcut,
     shortcut_exists,
 )
+from headmatch.exceptions import ConfigError
 
 
 def test_find_gui_binary_returns_none_when_not_installed():
@@ -68,5 +69,5 @@ def test_create_shortcut_raises_when_no_binary(tmp_path: Path, monkeypatch):
     import pytest
     monkeypatch.setattr("headmatch.desktop.DESKTOP_DIR", tmp_path)
     monkeypatch.setattr("headmatch.desktop.find_gui_binary", lambda: None)
-    with pytest.raises(FileNotFoundError, match="headmatch-gui"):
+    with pytest.raises(ConfigError, match="headmatch-gui"):
         create_shortcut(None)

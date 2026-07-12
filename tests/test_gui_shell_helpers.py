@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from headmatch.exceptions import ConfigError
 from headmatch.gui.shell import HeadMatchGuiApp, NavigationItem
 from headmatch.headphone_db import HeadphoneEntry
 from tests.test_gui import DummyVar
@@ -24,9 +25,9 @@ def test_strip_device_label_returns_bare_id():
 def test_parse_positive_int_validates_input():
     app = SimpleNamespace()
     assert HeadMatchGuiApp._parse_positive_int(app, "3", "Iterations") == 3
-    with pytest.raises(ValueError, match="whole number"):
+    with pytest.raises(ConfigError, match="whole number"):
         HeadMatchGuiApp._parse_positive_int(app, "x", "Iterations")
-    with pytest.raises(ValueError, match="greater than 0"):
+    with pytest.raises(ConfigError, match="greater than 0"):
         HeadMatchGuiApp._parse_positive_int(app, "0", "Iterations")
 
 

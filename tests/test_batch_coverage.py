@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from headmatch.batch import load_batch_manifest
+from headmatch.exceptions import ConfigError
 
 
 # ── line 92: an entry that isn't a JSON object ──
@@ -17,7 +18,7 @@ from headmatch.batch import load_batch_manifest
 def test_load_manifest_entry_not_object(tmp_path):
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps({"entries": ["not-a-dict"]}), encoding="utf-8")
-    with pytest.raises(ValueError, match="Entry 0 must be a JSON object"):
+    with pytest.raises(ConfigError, match="Entry 0 must be a JSON object"):
         load_batch_manifest(manifest)
 
 
