@@ -7,21 +7,18 @@ from dataclasses import replace
 from pathlib import Path
 
 from .state import (
-    NavigationItem,
     GuiState,
+    NavigationItem,
+    BASIC_NAV_ITEMS,
+    NAV_ITEMS,
     ConfigLoader,
     OnlineRunner,
     OfflinePrepareRunner,
     OfflineFitRunner,
     DoctorReportRunner,
-    BASIC_NAV_ITEMS,
-    NAV_ITEMS,
     load_gui_state,
     build_doctor_report,
 )
-
-# Needed for load_gui_state internal use
-from .state import _resolve_default_output_dir
 
 from typing import TYPE_CHECKING
 
