@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import pytest
 
+from headmatch.exceptions import MeasurementError
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import load_fr_csv
 
 
@@ -14,7 +16,7 @@ from headmatch.io_utils import load_fr_csv
 def test_load_fr_csv_no_rows(tmp_path):
     path = tmp_path / "empty.csv"
     path.write_text("# just a comment\n\n   \n", encoding="utf-8")
-    with pytest.raises(ValueError, match="No rows found"):
+    with pytest.raises(MeasurementError, match="No rows found"):
         load_fr_csv(path)
 
 
@@ -23,7 +25,7 @@ def test_load_fr_csv_no_rows(tmp_path):
 def test_load_fr_csv_header_only(tmp_path):
     path = tmp_path / "header.csv"
     path.write_text("frequency_hz,response_db\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="No data rows found"):
+    with pytest.raises(MeasurementError, match="No data rows found"):
         load_fr_csv(path)
 
 
@@ -32,7 +34,7 @@ def test_load_fr_csv_header_only(tmp_path):
 def test_load_fr_csv_no_frequency_column(tmp_path):
     path = tmp_path / "nofreq.csv"
     path.write_text("foo,response_db\n1,2\n3,4\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="Could not find a frequency column"):
+    with pytest.raises(MeasurementError, match="Could not find a frequency column"):
         load_fr_csv(path)
 
 
@@ -60,7 +62,7 @@ def test_load_fr_csv_value_column_fallback_first(tmp_path):
 def test_load_fr_csv_no_value_column(tmp_path):
     path = tmp_path / "onlyfreq.csv"
     path.write_text("frequency_hz\n100\n1000\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="Could not find response column"):
+    with pytest.raises(MeasurementError, match="Could not find response column"):
         load_fr_csv(path)
 
 
@@ -88,7 +90,7 @@ def test_load_fr_csv_key_error(tmp_path, monkeypatch):
             return iter([{"frequency_hz": "100"}, {"frequency_hz": "1000"}])
 
     monkeypatch.setattr("headmatch.io_utils.csv.DictReader", StubReader)
-    with pytest.raises(ValueError, match="Missing expected column"):
+    with pytest.raises(MeasurementError, match="Missing expected column"):
         load_fr_csv(path)
 
 
@@ -97,7 +99,7 @@ def test_load_fr_csv_key_error(tmp_path, monkeypatch):
 def test_load_fr_csv_non_numeric(tmp_path):
     path = tmp_path / "nonnum.csv"
     path.write_text("frequency_hz,response_db\n100,abc\n1000,2.0\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="Could not parse numeric"):
+    with pytest.raises(MeasurementError, match="Could not parse numeric"):
         load_fr_csv(path)
 
 
@@ -123,7 +125,7 @@ def test_load_fr_csv_invalid_shape(tmp_path, monkeypatch):
         return real_array(seq, dtype=dtype)
 
     monkeypatch.setattr("headmatch.io_utils.np.array", fake_array)
-    with pytest.raises(ValueError, match="Invalid frequency-response data shape"):
+    with pytest.raises(MeasurementError, match="Invalid frequency-response data shape"):
         load_fr_csv(path)
 
 
@@ -135,7 +137,7 @@ def test_load_fr_csv_short_row(tmp_path):
     path = tmp_path / "ragged.csv"
     # second data row is missing the response_db cell
     path.write_text("frequency_hz,response_db\n100,1.0\n1000\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="Could not parse numeric"):
+    with pytest.raises(MeasurementError, match="Could not parse numeric"):
         load_fr_csv(path)
 
 
@@ -144,7 +146,7 @@ def test_load_fr_csv_short_row(tmp_path):
 def test_load_fr_csv_single_row(tmp_path):
     path = tmp_path / "one.csv"
     path.write_text("frequency_hz,response_db\n100,1.0\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="at least two frequency rows"):
+    with pytest.raises(MeasurementError, match="at least two frequency rows"):
         load_fr_csv(path)
 
 
@@ -153,7 +155,7 @@ def test_load_fr_csv_single_row(tmp_path):
 def test_load_fr_csv_non_finite(tmp_path):
     path = tmp_path / "inf.csv"
     path.write_text("frequency_hz,response_db\n100,1.0\n1000,inf\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="non-finite"):
+    with pytest.raises(MeasurementError, match="non-finite"):
         load_fr_csv(path)
 
 
@@ -162,5 +164,5 @@ def test_load_fr_csv_non_finite(tmp_path):
 def test_load_fr_csv_non_positive_freq(tmp_path):
     path = tmp_path / "neg.csv"
     path.write_text("frequency_hz,response_db\n0,1.0\n1000,2.0\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="non-positive frequencies"):
+    with pytest.raises(MeasurementError, match="non-positive frequencies"):
         load_fr_csv(path)

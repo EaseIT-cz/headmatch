@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import load_fr_csv
 from headmatch.targets import clone_target_from_source_target, load_curve
 
@@ -26,7 +27,7 @@ def test_load_curve_requires_1khz_coverage(tmp_path):
     csv_path = tmp_path / 'too_narrow.csv'
     csv_path.write_text('frequency_hz,response_db\n20,1\n500,2\n900,3\n')
 
-    with pytest.raises(ValueError, match='1 kHz'):
+    with pytest.raises(MeasurementError, match='1 kHz'):
         load_curve(csv_path)
 
 
@@ -36,7 +37,7 @@ def test_clone_target_rejects_overwriting_inputs(tmp_path):
     src.write_text('frequency_hz,response_db\n20,2\n1000,0\n20000,-1\n')
     tgt.write_text('frequency_hz,response_db\n20,4\n1000,1\n20000,-3\n')
 
-    with pytest.raises(ValueError, match='Output CSV must not overwrite'):
+    with pytest.raises(MeasurementError, match='Output CSV must not overwrite'):
         clone_target_from_source_target(src, tgt, src)
 
 

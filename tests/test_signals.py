@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from headmatch.exceptions import MeasurementError
 from headmatch.signals import SweepSpec, generate_log_sweep, fractional_octave_smoothing, geometric_log_grid, standard_graphic_eq_grid
 
 
@@ -49,7 +50,7 @@ def test_fractional_octave_smoothing_reduces_peak():
 
 
 def test_fractional_octave_smoothing_length_mismatch_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(MeasurementError):
         fractional_octave_smoothing(np.array([100, 200, 300]), np.array([0, 0]), fraction=12)
 
 
