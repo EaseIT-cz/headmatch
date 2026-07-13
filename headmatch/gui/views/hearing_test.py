@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-import threading
 from typing import Callable, Optional
 
 from ...hearing_test import (
@@ -34,6 +33,7 @@ from ...hearing_test import (
     save_hearing_profile,
 )
 from ..widgets import theme_background
+from ..background import run_in_thread
 
 from datetime import datetime, timezone
 
@@ -152,8 +152,8 @@ def render_hearing_test(
                 backend.play_tone(samples, sample_rate, output_device)
             except Exception:
                 pass
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
+
+        t = run_in_thread(_worker, daemon=True)
         _state["tone_thread"] = t
 
     def _play_silence_async():
@@ -163,8 +163,8 @@ def render_hearing_test(
                 backend.play_tone(generate_silence(sample_rate), sample_rate, output_device)
             except Exception:
                 pass
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
+
+        t = run_in_thread(_worker, daemon=True)
         _state["tone_thread"] = t
 
     # ── view transitions ─────────────────────────────────────────────────────
