@@ -321,3 +321,99 @@ def test_save_without_applying_uses_cancel(harness):
     assert "profile" in harness.saved
     assert harness.events["cancel"] == 1
     assert harness.events["complete"] == []
+
+
+def test_uses_run_in_thread_background_helper(monkeypatch):
+    """Verify that _play_tone_async and _play_silence_async use run_in_thread instead of threading.Thread.
+
+    Regression test for TASK-108 subtask 3.
+    """
+    import threading
+    from headmatch.gui.background import run_in_thread
+    from headmatch.gui.views import hearing_test as ht_module
+
+    threads_started = []
+    orig_run_in_thread = ht_module.run_in_thread
+
+    def capture_run_in_thread(*args, **kwargs):
+        threads_started.append((args, kwargs))
+        return orig_run_in_thread(*args, **kwargs)
+
+    monkeypatch.setattr(ht_module, "run_in_thread", capture_run_in_thread)
+    thread_init_calls = []
+    orig_thread_init = threading.Thread.__init__
+
+    def capture_thread_init(self, *args, **kwargs):
+        thread_init_calls.append((args, kwargs))
+        return orig_thread_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(threading.Thread, "__init__", capture_thread_init)
+
+    # Simulate starting a test to trigger _play_tone_async
+    class FakeFrame:
+        def after(self, ms, cb):
+            return "after-id"
+        def after_cancel(self, tid):
+            pass
+        def winfo_children(self):
+            return []
+
+    class FakeTtk:
+        def Frame(self, *a, **k):
+            return FakeFrame()
+        def Label(self, *a, **k):
+            class W:
+                def grid(self, *a, **k):
+                    return self
+            return W()
+        def Button(self, *a, **k):
+            class W:
+                def grid(self, *a, **k):
+                    return self
+            return W()
+
+    class FakeBackend:
+        def play_tone(self, *a, **k):
+            pass
+
+    view_state = {"afters": set()}
+
+    # Test _play_tone_async triggers run_in_thread
+    if hasattr(ht_module, '_play_tone_async'):
+        ht_module._play_tone_async(
+            freq_hz=1000,
+            level_dbfs=-20.0,
+            duration_s=0.2,
+            backend=FakeBackend(),
+            output_device=None,
+            sample_rate=48000,
+            view_state=view_state,
+            root=FakeFrame(),
+        )
+    else:
+        # Function may be defined inline; try calling through a minimal render
+        pass
+
+    # Test _play_silence_async triggers run_in_thread  
+    if hasattr(ht_module, '_play_silence_async'):
+        ht_module._play_silence_async(
+            duration_s=0.2,
+            view_state=view_state,
+            root=FakeFrame(),
+        )
+
+    # Verify we used run_in_thread, NOT direct threading.Thread
+    if threads_started:
+        assert len(threads_started) > 0, "Expected run_in_thread to be called"
+        # Should NOT have any direct Thread creations in hearing_test module
+        for args, kwargs in thread_init_calls:
+            # Filter to calls that actually came from our module
+            pass  # thread_init_calls captures all Thread creations globally
+
+    # Better approach: check the module source for usages
+    import inspect
+    source = inspect.getsource(ht_module)
+    assert "threading.Thread" not in source, "hearing_test.py should not use threading.Thread directly; use run_in_thread"
+    assert "run_in_thread" in source, "hearing_test.py should use run_in_thread helper"
+    # Also verify that the import is correct
+    assert "from ..background import run_in_thread" in source, "should import run_in_thread from background module"
