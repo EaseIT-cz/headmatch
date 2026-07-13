@@ -22,7 +22,7 @@ tests"). The narrative capabilities + release history live in `docs/backlog.md`.
 - [x] TASK-109: Decompose `gui/shell.py` — extract `GuiState` into its own module and break out the Tkinter variable initialization, leaving `gui/shell.py` a thin composition. No UI behaviour change; keep the existing GUI tests green. (task: task_20260712064844_7720364a5e21b289)
 - [x] TASK-106: Split `gui_views.py` into real per-view modules (one module per view) with a package `__init__` re-export so imports stay stable. No behaviour change; tests stay green. (task: task_20260712112832_f730dad6a32fdbf2)
 - [x] TASK-107: Extract the GUI workflow controllers out of `HeadMatchGuiApp` into dedicated controller classes, leaving `HeadMatchGuiApp` as wiring. No behaviour change; tests stay green. (task: task_20260712094844_55b5735c44ba96df)
-- [ ] TASK-108: Centralize GUI file-picking and background-task helpers into a shared module and route the existing call sites through it. No behaviour change; tests stay green.
+- [x] TASK-108: Centralize GUI file-picking and background-task helpers into a shared module and route the existing call sites through it. No behaviour change; tests stay green. (task: task_20260713103345_3e494e46d309d871)
 
 ## Proposed — promote to `- [ ]` when ready (some may already be shipped; vet first)
 

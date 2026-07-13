@@ -22,10 +22,8 @@ from .state import (
 
 from typing import Any, Callable
 
-try:
-    from tkinter import filedialog
-except Exception:  # pragma: no cover
-    filedialog = None  # type: ignore[assignment]
+# Import filedialog from the centralized filepicker module
+from .filepicker import filedialog
 
 
 def _get_filedialog():
