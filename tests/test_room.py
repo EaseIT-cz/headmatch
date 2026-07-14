@@ -27,7 +27,7 @@ from headmatch.room import (
 from headmatch.analysis import MeasurementResult
 from headmatch.exceptions import MeasurementError
 from headmatch.mic_cal import MicCalibration
-from headmatch.peq import PEQBand
+from headmatch.peq import PEQBand, peq_chain_response_db
 
 
 def _dummy_measurement_result(freqs_hz: np.ndarray, response_db: np.ndarray | None = None) -> MeasurementResult:
@@ -166,6 +166,23 @@ class TestFitRoomBands:
         
         # Verify function runs without error with strict boost limit
         assert len(bands) >= 0  # Just verifies completion
+
+    def test_boost_ceiling_enforced_for_realized_chain(self):
+        """Stacked filters must not exceed the cumulative room boost ceiling."""
+        freqs = np.geomspace(20, 300, 300)
+        eq_target = 12.0 * np.exp(-((freqs - 80) ** 2) / (2 * 20 ** 2))
+
+        bands = fit_room_bands(
+            freqs_hz=freqs,
+            eq_target_db=eq_target,
+            sample_rate=48000,
+            cutoff_hz=300.0,
+            max_boost_db=ROOM_MAX_BOOST_DB,
+            low_freq_q_cap=12.0,
+        )
+        chain = peq_chain_response_db(freqs, 48000, bands)
+
+        assert float(np.max(chain)) <= ROOM_MAX_BOOST_DB + 1e-5
     
     def test_low_freq_q_cap_applied(self):
         """Low frequency Q cap of 12.0 enforced for sub-120 Hz."""
@@ -215,6 +232,18 @@ class TestFitRoomBands:
 
         with pytest.raises(MeasurementError, match="Nyquist"):
             fit_room_bands(freqs, eq_target, 48000, cutoff_hz=23900.0)
+
+    def test_three_position_average_does_not_warn_as_single_point(self):
+        from headmatch.room import energy_average_responses_n, _assess_room_fit_quality
+
+        freqs = np.array([20.0, 50.0, 100.0, 200.0, 300.0])
+        results = [_dummy_measurement_result(freqs, np.full_like(freqs, i)) for i in range(3)]
+
+        averaged = energy_average_responses_n(results)
+        warnings = _assess_room_fit_quality(averaged)
+
+        assert averaged.diagnostics["n_position_averaged"] == 3
+        assert not any("Single-point" in warning for warning in warnings)
 
 
 class TestEnergyAverageResponses:

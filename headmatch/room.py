@@ -107,6 +107,87 @@ def _validate_measurement_grid_pair(left: MeasurementResult, right: MeasurementR
         raise MeasurementError("Per-channel room recordings produced mismatched frequency grids")
 
 
+def _room_reference_db(freqs_hz: np.ndarray, values_db: np.ndarray, cutoff_hz: float) -> float:
+    """Reference room traces to the transition band around the modal cutoff."""
+    low = cutoff_hz * 0.9
+    high = cutoff_hz * 1.1
+    mask = (freqs_hz >= low) & (freqs_hz <= high)
+    if np.any(mask):
+        return float(np.median(values_db[mask]))
+    return float(np.interp(cutoff_hz, freqs_hz, values_db))
+
+
+def _reference_room_result_to_cutoff(result: MeasurementResult, cutoff_hz: float) -> MeasurementResult:
+    """Remove arbitrary capture/playback gain using the cutoff transition band.
+
+    The shared measurement analyzer normalizes headphone traces at 1 kHz. For
+    room correction we only fit the modal band, so use the handoff region around
+    the cutoff as the 0 dB reference instead.
+    """
+    freqs = result.freqs_hz
+    left_ref = _room_reference_db(freqs, result.left_db, cutoff_hz)
+    right_ref = _room_reference_db(freqs, result.right_db, cutoff_hz)
+    left_raw_ref = _room_reference_db(freqs, result.left_raw_db, cutoff_hz)
+    right_raw_ref = _room_reference_db(freqs, result.right_raw_db, cutoff_hz)
+    diagnostics = dict(result.diagnostics)
+    diagnostics["room_reference_hz"] = float(cutoff_hz)
+    diagnostics["room_left_reference_db"] = left_ref
+    diagnostics["room_right_reference_db"] = right_ref
+    return MeasurementResult(
+        freqs_hz=freqs,
+        left_db=result.left_db - left_ref,
+        right_db=result.right_db - right_ref,
+        left_raw_db=result.left_raw_db - left_raw_ref,
+        right_raw_db=result.right_raw_db - right_raw_ref,
+        diagnostics=diagnostics,
+    )
+
+
+def _with_scaled_positive_gains(bands: list[PEQBand], scale: float) -> list[PEQBand]:
+    return [
+        PEQBand(
+            b.kind,
+            b.freq,
+            b.gain_db * scale if b.gain_db > 0 else b.gain_db,
+            b.q,
+            slope=b.slope,
+        )
+        for b in bands
+    ]
+
+
+def _enforce_cumulative_boost_ceiling(
+    freqs_hz: np.ndarray,
+    sample_rate: int,
+    bands: list[PEQBand],
+    cutoff_hz: float,
+    max_boost_db: float,
+) -> list[PEQBand]:
+    """Ensure the realized EQ chain never boosts above the room boost ceiling."""
+    if max_boost_db < 0 or not any(b.gain_db > 0 for b in bands):
+        return bands
+    mask = freqs_hz <= cutoff_hz
+    if not np.any(mask):
+        return bands
+
+    def _peak_boost(scale: float) -> float:
+        trial = _with_scaled_positive_gains(bands, scale)
+        response = peq_chain_response_db(freqs_hz, sample_rate, trial)
+        return float(np.max(response[mask]))
+
+    if _peak_boost(1.0) <= max_boost_db + 1e-6:
+        return bands
+
+    lo, hi = 0.0, 1.0
+    for _ in range(32):
+        mid = (lo + hi) / 2.0
+        if _peak_boost(mid) <= max_boost_db + 1e-6:
+            lo = mid
+        else:
+            hi = mid
+    return _with_scaled_positive_gains(bands, lo)
+
+
 @dataclass
 class RoomFitResult:
     """Result of room measurement fitting.
@@ -238,6 +319,13 @@ def fit_room_bands(
         bands = bands + fit_full_range_tilt(
             freqs_hz, eq_target_db, cutoff_hz, enable_tilt=True
         )
+    bands = _enforce_cumulative_boost_ceiling(
+        freqs_hz,
+        sample_rate,
+        bands,
+        cutoff_hz,
+        max_boost_db,
+    )
     return bands
 
 
@@ -512,7 +600,8 @@ def _assess_room_fit_quality(result: MeasurementResult) -> list[str]:
     warnings = []
 
     # Check for single-point measurement caveats
-    if not result.diagnostics.get('two_position_averaged', False):
+    averaged_positions = int(result.diagnostics.get('n_position_averaged', 1))
+    if averaged_positions <= 1 and not result.diagnostics.get('two_position_averaged', False):
         warnings.append(
             "Single-point room measurement. Modal response varies with position. "
             "Consider averaging measurements from two or more listening positions."
@@ -685,8 +774,6 @@ def run_room_fit(
             right_raw_db=res_r.left_raw_db,
             diagnostics=diagnostics,
         )
-        measured_left_db = res_l.left_db
-        measured_right_db = res_r.left_db
         n_positions = 1
         single_point = True
     else:
@@ -703,10 +790,12 @@ def run_room_fit(
             recordings.append(mmm_sweep)
         results = [_measure(r) for r in recordings]
         result = energy_average_responses_n(results) if len(results) > 1 else results[0]
-        measured_left_db = result.left_db
-        measured_right_db = result.right_db
         n_positions = len(recordings)
         single_point = n_positions == 1
+
+    result = _reference_room_result_to_cutoff(result, cutoff_hz)
+    measured_left_db = result.left_db
+    measured_right_db = result.right_db
 
     # Build or load target. Room targets are bass-only (≤ cutoff), so load
     # user CSVs without the 1 kHz normalization that headphone targets require.
@@ -844,13 +933,13 @@ def run_room_fit(
     )
 
     # Trustworthiness assessment
-    trust_summary = summarize_trustworthiness(result, fit_report)
+    trust_summary = summarize_trustworthiness(result, fit_report, workflow='room')
 
     # Build run summary
     identity = get_app_identity()
     summary = FrontendRunSummary(
         schema_version=RUN_SUMMARY_SCHEMA_VERSION,
-        kind='fit',
+        kind='room',
         out_dir=str(out_dir),
         sample_rate=sample_rate,
         frequency_points=len(result.freqs_hz),
