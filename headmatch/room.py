@@ -67,6 +67,46 @@ ROOM_TILT_MAX_GAIN_DB = 6.0
 ROOM_TILT_SLOPE_DB_PER_OCT = -0.75
 
 
+def _validate_room_fit_inputs(
+    freqs_hz: np.ndarray,
+    values_db: np.ndarray,
+    sample_rate: int,
+    cutoff_hz: float,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    freqs = np.asarray(freqs_hz, dtype=np.float64)
+    values = np.asarray(values_db, dtype=np.float64)
+    if freqs.ndim != 1 or values.ndim != 1 or freqs.shape != values.shape:
+        raise MeasurementError("Room fit frequency and response arrays must be 1-D arrays with matching shapes")
+    if freqs.size < 2:
+        raise MeasurementError("Room fit requires at least two frequency points")
+    if np.any(~np.isfinite(freqs)) or np.any(~np.isfinite(values)):
+        raise MeasurementError("Room fit inputs contain non-finite values")
+    if np.any(freqs <= 0):
+        raise MeasurementError("Room fit frequencies must be positive")
+    if len(np.unique(freqs)) != len(freqs) or np.any(np.diff(freqs) <= 0):
+        raise MeasurementError("Room fit frequencies must be strictly increasing and unique")
+    if sample_rate <= 0:
+        raise MeasurementError(f"sample_rate must be positive, got {sample_rate}")
+    cutoff = float(cutoff_hz)
+    if not np.isfinite(cutoff) or cutoff <= 0:
+        raise MeasurementError(f"cutoff_hz must be a positive finite value, got {cutoff_hz!r}")
+    nyquist_margin = sample_rate / 2.0 - 200.0
+    if nyquist_margin <= 0:
+        raise MeasurementError(f"sample_rate {sample_rate} is too low for PEQ fitting")
+    if cutoff >= nyquist_margin:
+        raise MeasurementError(
+            f"cutoff_hz {cutoff:.1f} Hz must be below Nyquist safety margin {nyquist_margin:.1f} Hz"
+        )
+    if not np.any(freqs <= cutoff * 1.1):
+        raise MeasurementError("Room fit frequency grid has no points at or below the cutoff")
+    return freqs, values, cutoff
+
+
+def _validate_measurement_grid_pair(left: MeasurementResult, right: MeasurementResult) -> None:
+    if left.freqs_hz.shape != right.freqs_hz.shape or not np.allclose(left.freqs_hz, right.freqs_hz):
+        raise MeasurementError("Per-channel room recordings produced mismatched frequency grids")
+
+
 @dataclass
 class RoomFitResult:
     """Result of room measurement fitting.
@@ -168,7 +208,13 @@ def fit_room_bands(
             sample_rate,
             room_volume_m3 if room_volume_m3 is not None else 50.0,
         )
-    cutoff_hz = float(cutoff_hz)
+    freqs_hz, eq_target_db, cutoff_hz = _validate_room_fit_inputs(
+        freqs_hz, eq_target_db, sample_rate, cutoff_hz
+    )
+    if not np.isfinite(max_boost_db) or max_boost_db < 0:
+        raise MeasurementError(f"max_boost_db must be a non-negative finite value, got {max_boost_db!r}")
+    if not np.isfinite(low_freq_q_cap) or low_freq_q_cap <= 0:
+        raise MeasurementError(f"low_freq_q_cap must be a positive finite value, got {low_freq_q_cap!r}")
 
     # Structural cutoff: filter data ABOVE cutoff Hz before fitting.
     # This ensures the residual/error signal does not see above-cutoff frequencies.
@@ -331,7 +377,18 @@ def fit_full_range_tilt(
         return []
 
     freqs = np.asarray(freqs_hz, dtype=np.float64)
-    nyquist = float(freqs[-1]) if freqs.size else 0.0
+    measured = np.asarray(measured_db, dtype=np.float64)
+    if freqs.ndim != 1 or measured.ndim != 1 or freqs.shape != measured.shape:
+        raise MeasurementError("Tilt frequency and response arrays must be 1-D arrays with matching shapes")
+    if freqs.size == 0:
+        return []
+    if np.any(~np.isfinite(freqs)) or np.any(~np.isfinite(measured)) or np.any(freqs <= 0):
+        raise MeasurementError("Tilt inputs contain invalid frequency/response values")
+    if len(np.unique(freqs)) != len(freqs) or np.any(np.diff(freqs) <= 0):
+        raise MeasurementError("Tilt frequencies must be strictly increasing and unique")
+    if not np.isfinite(cutoff_hz) or cutoff_hz <= 0:
+        raise MeasurementError(f"cutoff_hz must be a positive finite value, got {cutoff_hz!r}")
+    nyquist = float(freqs[-1])
 
     bands: list[PEQBand] = []
     # Place one broad band per octave above the cutoff, implementing a gentle
@@ -616,6 +673,7 @@ def run_room_fit(
             )
         res_l = _measure(recording_left)  # type: ignore[arg-type]
         res_r = _measure(recording_right)  # type: ignore[arg-type]
+        _validate_measurement_grid_pair(res_l, res_r)
         diagnostics = dict(res_l.diagnostics)
         diagnostics['per_channel'] = True
         # Combined result carries the real L/R responses for graphs/report.

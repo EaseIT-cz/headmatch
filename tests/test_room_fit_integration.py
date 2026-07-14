@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
+from headmatch.analysis import MeasurementResult
+from headmatch.exceptions import MeasurementError
 from headmatch.io_utils import write_wav
 from headmatch.room import run_room_fit
 from headmatch.signals import SweepSpec, generate_log_sweep
@@ -133,3 +136,33 @@ def test_room_target_absolute_reference_is_irrelevant(tmp_path):
     base_gains = sorted(round(b.gain_db, 4) for b in _fit(base_csv, "base_out").eq_bands)
     shifted_gains = sorted(round(b.gain_db, 4) for b in _fit(shifted_csv, "shifted_out").eq_bands)
     assert base_gains == shifted_gains
+
+
+def test_run_room_fit_rejects_per_channel_mismatched_frequency_grids(tmp_path, monkeypatch):
+    spec = SweepSpec(sample_rate=48000, duration_s=1.0, f_start=20.0, f_end=20000.0,
+                     pre_silence_s=0.1, post_silence_s=0.2, amplitude=0.3)
+
+    freqs_left = np.array([20.0, 50.0, 100.0, 200.0, 300.0])
+    freqs_right = np.array([20.0, 60.0, 100.0, 200.0, 300.0])
+
+    def _result(freqs):
+        zeros = np.zeros_like(freqs)
+        return MeasurementResult(
+            freqs_hz=freqs,
+            left_db=zeros,
+            right_db=zeros,
+            left_raw_db=zeros,
+            right_raw_db=zeros,
+            diagnostics={},
+        )
+
+    calls = iter([_result(freqs_left), _result(freqs_right)])
+    monkeypatch.setattr("headmatch.room.analyze_room_measurement", lambda *args, **kwargs: next(calls))
+
+    with pytest.raises(MeasurementError, match="mismatched frequency grids"):
+        run_room_fit(
+            recording_left=tmp_path / "left.wav",
+            recording_right=tmp_path / "right.wav",
+            out_dir=tmp_path / "out",
+            sweep_spec=spec,
+        )

@@ -80,7 +80,7 @@ def load_mic_calibration(path: str | Path) -> MicCalibration:
     freqs: list[float] = []
     gains: list[float] = []
     
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8-sig') as f:
         for line in f:
             line = line.strip()
             
@@ -122,11 +122,22 @@ def load_mic_calibration(path: str | Path) -> MicCalibration:
     
     freqs_arr = np.array(freqs, dtype=float)
     gains_arr = np.array(gains, dtype=float)
+
+    if np.any(~np.isfinite(freqs_arr)) or np.any(~np.isfinite(gains_arr)):
+        raise ConfigError(f"Calibration file '{path}' contains non-finite values")
+    if np.any(freqs_arr <= 0):
+        raise ConfigError(f"Calibration file '{path}' contains non-positive frequencies")
     
     # Sort by frequency
     sort_idx = np.argsort(freqs_arr)
     freqs_arr = freqs_arr[sort_idx]
     gains_arr = gains_arr[sort_idx]
+
+    if len(np.unique(freqs_arr)) != len(freqs_arr):
+        raise ConfigError(
+            f"Calibration file '{path}' contains duplicate frequency values; "
+            "deduplicate the calibration file first."
+        )
     
     # Check for implausible values (beyond ±30 dB)
     if np.any(np.abs(gains_arr) > MIC_CAL_PLAUSIBLE_ABS_DB):
@@ -165,6 +176,16 @@ def calibration_offset(cal: MicCalibration, freq_grid: np.ndarray) -> np.ndarray
     """
     if len(cal.freqs_hz) == 0:
         return np.zeros_like(freq_grid, dtype=float)
+    if np.any(~np.isfinite(cal.freqs_hz)) or np.any(~np.isfinite(cal.gains_db)):
+        raise ConfigError("Calibration data contains non-finite values")
+    if np.any(cal.freqs_hz <= 0):
+        raise ConfigError("Calibration data contains non-positive frequencies")
+    if len(np.unique(cal.freqs_hz)) != len(cal.freqs_hz):
+        raise ConfigError("Calibration data contains duplicate frequency values")
+    if np.any(np.diff(cal.freqs_hz) <= 0):
+        raise ConfigError("Calibration frequencies must be strictly increasing")
+    if np.any(~np.isfinite(freq_grid)):
+        raise ConfigError("Frequency grid contains non-finite values")
     
     # Handle edge case: single point calibration
     if len(cal.freqs_hz) == 1:
