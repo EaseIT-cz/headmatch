@@ -120,7 +120,7 @@ class FrontendRunSummary:
     """Minimal stable summary that every frontend can read back."""
 
     schema_version: int
-    kind: Literal["fit", "iteration"]
+    kind: Literal["fit", "iteration", "room"]
     out_dir: str
     sample_rate: int
     frequency_points: int

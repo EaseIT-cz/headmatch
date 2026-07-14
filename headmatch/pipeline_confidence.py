@@ -142,7 +142,12 @@ SCORE_HIGH_THRESHOLD = 85
 SCORE_MEDIUM_THRESHOLD = 65
 
 
-def summarize_trustworthiness(result: MeasurementResult, report: dict) -> ConfidenceSummary:
+def summarize_trustworthiness(
+    result: MeasurementResult,
+    report: dict,
+    *,
+    workflow: str = "fit",
+) -> ConfidenceSummary:
     """Score measurement quality and produce a user-facing confidence summary.
 
     Computes a 0-100 confidence score by accumulating weighted penalties across
@@ -206,10 +211,17 @@ def summarize_trustworthiness(result: MeasurementResult, report: dict) -> Confid
         warnings.append('Alignment to the sweep was weaker than expected, so the measurement timing may be unreliable.')
     if diagnostics['alignment_peak_ratio'] < ALIGNMENT_PEAK_WARNING_THRESHOLD:
         warnings.append('The sweep alignment peak was not clearly dominant, which can happen with extra noise or confusing echoes.')
+    is_room = workflow == "room"
     if diagnostics['channel_mismatch_rms_db'] >= CHANNEL_MISMATCH_WARN_DB:
-        warnings.append('Left and right measurements differ more than usual, which often means the headset or microphones were not seated consistently.')
+        if is_room:
+            warnings.append('Left and right room responses differ more than usual, which can indicate different speaker/seat modal behavior or inconsistent captures.')
+        else:
+            warnings.append('Left and right measurements differ more than usual, which often means the headset or microphones were not seated consistently.')
     if roughness >= ROUGHNESS_WARN_DB:
-        warnings.append('The raw trace is rougher than expected, suggesting noise, movement, or a leaky seal during capture.')
+        if is_room:
+            warnings.append('The room trace is rougher than expected, suggesting noise, movement, reflections, or insufficient averaging during capture.')
+        else:
+            warnings.append('The raw trace is rougher than expected, suggesting noise, movement, or a leaky seal during capture.')
     if predicted_rms >= RESIDUAL_RMS_WARN_DB:
         warnings.append('The fitted result still leaves noticeable residual error, so the generated EQ should be treated as provisional.')
     if predicted_max >= RESIDUAL_PEAK_WARN_DB:
@@ -218,15 +230,24 @@ def summarize_trustworthiness(result: MeasurementResult, report: dict) -> Confid
     if score >= SCORE_HIGH_THRESHOLD:
         label = 'high'
         headline = 'This run looks trustworthy.'
-        interpretation = 'The measurement aligned cleanly, the channels agree reasonably well, and the predicted post-EQ error is low enough for normal use.'
+        if is_room:
+            interpretation = 'The room measurement aligned cleanly and the predicted modal-band post-EQ error is low enough for normal use.'
+        else:
+            interpretation = 'The measurement aligned cleanly, the channels agree reasonably well, and the predicted post-EQ error is low enough for normal use.'
     elif score >= SCORE_MEDIUM_THRESHOLD:
         label = 'medium'
         headline = 'This run looks usable, but review it before trusting it fully.'
-        interpretation = 'Nothing looks catastrophically wrong, but one or more stability signals are only fair. Check the graphs and consider re-running if the sound seems off.'
+        if is_room:
+            interpretation = 'Nothing looks catastrophically wrong, but one or more room measurement signals are only fair. Check the modal-band graphs and consider averaging more positions.'
+        else:
+            interpretation = 'Nothing looks catastrophically wrong, but one or more stability signals are only fair. Check the graphs and consider re-running if the sound seems off.'
     else:
         label = 'low'
         headline = 'This run looks suspicious.'
-        interpretation = 'One or more stability signals suggest the measurement or fit may not be trustworthy. Re-seat the headphones or microphones and capture another run before relying on this EQ.'
+        if is_room:
+            interpretation = 'One or more stability signals suggest the room measurement or modal fit may not be trustworthy. Re-capture in a quiet room and consider averaging more listening positions before relying on this EQ.'
+        else:
+            interpretation = 'One or more stability signals suggest the measurement or fit may not be trustworthy. Re-seat the headphones or microphones and capture another run before relying on this EQ.'
 
     reasons = [
         f"Alignment score: {diagnostics['alignment_reference_score']:.3f} (higher is better).",

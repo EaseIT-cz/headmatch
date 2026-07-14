@@ -46,6 +46,7 @@ def test_run_room_fit_honors_non_48k_sweep_spec(tmp_path):
     )
 
     assert result.run_summary["sample_rate"] == 44100
+    assert result.run_summary["kind"] == "room"
     assert (out_dir / "equalizer_apo.txt").exists()
     # Every band stays within the boost ceiling and the modal band.
     assert all(b.gain_db <= 2.0 + 1e-6 for b in result.eq_bands)
@@ -166,3 +167,41 @@ def test_run_room_fit_rejects_per_channel_mismatched_frequency_grids(tmp_path, m
             out_dir=tmp_path / "out",
             sweep_spec=spec,
         )
+
+
+def test_run_room_fit_references_room_trace_to_cutoff_band(tmp_path, monkeypatch):
+    spec = SweepSpec(sample_rate=48000, duration_s=1.0, f_start=20.0, f_end=20000.0,
+                     pre_silence_s=0.1, post_silence_s=0.2, amplitude=0.3)
+    freqs = np.array([20.0, 100.0, 270.0, 300.0, 330.0, 1000.0])
+    # Simulates a trace already normalized at 1 kHz by the shared headphone
+    # analyzer. Room correction should re-reference it to the cutoff handoff.
+    measured = np.array([8.0, 6.0, 4.0, 4.0, 4.0, 0.0])
+
+    def fake_analyze(*args, **kwargs):
+        return MeasurementResult(
+            freqs_hz=freqs,
+            left_db=measured.copy(),
+            right_db=measured.copy(),
+            left_raw_db=measured.copy(),
+            right_raw_db=measured.copy(),
+            diagnostics={
+                "alignment_reference_score": 0.99,
+                "alignment_peak_ratio": 0.99,
+                "left_roughness_db": 0.1,
+                "right_roughness_db": 0.1,
+                "channel_mismatch_rms_db": 0.0,
+                "capture_rms_dbfs": -20.0,
+            },
+        )
+
+    monkeypatch.setattr("headmatch.room.analyze_room_measurement", fake_analyze)
+
+    result = run_room_fit(
+        recording=tmp_path / "room.wav",
+        cutoff_hz=300.0,
+        out_dir=tmp_path / "out",
+        sweep_spec=spec,
+    )
+
+    assert float(np.interp(300.0, result.result.freqs_hz, result.result.left_db)) == pytest.approx(0.0)
+    assert result.result.diagnostics["room_reference_hz"] == 300.0

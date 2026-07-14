@@ -91,6 +91,39 @@ def test_frontend_run_summary_has_cutoff_hz():
     assert summary.cutoff_hz == 300.0
 
 
+def test_frontend_run_summary_accepts_room_kind():
+    """Room fits should be identifiable without overloading generic fit kind."""
+    from headmatch.contracts import ConfidenceSummary, RunErrorSummary, RunFilterCounts
+
+    summary = FrontendRunSummary(
+        schema_version=1,
+        kind="room",
+        out_dir="/tmp/test",
+        sample_rate=48000,
+        frequency_points=100,
+        target="room_modal_flat",
+        filters=RunFilterCounts(left=5, right=5),
+        predicted_error_db=RunErrorSummary(
+            left_rms=1.0, right_rms=1.0, left_max=2.0, right_max=2.0
+        ),
+        generated_by={"version": "1.0"},
+        confidence=ConfidenceSummary(
+            score=75,
+            label="high",
+            headline="Good room fit",
+            interpretation="Test",
+            reasons=(),
+            warnings=(),
+            metrics={},
+        ),
+        plots={},
+        results_guide="/tmp/test/README.txt",
+        cutoff_hz=300.0,
+    )
+
+    assert summary.to_dict()["kind"] == "room"
+
+
 def test_frontend_run_summary_has_mic_cal_applied():
     """FrontendRunSummary should have mic_cal_applied field."""
     from headmatch.contracts import ConfidenceSummary, RunErrorSummary, RunFilterCounts

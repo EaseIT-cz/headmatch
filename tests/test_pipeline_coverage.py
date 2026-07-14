@@ -147,6 +147,20 @@ class TestConfidenceAlignmentPeakWarning:
         summary = summarize_trustworthiness(result, _clean_report())
         assert any('alignment peak' in w for w in summary.warnings)
 
+    def test_room_confidence_uses_room_specific_language(self):
+        diag = _clean_diagnostics(
+            channel_mismatch_rms_db=3.0,
+            left_roughness_db=2.0,
+            right_roughness_db=2.0,
+        )
+        summary = summarize_trustworthiness(_result(diag), _clean_report(), workflow="room")
+        text = " ".join((summary.interpretation, *summary.warnings)).lower()
+
+        assert "room" in text
+        assert "headset" not in text
+        assert "headphones" not in text
+        assert "leaky seal" not in text
+
 
 def _profile_with(left_thresholds, right_thresholds) -> HearingProfile:
     return HearingProfile(
