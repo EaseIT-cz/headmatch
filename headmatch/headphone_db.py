@@ -159,6 +159,8 @@ def _read_https_url(url: str, *, timeout: float, max_bytes: int, headers: dict[s
             if isinstance(final_url, str) and final_url != url:
                 raise NetworkError(f"Unexpected response URL: {final_url}")
             raw = resp.read(max_bytes + 1)
+            if not isinstance(raw, bytes):
+                raise NetworkError("Response body was not bytes")
     except HTTPError as e:
         if 300 <= e.code < 400:
             location = e.headers.get("Location", "")
