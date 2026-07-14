@@ -106,6 +106,27 @@ class TestRejectsImplausible:
         assert "implausible" in str(exc_info.value).lower()
         assert "beyond ±30" in str(exc_info.value)
 
+    def test_rejects_duplicate_frequencies(self, tmp_path: Path) -> None:
+        cal_path = tmp_path / "duplicate_cal.txt"
+        cal_path.write_text("20,0.0\n100,1.0\n100,2.0\n")
+
+        with pytest.raises(ConfigError, match="duplicate"):
+            load_mic_calibration(cal_path)
+
+    def test_rejects_non_finite_values(self, tmp_path: Path) -> None:
+        cal_path = tmp_path / "nan_cal.txt"
+        cal_path.write_text("20,0.0\n100,nan\n1000,1.0\n")
+
+        with pytest.raises(ConfigError, match="non-finite"):
+            load_mic_calibration(cal_path)
+
+    def test_rejects_non_positive_frequencies(self, tmp_path: Path) -> None:
+        cal_path = tmp_path / "zero_cal.txt"
+        cal_path.write_text("0,0.0\n100,1.0\n1000,2.0\n")
+
+        with pytest.raises(ConfigError, match="non-positive"):
+            load_mic_calibration(cal_path)
+
 
 class TestWarnsCoverage:
     """Test warning for insufficient frequency coverage."""
@@ -227,3 +248,13 @@ class TestOffsetInterpolation:
         # Interpolated points should be within range of calibration data
         assert np.all(offsets >= -0.1)  # Slightly below min gain
         assert np.all(offsets <= 1.1)   # Slightly above max gain
+
+    def test_rejects_duplicate_frequency_data_before_pchip(self) -> None:
+        cal = MicCalibration(
+            freqs_hz=np.array([100, 100, 400]),
+            gains_db=np.array([0.0, 1.0, 0.5]),
+            source="test",
+        )
+
+        with pytest.raises(ConfigError, match="duplicate"):
+            calibration_offset(cal, np.array([150, 250]))

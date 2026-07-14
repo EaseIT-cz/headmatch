@@ -25,6 +25,7 @@ from headmatch.room import (
     RoomFitResult,
 )
 from headmatch.analysis import MeasurementResult
+from headmatch.exceptions import MeasurementError
 from headmatch.mic_cal import MicCalibration
 from headmatch.peq import PEQBand
 
@@ -185,6 +186,35 @@ class TestFitRoomBands:
         for band in bands:
             if band.kind == 'peaking' and band.freq < 120:
                 assert band.q <= 12.5, f"Q {band.q} violates cap for {band.freq} Hz"
+
+    def test_rejects_non_finite_eq_target(self):
+        freqs = np.geomspace(20, 300, 100)
+        eq_target = np.zeros_like(freqs)
+        eq_target[10] = np.nan
+
+        with pytest.raises(MeasurementError, match="non-finite"):
+            fit_room_bands(freqs, eq_target, 48000, cutoff_hz=300.0)
+
+    def test_rejects_unsorted_frequency_grid(self):
+        freqs = np.array([20.0, 100.0, 50.0, 300.0])
+        eq_target = np.zeros_like(freqs)
+
+        with pytest.raises(MeasurementError, match="strictly increasing"):
+            fit_room_bands(freqs, eq_target, 48000, cutoff_hz=300.0)
+
+    def test_rejects_cutoff_without_frequency_overlap(self):
+        freqs = np.geomspace(1000, 2000, 20)
+        eq_target = np.zeros_like(freqs)
+
+        with pytest.raises(MeasurementError, match="no points"):
+            fit_room_bands(freqs, eq_target, 48000, cutoff_hz=100.0)
+
+    def test_rejects_cutoff_above_nyquist_margin(self):
+        freqs = np.geomspace(20, 20000, 100)
+        eq_target = np.zeros_like(freqs)
+
+        with pytest.raises(MeasurementError, match="Nyquist"):
+            fit_room_bands(freqs, eq_target, 48000, cutoff_hz=23900.0)
 
 
 class TestEnergyAverageResponses:

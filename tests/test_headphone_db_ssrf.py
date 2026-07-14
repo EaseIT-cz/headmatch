@@ -3,10 +3,13 @@
 import socket
 import pytest
 from unittest.mock import patch
+from urllib.error import HTTPError
 
-from headmatch.exceptions import NetworkError
+from headmatch.exceptions import MeasurementError, NetworkError
 from headmatch.headphone_db import (
     ALLOWED_DOMAINS,
+    fetch_curve_from_url,
+    _parse_autoeq_csv,
     _validate_url_for_ssrf,
     _is_private_ip,
 )
@@ -54,6 +57,13 @@ class TestIsPrivateIp:
         assert _is_private_ip("8.8.8.8") is False
         assert _is_private_ip("1.1.1.1") is False
         assert _is_private_ip("185.199.108.133") is False
+
+    def test_non_global_ips_are_blocked(self):
+        """Reserved, unspecified, and multicast ranges are not safe SSRF targets."""
+        assert _is_private_ip("0.0.0.0") is True
+        assert _is_private_ip("224.0.0.1") is True
+        assert _is_private_ip("240.0.0.1") is True
+        assert _is_private_ip("::1") is True
 
     def test_invalid_ip_returns_false(self):
         """Invalid IP strings should return False."""
@@ -195,3 +205,36 @@ class TestValidateUrlForSsrf:
         url = "https://raw.githubusercontent.com:443/user/repo/file.csv"
         result = _validate_url_for_ssrf(url)
         assert result == url
+
+
+class TestFetchCurveRedirectSafety:
+    @patch("headmatch.headphone_db.socket.getaddrinfo")
+    @patch("headmatch.headphone_db._NO_REDIRECT_OPENER.open")
+    def test_rejects_redirects_before_reading_body(self, mock_open, mock_getaddrinfo, tmp_path):
+        """Allowed hosts must not be able to redirect the fetcher to internal URLs."""
+        mock_getaddrinfo.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("185.199.108.133", 443))]
+        mock_open.side_effect = HTTPError(
+            "https://raw.githubusercontent.com/user/repo/file.csv",
+            302,
+            "Found",
+            {"Location": "http://169.254.169.254/latest/meta-data/"},
+            None,
+        )
+
+        with pytest.raises(NetworkError, match="Redirects are not allowed"):
+            fetch_curve_from_url(
+                "https://raw.githubusercontent.com/user/repo/file.csv",
+                tmp_path / "out.csv",
+            )
+
+    def test_rejects_unsorted_remote_csv(self):
+        with pytest.raises(MeasurementError, match="strictly increasing"):
+            _parse_autoeq_csv("20,0\n100,1\n50,2\n")
+
+    def test_rejects_duplicate_remote_csv_frequency(self):
+        with pytest.raises(MeasurementError, match="duplicate"):
+            _parse_autoeq_csv("20,0\n20,1\n100,2\n")
+
+    def test_rejects_non_finite_remote_csv_value(self):
+        with pytest.raises(MeasurementError, match="non-finite"):
+            _parse_autoeq_csv("20,0\n100,nan\n1000,2\n")

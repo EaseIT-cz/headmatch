@@ -14,9 +14,9 @@ import socket
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import List, Tuple
-from urllib.request import urlopen, Request
-from urllib.error import URLError
+from typing import Tuple
+from urllib.request import build_opener, HTTPRedirectHandler, Request
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
 
 import numpy as np
@@ -34,22 +34,28 @@ ALLOWED_DOMAINS: tuple[str, ...] = (
 
 
 def _is_private_ip(ip: str) -> bool:
-    """Check if an IP address is private, loopback, or link-local.
+    """Check if an IP address is not globally routable.
 
     Returns True if the IP is:
     - Private (10.x.x.x, 172.16.x.x-172.31.x.x, 192.168.x.x)
     - Loopback (127.x.x.x)
     - Link-local (169.254.x.x)
+    - Multicast, reserved, unspecified, documentation, or otherwise non-global
     """
     try:
         addr = ipaddress.ip_address(ip)
-        return addr.is_private or addr.is_loopback or addr.is_link_local
+        return (
+            not addr.is_global
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        )
     except ValueError:
         # Invalid IP format
         return False
 
 
-def _validate_url_for_ssrf(url: str) -> str:
+def _validate_url_for_ssrf(url: str, *, validate_resolution: bool = True) -> str:
     """Validate a URL to prevent SSRF (Server-Side Request Forgery) attacks.
 
     This function ensures that the URL:
@@ -82,6 +88,9 @@ def _validate_url_for_ssrf(url: str) -> str:
     if hostname.lower() not in (d.lower() for d in ALLOWED_DOMAINS):
         raise NetworkError(f"Domain '{hostname}' is not in the allowed list")
 
+    if not validate_resolution:
+        return url
+
     # Validate that the hostname doesn't resolve to a private IP
     try:
         # Resolve hostname to IP address(es)
@@ -110,7 +119,58 @@ AUTOEQ_TREE_API = "https://api.github.com/repos/jaakkopasanen/AutoEq/git/trees/m
 
 INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap
+MAX_INDEX_RESPONSE_BYTES = 50 * 1024 * 1024  # GitHub tree can be large
 _USER_AGENT = "headmatch/0.4.6"
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """urllib redirect handler that turns redirects into errors."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_NoRedirectHandler)
+
+
+def urlopen(req: Request | str, timeout: float):  # type: ignore[no-untyped-def]
+    """Open a URL with HeadMatch's no-redirect policy.
+
+    Kept as a module-level seam for tests and callers that monkeypatch the old
+    urllib-based fetch path.
+    """
+    return _NO_REDIRECT_OPENER.open(req, timeout=timeout)
+
+
+def _using_default_urlopen() -> bool:
+    return (
+        getattr(urlopen, "__module__", None) == __name__
+        and getattr(urlopen, "__name__", None) == "urlopen"
+    )
+
+
+def _read_https_url(url: str, *, timeout: float, max_bytes: int, headers: dict[str, str] | None = None) -> bytes:
+    """Validate and read an allowlisted HTTPS URL without following redirects."""
+    _validate_url_for_ssrf(url, validate_resolution=_using_default_urlopen())
+    req = Request(url, headers=headers or {})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            final_url = resp.geturl() if hasattr(resp, "geturl") else url
+            if isinstance(final_url, str) and final_url != url:
+                raise NetworkError(f"Unexpected response URL: {final_url}")
+            raw = resp.read(max_bytes + 1)
+            if not isinstance(raw, bytes):
+                raise NetworkError("Response body was not bytes")
+    except HTTPError as e:
+        if 300 <= e.code < 400:
+            location = e.headers.get("Location", "")
+            raise NetworkError(f"Redirects are not allowed when fetching headphone data: {location}") from e
+        raise NetworkError(f"Failed to fetch {url}: HTTP {e.code}") from e
+    except (URLError, OSError) as e:
+        raise NetworkError(f"Failed to fetch {url}: {e}") from e
+    if len(raw) > max_bytes:
+        raise MeasurementError(f"Response exceeds {max_bytes // (1024 * 1024)} MB limit")
+    return raw
 
 
 def _cache_dir() -> Path:
@@ -174,14 +234,22 @@ def _build_index_from_tree(tree_data: dict) -> list[dict]:
 
 def _fetch_and_cache_index() -> list[dict]:
     """Fetch the AutoEQ repo tree from GitHub API and cache locally."""
-    req = Request(AUTOEQ_TREE_API, headers={
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": _USER_AGENT,
-    })
     try:
-        with urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read(50 * 1024 * 1024))  # GitHub tree can be large
-    except (URLError, OSError) as e:
+        raw = _read_https_url(
+            AUTOEQ_TREE_API,
+            timeout=30,
+            max_bytes=MAX_INDEX_RESPONSE_BYTES,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": _USER_AGENT,
+            },
+        )
+        data = json.loads(raw)
+    except NetworkError as e:
+        raise NetworkError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
+    except json.JSONDecodeError as e:
+        raise NetworkError(f"AutoEQ index response was not valid JSON: {e}") from e
+    except OSError as e:
         raise NetworkError(f"Failed to fetch AutoEQ index from GitHub: {e}") from e
 
     entries = _build_index_from_tree(data)
@@ -294,7 +362,17 @@ def _parse_autoeq_csv(text: str) -> Tuple[np.ndarray, np.ndarray]:
             continue
     if not freqs:
         raise MeasurementError("No valid frequency/response data found in CSV")
-    return np.array(freqs), np.array(values)
+    freqs_arr = np.array(freqs, dtype=np.float64)
+    values_arr = np.array(values, dtype=np.float64)
+    if np.any(~np.isfinite(freqs_arr)) or np.any(~np.isfinite(values_arr)):
+        raise MeasurementError("CSV contains non-finite frequency/response values")
+    if np.any(freqs_arr <= 0):
+        raise MeasurementError("CSV contains non-positive frequencies")
+    if len(np.unique(freqs_arr)) != len(freqs_arr):
+        raise MeasurementError("CSV contains duplicate frequency values")
+    if np.any(np.diff(freqs_arr) <= 0):
+        raise MeasurementError("CSV frequencies must be strictly increasing")
+    return freqs_arr, values_arr
 
 
 def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
@@ -307,21 +385,18 @@ def fetch_curve_from_url(url: str, out_path: str | Path) -> Path:
 
     Response size is capped at 5 MB.
     """
-    # Validate URL for SSRF protection before any other processing
-    _validate_url_for_ssrf(url)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with urlopen(url, timeout=15) as resp:
-            raw = resp.read(MAX_RESPONSE_BYTES + 1)
-            if len(raw) > MAX_RESPONSE_BYTES:
-                raise MeasurementError(f"Response exceeds {MAX_RESPONSE_BYTES // (1024*1024)} MB limit")
-            try:
-                text = raw.decode("utf-8")
-            except UnicodeDecodeError as e:
-                raise MeasurementError("Downloaded file is not valid UTF-8 CSV text.") from e
-    except (URLError, OSError) as e:
-        raise NetworkError(f"Failed to fetch {url}: {e}") from e
+        raw = _read_https_url(
+            url,
+            timeout=15,
+            max_bytes=MAX_RESPONSE_BYTES,
+            headers={"User-Agent": _USER_AGENT},
+        )
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise MeasurementError("Downloaded file is not valid UTF-8 CSV text.") from e
 
     # Validate it's parseable and spans a usable frequency range
     freqs, values = _parse_autoeq_csv(text)
