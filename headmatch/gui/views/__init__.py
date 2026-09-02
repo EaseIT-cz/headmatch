@@ -7,6 +7,7 @@ from .hearing_test import render_hearing_test
 from .history import render_history_page, render_history_results
 from .import_apo import render_import_apo
 from .offline import render_offline_wizard
+from .room import render_room_correction
 from .online import render_online_wizard
 from .setup import render_setup_check
 from .target_editor import render_target_editor
@@ -21,6 +22,7 @@ __all__ = [
     'render_history_results',
     'render_import_apo',
     'render_offline_wizard',
+    'render_room_correction',
     'render_online_wizard',
     'render_progress',
     'render_setup_check',

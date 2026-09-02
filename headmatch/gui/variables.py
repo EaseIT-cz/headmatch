@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..room import ROOM_CUTOFF_DEFAULT_HZ, ROOM_MAX_BOOST_DB
 from .state import GuiState
 
 
@@ -33,6 +34,20 @@ def initialize_tkinter_variables(root, state: GuiState) -> dict[str, Any]:
     variables["offline_recording_var"] = tk.StringVar(master=root, value="")
     variables["offline_fit_output_var"] = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "fit"))
     variables["offline_notes_var"] = tk.StringVar(master=root, value="")
+    # Room correction. Defaults mirror the CLI's room-measure / room-fit
+    # arguments so the two surfaces cannot disagree about what a fresh run does.
+    variables["room_output_var"] = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "room"))
+    variables["room_recording_var"] = tk.StringVar(master=root, value="")
+    variables["room_recording_two_var"] = tk.StringVar(master=root, value="")
+    variables["room_mic_cal_var"] = tk.StringVar(master=root, value="")
+    variables["room_target_csv_var"] = tk.StringVar(master=root, value="")
+    variables["room_fit_output_var"] = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "room" / "fit"))
+    variables["room_cutoff_hz_var"] = tk.StringVar(master=root, value=str(ROOM_CUTOFF_DEFAULT_HZ))
+    variables["room_max_boost_db_var"] = tk.StringVar(master=root, value=str(ROOM_MAX_BOOST_DB))
+    # StringVar, not BooleanVar: every shared variable here is a StringVar, and
+    # the Checkbutton carries explicit onvalue/offvalue. Views that need a real
+    # boolean (hearing_test) make one locally.
+    variables["room_two_positions_var"] = tk.StringVar(master=root, value="0")
     variables["apo_preset_var"] = tk.StringVar(master=root, value="")
     variables["apo_output_dir_var"] = tk.StringVar(master=root, value=str(Path(state.default_output_dir).expanduser() / "imported"))
     variables["apo_refine_recording_var"] = tk.StringVar(master=root, value="")

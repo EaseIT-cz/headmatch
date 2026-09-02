@@ -1,5 +1,14 @@
 # HeadMatch Changelog
 
+## Unreleased
+
+### UI/UX
+- **Room Correction is now available in the GUI.** The `room-measure` /
+  `room-fit` workflow was CLI-only; the GUI referenced none of `headmatch.room`.
+  A new Room Correction section writes the sweep package and fits correction
+  from the recording(s), including optional mic calibration, an optional second
+  listening position, and a custom room target.
+
 ## 0.7.1
 
 ### Bug Fixes

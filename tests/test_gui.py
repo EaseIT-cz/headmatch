@@ -212,6 +212,7 @@ def test_navigation_items_cover_shell_sections():
         "hearing-test",
         "setup-check",
         "prepare-offline",
+        "room-correction",
         "target-editor",
         "import-apo",
         "fetch-curve",
@@ -219,7 +220,7 @@ def test_navigation_items_cover_shell_sections():
     ]
     assert [item.label for item in NAV_ITEMS] == [
         "Measure", "Hearing Test", "Setup Check", "Prepare Offline",
-        "Target Editor", "Import APO", "Fetch Curve", "Results",
+        "Room Correction", "Target Editor", "Import APO", "Fetch Curve", "Results",
     ]
 
 
@@ -532,7 +533,7 @@ def test_create_app_builds_shell_on_fake_root(tmp_path, fake_tk, monkeypatch):
     assert root.minsize_value == (880, 560)
     assert app.history_root_var.get() == str(tmp_path / 'out')
     assert app.offline_fit_output_var.get().endswith('fit')
-    assert nav_labels == ['Measure', 'Hearing Test', 'Setup Check', 'Prepare Offline', 'Target Editor', 'Import APO', 'Fetch Curve', 'Results']
+    assert nav_labels == ['Measure', 'Hearing Test', 'Setup Check', 'Prepare Offline', 'Room Correction', 'Target Editor', 'Import APO', 'Fetch Curve', 'Results']
     assert all('\n' not in label for label in nav_labels)
 
 
