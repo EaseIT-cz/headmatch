@@ -70,6 +70,17 @@ def make_app(tmp_path):
         iteration_mode_var=DummyVar("independent"),
         offine_notes_var=DummyVar(""),
         offline_notes_var=DummyVar(""),
+        _parse_positive_float=lambda s, _label: float(s),
+        _parse_non_negative_float=lambda s, _label: float(s),
+        room_output_var=DummyVar(str(tmp_path / "room")),
+        room_fit_output_var=DummyVar(str(tmp_path / "room" / "fit")),
+        room_recording_var=DummyVar(str(tmp_path / "room_recording.wav")),
+        room_recording_two_var=DummyVar(""),
+        room_mic_cal_var=DummyVar(""),
+        room_target_csv_var=DummyVar(""),
+        room_cutoff_hz_var=DummyVar("300"),
+        room_max_boost_db_var=DummyVar("2.0"),
+        room_two_positions_var=DummyVar("0"),
     )
     return app
 
@@ -247,3 +258,164 @@ def test_start_offline_prepare_and_fit_validate_and_schedule(tmp_path, monkeypat
     app.offline_recording_var.set("")
     with pytest.raises(ConfigError, match="Recorded WAV"):
         controllers.start_offline_fit()
+
+# Room correction was implemented in headmatch.room and exposed on the CLI
+# (`room-measure` / `room-fit`) but never reached the GUI: no module under
+# headmatch/gui referenced a single one of room.py's functions. These tests pin
+# the wiring so it cannot quietly come undone again.
+
+
+def test_start_room_prepare_validates_and_schedules(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    controllers = WorkflowControllers(app)
+
+    controllers.start_room_prepare()
+    assert app.last_task["task_name"] == "room-prepare"
+
+    # The worker must reach headmatch.room, not a GUI-local reimplementation.
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.prepare_room_measurement",
+        lambda **kwargs: called.update(kwargs) or {"prepared": True},
+    )
+    assert app.last_task["worker"]() == {"prepared": True}
+    assert called["cutoff_hz"] == 300.0
+    assert called["max_boost_db"] == 2.0
+    assert called["listen_position_two"] is False
+    assert Path(called["out_dir"]) == tmp_path / "room"
+
+    app.room_output_var.set("")
+    with pytest.raises(ConfigError, match="Room package folder"):
+        controllers.start_room_prepare()
+
+
+def test_start_room_prepare_honours_the_two_position_checkbox(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    app.room_two_positions_var.set("1")
+    controllers = WorkflowControllers(app)
+    controllers.start_room_prepare()
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.prepare_room_measurement",
+        lambda **kwargs: called.update(kwargs) or {},
+    )
+    app.last_task["worker"]()
+    assert called["listen_position_two"] is True
+
+
+def test_start_room_fit_validates_and_passes_second_position(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    app.room_recording_two_var.set(str(tmp_path / "second.wav"))
+    controllers = WorkflowControllers(app)
+
+    controllers.start_room_fit()
+    assert app.last_task["task_name"] == "room-fit"
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.run_room_fit",
+        lambda **kwargs: called.update(kwargs) or {"ok": True},
+    )
+    assert app.last_task["worker"]() == {"ok": True}
+    assert Path(called["recording"]) == tmp_path / "room_recording.wav"
+    # The optional second position is what makes a fit represent the room
+    # rather than one chair; dropping it silently would be invisible.
+    assert Path(called["recording_two"]) == tmp_path / "second.wav"
+    assert called["cutoff_hz"] == 300.0
+
+    app.room_recording_var.set("")
+    with pytest.raises(ConfigError, match="Room recording WAV"):
+        controllers.start_room_fit()
+
+
+def test_start_room_fit_requires_an_output_folder(tmp_path):
+    app = make_app(tmp_path)
+    app.room_fit_output_var.set("")
+    controllers = WorkflowControllers(app)
+    with pytest.raises(ConfigError, match="Room fit output folder"):
+        controllers.start_room_fit()
+
+
+def test_room_optional_inputs_are_omitted_when_blank(tmp_path, monkeypatch):
+    """Blank optional fields must become None, not empty-string paths.
+
+    An empty string is falsy in Python but Path("") is not a usable path, so a
+    naive pass-through would hand run_room_fit a second recording it cannot open.
+    """
+    app = make_app(tmp_path)
+    controllers = WorkflowControllers(app)
+    controllers.start_room_fit()
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.run_room_fit",
+        lambda **kwargs: called.update(kwargs) or {},
+    )
+    app.last_task["worker"]()
+    assert called["recording_two"] is None
+    assert called["target_csv"] is None
+    assert called["mic_cal"] is None
+
+
+def test_room_max_boost_of_zero_is_accepted(tmp_path, monkeypatch):
+    """0 dB means "cut only, never boost" — a real and conservative choice.
+
+    room.py validates `max_boost_db < 0`, so zero is valid there and the CLI
+    accepts it. Parsing it as strictly positive in the GUI would refuse a
+    setting the engine supports, which is the kind of drift wiring a CLI feature
+    into a GUI is most likely to introduce.
+    """
+    app = make_app(tmp_path)
+    app.room_max_boost_db_var.set("0")
+    controllers = WorkflowControllers(app)
+    controllers.start_room_fit()
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.run_room_fit",
+        lambda **kwargs: called.update(kwargs) or {},
+    )
+    app.last_task["worker"]()
+    assert called["max_boost_db"] == 0.0
+
+
+def test_room_prepare_accepts_zero_max_boost(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    app.room_max_boost_db_var.set("0")
+    controllers = WorkflowControllers(app)
+    controllers.start_room_prepare()
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.prepare_room_measurement",
+        lambda **kwargs: called.update(kwargs) or {},
+    )
+    app.last_task["worker"]()
+    assert called["max_boost_db"] == 0.0
+
+
+def test_room_optional_inputs_are_forwarded_when_provided(tmp_path, monkeypatch):
+    """The blank-is-None test proved omission; this proves delivery.
+
+    A wiring bug that dropped a provided mic calibration or target would be
+    invisible: the fit still succeeds, just against the wrong reference.
+    """
+    app = make_app(tmp_path)
+    app.room_target_csv_var.set(str(tmp_path / "room_target.csv"))
+    app.room_mic_cal_var.set(str(tmp_path / "mic.txt"))
+    controllers = WorkflowControllers(app)
+    controllers.start_room_fit()
+
+    called = {}
+    monkeypatch.setattr(
+        "headmatch.room.run_room_fit",
+        lambda **kwargs: called.update(kwargs) or {},
+    )
+    monkeypatch.setattr(
+        "headmatch.mic_cal.load_mic_calibration",
+        lambda path: f"cal:{path}",
+    )
+    app.last_task["worker"]()
+    assert called["target_csv"] == str(tmp_path / "room_target.csv")
+    assert called["mic_cal"] == f"cal:{tmp_path / 'mic.txt'}"

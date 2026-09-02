@@ -209,6 +209,120 @@ class WorkflowControllers:
             on_success=lambda result: self.app._set_completion(title="Online measurement complete", summary=f"The guided online run finished in {output_dir}.", result=result, steps=(f"Review outputs in {output_dir}.", "Start with run_summary.json, then use equalizer_apo.txt or camilladsp_full.yaml.", "If the wrong devices were used, rerun with clearer playback/capture target matches.")),
         )
 
+    def start_room_prepare(self) -> None:
+        """Write the room sweep package (CLI equivalent: `headmatch room-measure`)."""
+        from ..exceptions import ConfigError
+
+        out_dir = self.app.room_output_var.get().strip()
+        if not out_dir:
+            raise ConfigError("Room package folder is required.")
+        cutoff_hz = self.app._parse_positive_float(
+            self.app.room_cutoff_hz_var.get().strip(), "Transition frequency"
+        )
+        max_boost_db = self.app._parse_non_negative_float(
+            self.app.room_max_boost_db_var.get().strip(), "Max boost"
+        )
+        out_path = Path(out_dir)
+        mic_cal_path = self.app.room_mic_cal_var.get().strip() or None
+        two_positions = self.app.room_two_positions_var.get().strip() == "1"
+
+        def _worker() -> object:
+            from ..room import prepare_room_measurement
+            from ..mic_cal import load_mic_calibration
+
+            mic_cal = load_mic_calibration(mic_cal_path) if mic_cal_path else None
+            out_path.mkdir(parents=True, exist_ok=True)
+            return prepare_room_measurement(
+                spec=self.app._build_sweep(),
+                mic_cal=mic_cal,
+                cutoff_hz=cutoff_hz,
+                max_boost_db=max_boost_db,
+                listen_position_two=two_positions,
+                out_dir=out_path,
+            )
+
+        second = (
+            "Record the same sweep at a second listening position too."
+            if two_positions
+            else "Record at your usual listening position."
+        )
+        self.app._run_background_task(
+            task_name="room-prepare",
+            progress_title="Writing room sweep package",
+            progress_body=f"Preparing room_sweep.wav in {out_path}.",
+            worker=_worker,
+            on_success=lambda result: self.app._set_completion(
+                title="Room package ready",
+                summary=f"The room measurement package was written to {out_path}.",
+                result=result,
+                steps=(
+                    f"Play {out_path / 'room_sweep.wav'} through your speakers, not headphones.",
+                    f"{second} Keep the microphone at ear height.",
+                    "Keep the full capture including the tail; do not trim the WAV.",
+                    "Then return here and run Step B to fit the correction.",
+                ),
+            ),
+        )
+
+    def start_room_fit(self) -> None:
+        """Fit room correction from a recording (CLI equivalent: `headmatch room-fit`)."""
+        from ..exceptions import ConfigError
+
+        recording = self.app.room_recording_var.get().strip()
+        if not recording:
+            raise ConfigError("Room recording WAV is required.")
+        out_dir = self.app.room_fit_output_var.get().strip()
+        if not out_dir:
+            raise ConfigError("Room fit output folder is required.")
+        cutoff_hz = self.app._parse_positive_float(
+            self.app.room_cutoff_hz_var.get().strip(), "Transition frequency"
+        )
+        max_boost_db = self.app._parse_non_negative_float(
+            self.app.room_max_boost_db_var.get().strip(), "Max boost"
+        )
+        out_path = Path(out_dir)
+        recording_two = self.app.room_recording_two_var.get().strip() or None
+        target_csv = self.app.room_target_csv_var.get().strip() or None
+        mic_cal_path = self.app.room_mic_cal_var.get().strip() or None
+
+        def _worker() -> object:
+            from ..room import run_room_fit
+            from ..mic_cal import load_mic_calibration
+
+            mic_cal = load_mic_calibration(mic_cal_path) if mic_cal_path else None
+            out_path.mkdir(parents=True, exist_ok=True)
+            return run_room_fit(
+                recording=Path(recording),
+                recording_two=Path(recording_two) if recording_two else None,
+                mic_cal=mic_cal,
+                cutoff_hz=cutoff_hz,
+                max_boost_db=max_boost_db,
+                target_csv=target_csv,
+                out_dir=out_path,
+                sweep_spec=self.app._build_sweep(),
+            )
+
+        positions = 2 if recording_two else 1
+        self.app._run_background_task(
+            task_name="room-fit",
+            progress_title="Fitting room correction",
+            progress_body=f"Analyzing {recording} and writing correction EQ into {out_path}.",
+            worker=_worker,
+            on_success=lambda result: self.app._set_completion(
+                title="Room correction ready",
+                summary=(
+                    f"Correction EQ from {positions} position"
+                    f"{'s' if positions > 1 else ''} was written to {out_path}."
+                ),
+                result=result,
+                steps=(
+                    f"Load the exported filters from {out_path} into your DSP or player.",
+                    f"Correction applies below {cutoff_hz:g} Hz, where the room dominates.",
+                    "Re-measure after any speaker or seating change.",
+                ),
+            ),
+        )
+
     def start_offline_prepare(self) -> None:
         output_dir = self.app.output_dir_var.get().strip()
         if not output_dir:

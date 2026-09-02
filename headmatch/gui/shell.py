@@ -49,6 +49,7 @@ from .views import (
     render_history_page,
     render_import_apo,
     render_offline_wizard,
+    render_room_correction,
     render_online_wizard,
     render_progress,
     render_setup_check,
@@ -206,6 +207,9 @@ class HeadMatchGuiApp:
         if key == "prepare-offline":
             self._render_offline_wizard()
             return
+        if key == "room-correction":
+            self._render_room_correction()
+            return
         if key == "target-editor":
             self._render_target_editor()
             return
@@ -284,6 +288,15 @@ class HeadMatchGuiApp:
 
     def refresh_setup_check(self) -> None:
         self._controllers.refresh_setup_check()
+
+    def _render_room_correction(self) -> None:
+        render_room_correction(
+            self._ttk,
+            self.content,
+            variables=self,
+            on_prepare=self.start_room_prepare,
+            on_fit=self.start_room_fit,
+        )
 
     def _render_target_editor(self) -> None:
         def _save():
@@ -699,6 +712,32 @@ class HeadMatchGuiApp:
             raise ConfigError(f"{label} must be greater than 0.")
         return value
 
+    def _parse_positive_float(self, raw: str, label: str) -> float:
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise ConfigError(f"{label} must be a number.") from exc
+        if value <= 0:
+            raise ConfigError(f"{label} must be greater than 0.")
+        return value
+
+    def _parse_non_negative_float(self, raw: str, label: str) -> float:
+        """Parse a float that may legitimately be zero.
+
+        Distinct from _parse_positive_float because some engine parameters accept
+        0 as a meaningful value rather than as "unset". Max boost is the case
+        here: room.py validates `max_boost_db < 0`, so 0 means "correct cuts
+        only, never boost" — a reasonable and conservative choice that a
+        positive-only parser would refuse while the CLI accepts it.
+        """
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise ConfigError(f"{label} must be a number.") from exc
+        if value < 0:
+            raise ConfigError(f"{label} cannot be negative.")
+        return value
+
 
     def _choose_directory(self, variable, *, title: str, fallback: str | Path) -> None:
         selected = self._file_picker.choose_directory(variable.get(), title=title, fallback=fallback)
@@ -768,6 +807,52 @@ class HeadMatchGuiApp:
             fallback=self.output_dir_var.get().strip() or self.state.default_output_dir,
         )
 
+    def choose_room_output_dir(self) -> None:
+        self._choose_directory(
+            self.room_output_var,
+            title="Choose room package folder",
+            fallback=self.output_dir_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_room_fit_output_dir(self) -> None:
+        self._choose_directory(
+            self.room_fit_output_var,
+            title="Choose room fit output folder",
+            fallback=self.room_output_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_room_recording(self) -> None:
+        self._choose_file(
+            self.room_recording_var,
+            title="Choose room recording WAV",
+            filetypes=(("WAV files", "*.wav"), ("All files", "*.*")),
+            fallback=self.room_output_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_room_recording_two(self) -> None:
+        self._choose_file(
+            self.room_recording_two_var,
+            title="Choose second position WAV",
+            filetypes=(("WAV files", "*.wav"), ("All files", "*.*")),
+            fallback=self.room_output_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_room_mic_cal(self) -> None:
+        self._choose_file(
+            self.room_mic_cal_var,
+            title="Choose microphone calibration file",
+            filetypes=(("Calibration files", "*.txt *.csv"), ("All files", "*.*")),
+            fallback=self.room_output_var.get().strip() or self.state.default_output_dir,
+        )
+
+    def choose_room_target_csv(self) -> None:
+        self._choose_file(
+            self.room_target_csv_var,
+            title="Choose room target CSV",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            fallback=self.room_output_var.get().strip() or self.state.default_output_dir,
+        )
+
     def choose_offline_fit_output_dir(self) -> None:
         self._choose_directory(
             self.offline_fit_output_var,
@@ -802,6 +887,12 @@ class HeadMatchGuiApp:
 
     def start_online_measurement(self) -> None:
         self._controllers.start_online_measurement()
+
+    def start_room_prepare(self) -> None:
+        self._controllers.start_room_prepare()
+
+    def start_room_fit(self) -> None:
+        self._controllers.start_room_fit()
 
     def start_offline_prepare(self) -> None:
         self._controllers.start_offline_prepare()

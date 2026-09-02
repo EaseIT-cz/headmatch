@@ -72,6 +72,7 @@ NAV_ITEMS: tuple[NavigationItem, ...] = (
     NavigationItem("hearing-test", "Hearing Test"),
     NavigationItem("setup-check", "Setup Check"),
     NavigationItem("prepare-offline", "Prepare Offline"),
+    NavigationItem("room-correction", "Room Correction"),
     NavigationItem("target-editor", "Target Editor"),
     NavigationItem("import-apo", "Import APO"),
     NavigationItem("fetch-curve", "Fetch Curve"),
