@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TextIO
 
-from .contracts import FrontendConfig, FrontendRunSummary
+from .contracts import FrontendConfig
 from .history import load_recent_runs, read_results_guide
 from .measure import OfflineMeasurementPlan, prepare_offline_measurement
 from .pipeline import iterative_measure_and_fit
