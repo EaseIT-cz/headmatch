@@ -9,3 +9,4 @@ recursive-include tests/fixtures *
 recursive-include docs *.md
 recursive-include docs/examples *.csv *.json *.desktop
 recursive-include headmatch *.py
+include headmatch/py.typed
