@@ -6,6 +6,7 @@ from typing import Iterable, List
 import yaml
 
 from .app_identity import get_app_identity
+from .exceptions import MeasurementError
 from .peq import PEQBand
 
 
@@ -20,6 +21,21 @@ single specified point. This constant adds headroom to prevent clipping.
 """
 
 APO_FILTER_TYPE_NAMES = {'peaking': 'PK', 'lowshelf': 'LS', 'highshelf': 'HS'}
+
+
+def _filter_type_name(names: dict[str, str], band: PEQBand) -> str:
+    """Look up a band's exporter-specific type name.
+
+    Raises MeasurementError rather than letting a bare KeyError escape. An
+    unknown band kind is the same condition peq.py:204 already reports this
+    way, and the error hierarchy exists so a caller can catch HeadMatchError
+    and get every failure this package can produce -- a raw KeyError falls
+    straight through that.
+    """
+    try:
+        return names[band.kind]
+    except KeyError:
+        raise MeasurementError(f"Unsupported band type: {band.kind}") from None
 
 
 
@@ -47,7 +63,7 @@ def _band_payload(band: PEQBand) -> dict:
         # true Q from the explicit slope (or legacy q-as-slope fallback).
         q = round(band.shelf_q, 4)
     return {
-        'type': FILTER_TYPE_NAMES[band.kind],
+        'type': _filter_type_name(FILTER_TYPE_NAMES, band),
         'freq': round(band.freq, 3),
         'q': q,
         'gain': round(band.gain_db, 3),
@@ -153,7 +169,7 @@ def _format_apo_channel(channel: str, bands: List[PEQBand], *, preamp_db: float 
         # not the RBJ slope S stored in band.q. Use band.shelf_q for shelf filters.
         q_out = band.q if band.kind == 'peaking' else band.shelf_q
         lines.append(
-            f'Filter {index}: ON {APO_FILTER_TYPE_NAMES[band.kind]} '
+            f'Filter {index}: ON {_filter_type_name(APO_FILTER_TYPE_NAMES, band)} '
             f'Fc {band.freq:.2f} Hz Gain {band.gain_db:.2f} dB Q {q_out:.2f}'
         )
     return lines
