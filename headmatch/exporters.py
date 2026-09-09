@@ -23,7 +23,7 @@ single specified point. This constant adds headroom to prevent clipping.
 APO_FILTER_TYPE_NAMES = {'peaking': 'PK', 'lowshelf': 'LS', 'highshelf': 'HS'}
 
 
-def _filter_type_name(names: dict, band: PEQBand) -> str:
+def _filter_type_name(names: dict[str, str], band: PEQBand) -> str:
     """Look up a band's exporter-specific type name.
 
     Raises MeasurementError rather than letting a bare KeyError escape. An
