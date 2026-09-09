@@ -535,3 +535,26 @@ def test_camilladsp_export_sorts_filters_by_channel_and_index():
     assert 'L_1_lowshelf' in content
     assert 'L_2_peaking' in content
     assert 'L_3_highshelf' in content
+
+
+def test_exporters_report_an_unknown_band_kind_as_a_headmatch_error(tmp_path):
+    """A band kind no exporter knows must raise MeasurementError, not KeyError.
+
+    The error hierarchy exists so a caller can catch HeadMatchError and handle
+    everything this package can fail with. A bare KeyError from a dict lookup
+    falls straight through that, and peq.py already reports the identical
+    condition as MeasurementError -- so the two paths disagreed about the same
+    input.
+    """
+    import pytest
+
+    from headmatch.exceptions import HeadMatchError, MeasurementError
+
+    band = PEQBand('peaking', 1000.0, 3.0, 1.0)
+    object.__setattr__(band, 'kind', 'allpass')  # a kind no exporter maps
+
+    for export in (export_camilladsp_filters_yaml, export_equalizer_apo_parametric_txt):
+        with pytest.raises(MeasurementError) as excinfo:
+            export(tmp_path / 'out', [band], [band])
+        assert 'allpass' in str(excinfo.value)
+        assert isinstance(excinfo.value, HeadMatchError)
