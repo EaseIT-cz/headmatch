@@ -11,7 +11,7 @@ from .peq import PEQBand
 _APO_FILTER_RE = re.compile(
     r'Filter\s+\d+:\s+ON\s+(\w+)\s+'
     r'Fc\s+([\d.]+)\s*Hz\s+'
-    r'Gain\s+([-\d.]+)\s*dB\s+'
+    r'Gain\s+([-+]?(?:\d+\.?\d*|\.\d+))\s*dB\s+'
     r'Q\s+([\d.]+)',
     re.IGNORECASE,
 )

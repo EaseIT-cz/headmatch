@@ -72,3 +72,59 @@ def test_parse_handles_variant_type_names():
     assert left[0].kind == "peaking"
     assert left[1].kind == "lowshelf"
     assert left[2].kind == "highshelf"
+
+
+def test_parse_explicit_plus_gain_peaking():
+    left, right = parse_apo_parametric("Filter 1: ON PK Fc 100 Hz Gain +3.0 dB Q 1.0")
+    assert len(left) == 1
+    assert len(right) == 1
+    assert left[0].kind == "peaking"
+    assert left[0].freq == 100.0
+    assert left[0].gain_db == 3.0
+
+
+def test_parse_explicit_plus_gain_lowshelf():
+    left, right = parse_apo_parametric("Filter 1: ON LS Fc 50 Hz Gain +4.5 dB Q 0.70")
+    assert len(left) == 1
+    assert len(right) == 1
+    assert left[0].kind == "lowshelf"
+    assert left[0].freq == 50.0
+    assert left[0].gain_db == 4.5
+
+
+def test_parse_explicit_plus_gain_highshelf():
+    left, right = parse_apo_parametric("Filter 1: ON HS Fc 8000 Hz Gain +2.0 dB Q 0.70")
+    assert len(left) == 1
+    assert right[0].kind == "highshelf"
+    assert right[0].gain_db == 2.0
+
+
+def test_parse_plus_gain_not_dropped():
+    left, right = parse_apo_parametric("Filter 1: ON PK Fc 1000 Hz Gain +6.0 dB Q 1.41")
+    assert len(left) == 1
+    assert len(left) != 0
+
+
+def test_parse_negative_and_unsigned_still_work():
+    text = (
+        "Filter 1: ON PK Fc 100.00 Hz Gain -3.50 dB Q 1.41\n"
+        "Filter 2: ON LS Fc 50.00 Hz Gain 2.00 dB Q 0.70\n"
+    )
+    left, right = parse_apo_parametric(text)
+    assert len(left) == 2
+    assert left[0].gain_db == -3.50
+    assert left[1].gain_db == 2.00
+
+
+def test_parse_trailing_dot_gain_still_parses():
+    # The first cut of the #55 fix narrowed the gain group to
+    # [-+]?\d*\.?\d+, which rejects a trailing-dot value the original
+    # [-\d.]+ accepted. Both signs, and an unsigned trailing dot, must parse.
+    text = (
+        "Filter 1: ON PK Fc 100 Hz Gain 12. dB Q 1.0\n"
+        "Filter 2: ON PK Fc 200 Hz Gain +3. dB Q 1.0\n"
+        "Filter 3: ON PK Fc 300 Hz Gain -4. dB Q 1.0\n"
+        "Filter 4: ON PK Fc 400 Hz Gain .5 dB Q 1.0\n"
+    )
+    left, _ = parse_apo_parametric(text)
+    assert [b.gain_db for b in left] == [12.0, 3.0, -4.0, 0.5]
