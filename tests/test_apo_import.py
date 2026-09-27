@@ -114,3 +114,17 @@ def test_parse_negative_and_unsigned_still_work():
     assert len(left) == 2
     assert left[0].gain_db == -3.50
     assert left[1].gain_db == 2.00
+
+
+def test_parse_trailing_dot_gain_still_parses():
+    # The first cut of the #55 fix narrowed the gain group to
+    # [-+]?\d*\.?\d+, which rejects a trailing-dot value the original
+    # [-\d.]+ accepted. Both signs, and an unsigned trailing dot, must parse.
+    text = (
+        "Filter 1: ON PK Fc 100 Hz Gain 12. dB Q 1.0\n"
+        "Filter 2: ON PK Fc 200 Hz Gain +3. dB Q 1.0\n"
+        "Filter 3: ON PK Fc 300 Hz Gain -4. dB Q 1.0\n"
+        "Filter 4: ON PK Fc 400 Hz Gain .5 dB Q 1.0\n"
+    )
+    left, _ = parse_apo_parametric(text)
+    assert [b.gain_db for b in left] == [12.0, 3.0, -4.0, 0.5]
